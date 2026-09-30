@@ -1,0 +1,412 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #0f172a;
+  --color-muted: #334155;
+  --color-crimson: #e11d48;
+  --color-crimson-deep: #dc2626;
+  --color-cyan: #0ea5e9;
+  --color-slate-ice: #f8fafc;
+  --color-line: #e2e8f0;
+  --font-sans: 'DM Sans', sans-serif;
+  --font-display: 'Manrope', sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scrollbar-gutter: stable;
+    scrollbar-color: #e11d48 #0f172a;
+    scrollbar-width: thin;
+  }
+
+  html::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  html::-webkit-scrollbar-track {
+    background: #0f172a;
+  }
+
+  html::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: linear-gradient(180deg, #e11d48 0%, #0ea5e9 100%);
+  }
+
+  html::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #dc2626 0%, #0284c7 100%);
+  }
+
+  body {
+    min-width: 320px;
+    min-height: 100vh;
+    margin: 0;
+    background: #fff;
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  img {
+    display: block;
+    max-width: 100%;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+}
+
+@keyframes tab-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-tab-fade {
+  animation: tab-fade 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes hero-arrive {
+  from { opacity: 0; transform: scale(1.08); }
+  to { opacity: 1; transform: scale(1.12); }
+}
+
+@keyframes vehicle-enter {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.96);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes vehicle-grid-exit {
+  to {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+}
+
+#armada [data-vehicle-transition="exit"] {
+  pointer-events: none;
+  animation: vehicle-grid-exit 220ms cubic-bezier(.4, 0, 1, 1) both;
+}
+
+#armada [data-vehicle-transition="enter"] article,
+#armada[data-reveal="visible"] article {
+  animation: vehicle-enter 750ms cubic-bezier(.16, 1, .3, 1) both;
+  animation-delay: var(--vehicle-delay, 0ms);
+}
+
+/* Reset animasi saat exit transition supaya tidak bentrok */
+#armada [data-vehicle-transition="exit"] article {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #root *, #root *::before, #root *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+
+  .picker-popover {
+    transition: none;
+  }
+}
+
+/* Polished surfaces and clearer hierarchy across the landing page. */
+.mobile-sidebar {
+  transform: translate3d(100%, 0, 0);
+  will-change: transform;
+  transition: transform 430ms cubic-bezier(.22, 1, .36, 1);
+}
+
+.mobile-sidebar[data-open="true"] {
+  transform: translate3d(0, 0, 0);
+}
+
+.picker-popover {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, 9px, 0) scale(.985);
+  transform-origin: top center;
+  transition: opacity 240ms cubic-bezier(.22, 1, .36, 1), transform 300ms cubic-bezier(.22, 1, .36, 1), visibility 0s linear 300ms;
+}
+
+.picker-popover[data-open="true"] {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate3d(0, 0, 0) scale(1);
+  transition-delay: 0s, 0s, 0s;
+}
+
+#mobile-nav-panel a,
+#mobile-nav-panel button {
+  transition-duration: 280ms;
+  transition-timing-function: cubic-bezier(.22, 1, .36, 1);
+}
+
+body {
+  background: #f8fafc;
+}
+
+header.sticky {
+  border-color: rgb(255 255 255 / 12%);
+  background: rgb(15 23 42 / 88%);
+  box-shadow: 0 12px 34px rgb(15 23 42 / 18%);
+}
+
+#beranda {
+  border-radius: 0 0 28px 28px;
+  box-shadow: 0 24px 70px rgb(15 23 42 / 14%);
+}
+
+#beranda > img {
+  animation: hero-arrive 1100ms cubic-bezier(.16, 1, .3, 1) both;
+  transform: scale(1.12);
+  transform-origin: left center;
+}
+
+#beranda h1 {
+  letter-spacing: -.045em;
+  text-wrap: balance;
+}
+
+#beranda p {
+  text-wrap: pretty;
+}
+
+#beranda > div:nth-of-type(2) > span {
+  border-color: rgb(255 255 255 / 22%);
+  background: rgb(15 23 42 / 38%);
+}
+
+main > section[aria-label="Pencarian kendaraan"] {
+  margin-top: -38px;
+  border-radius: 16px;
+  box-shadow: 0 20px 55px rgb(15 23 42 / 12%);
+}
+
+#armada {
+  margin-top: 96px;
+  border-radius: 28px;
+  background: linear-gradient(180deg, #f1f7fb 0%, #f8fafc 100%);
+}
+
+#armada article {
+  overflow: hidden;
+  border: 1px solid #e7edf3;
+  border-radius: 16px;
+  background: #fff;
+  padding: 10px 10px 18px;
+  box-shadow: 0 8px 24px rgb(15 23 42 / 4%);
+  transform: translateY(0) scale(1);
+  transition: transform 350ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 350ms ease, border-color 250ms ease;
+  will-change: transform;
+}
+
+#armada article:hover {
+  transform: translateY(-6px) scale(1.015);
+  border-color: rgb(14 165 233 / 35%);
+  box-shadow: 0 24px 48px rgb(15 23 42 / 12%);
+}
+
+#armada article:not(:hover) {
+  transition: transform 450ms cubic-bezier(0.25, 1, 0.5, 1), box-shadow 450ms ease, border-color 300ms ease;
+}
+
+#armada article > a {
+  height: 220px;
+  border-radius: 11px;
+  background: transparent;
+}
+
+#armada article > a img {
+  object-fit: contain;
+  mix-blend-mode: normal;
+  padding: 10px;
+  filter: drop-shadow(0 12px 9px rgb(15 23 42 / 24%));
+  transform: scale(1);
+  transition: transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1), filter 350ms ease;
+}
+
+#armada article > a img[alt="Innova Zenix G"] {
+  transform: translateX(-10px) scale(1);
+}
+
+#armada article:hover > a img {
+  transform: scale(1.07);
+  filter: drop-shadow(0 18px 14px rgb(15 23 42 / 30%));
+}
+
+#armada article:hover > a img[alt="Innova Zenix G"] {
+  transform: translateX(-10px) scale(1.07);
+}
+
+#armada article:not(:hover) > a img {
+  transition: transform 550ms cubic-bezier(0.25, 1, 0.5, 1), filter 450ms ease;
+}
+
+#armada article:not(:hover) > a img[alt="Innova Zenix G"] {
+  transition: transform 550ms cubic-bezier(0.25, 1, 0.5, 1), filter 450ms ease;
+}
+
+#armada article > div {
+  padding-inline: 7px;
+}
+
+#layanan,
+#tentang {
+  scroll-margin-top: 112px;
+}
+
+#layanan article {
+  transform: translateY(0);
+  transition: transform 650ms cubic-bezier(.16, 1, .3, 1), box-shadow 650ms cubic-bezier(.16, 1, .3, 1), border-color 450ms ease;
+}
+
+#kontak {
+  border-radius: 24px 24px 0 0;
+}
+
+#kontak a,
+header > a[href^="https://wa.me"] {
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgb(225 29 72 / 18%);
+}
+
+footer {
+  background: #0b1220;
+}
+
+main h2 {
+  letter-spacing: -.035em;
+  text-wrap: balance;
+}
+
+input:focus-visible,
+select:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid rgb(14 165 233 / 55%);
+  outline-offset: 3px;
+}
+
+@media (hover: none) {
+  #armada article:hover,
+  #layanan article:hover {
+    transform: none;
+  }
+}
+@media (max-width: 600px) {
+  main > section[aria-label="Pencarian kendaraan"] form {
+    column-gap: 16px;
+    row-gap: 18px;
+  }
+
+  main > section[aria-label="Pencarian kendaraan"] form > :nth-child(-n+4) {
+    border-right: 0;
+    padding-inline: 0;
+  }
+
+  #beranda {
+    border-radius: 0 0 20px 20px;
+  }
+
+  #beranda > img {
+    object-position: 30% center;
+  }
+
+  main > section[aria-label="Pencarian kendaraan"] {
+    margin-top: -27px;
+  }
+
+  #armada {
+    margin-top: 58px;
+    border-radius: 20px;
+  }
+
+  #armada article > a {
+    height: 205px;
+  }
+
+  #kontak {
+    border-radius: 18px 18px 0 0;
+  }
+}
+
+@media (max-width: 900px) {
+  #beranda > img {
+    animation-name: hero-arrive-compact;
+    transform: none;
+    object-position: 30% center;
+  }
+}
+
+@keyframes hero-arrive-compact {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Tiap section punya delay masuk yang berbeda supaya terasa organic */
+main > section[aria-label="Pencarian kendaraan"][data-reveal="hidden"] {
+  transition-delay: 60ms;
+}
+
+#tentang[data-reveal="hidden"] {
+  transition-delay: 80ms;
+}
+
+#layanan[data-reveal="hidden"] {
+  transition-delay: 40ms;
+}
+
+#kontak[data-reveal="hidden"] {
+  transition-delay: 50ms;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 380px) {
+  main > section[aria-label="Pencarian kendaraan"] form {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 13px;
+  }
+
+  main > section[aria-label="Pencarian kendaraan"] form > :nth-child(-n+4) {
+    grid-column: 1;
+  }
+
+  main > section[aria-label="Pencarian kendaraan"] form > :last-child {
+    grid-column: 1;
+  }
+
+  main > section[aria-label="Pencarian kendaraan"] form > :nth-child(3) {
+    border-right: 0;
+  }
+}
+
+
