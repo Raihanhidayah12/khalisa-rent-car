@@ -21,6 +21,7 @@
 - [Fitur](#fitur)
 - [Teknologi](#teknologi)
 - [Menjalankan Secara Lokal](#menjalankan-secara-lokal)
+- [Deploy ke Vercel](#deploy-ke-vercel)
 - [Konfigurasi Supabase](#konfigurasi-supabase)
 - [Perintah](#perintah)
 - [Catatan Keamanan](#catatan-keamanan)
@@ -81,6 +82,33 @@ Website ini dibuat untuk PT Khalisa Sumber Rezeki. Pengunjung dapat melihat kend
    ```
 
    Buka URL lokal yang ditampilkan Vite, biasanya `http://localhost:5173`.
+
+## Deploy ke Vercel
+
+1. Import repository GitHub `Raihanhidayah12/Website-Rental-Mobil` ke Vercel.
+2. Pilih preset **Vite** dan root directory `./`. Pengaturan build proyek:
+
+    | Pengaturan | Nilai |
+    | --- | --- |
+    | Build Command | `npm run build` |
+    | Output Directory | `dist` |
+    | Install Command | `npm install` |
+
+    Vercel biasanya mendeteksi nilai-nilai ini secara otomatis.
+
+3. Di **Project Settings → Environment Variables**, tambahkan variabel berikut untuk environment **Production** dan **Preview**:
+
+    ```text
+    VITE_SUPABASE_URL
+    VITE_SUPABASE_ANON_KEY
+    VITE_GEOAPIFY_API_KEY
+    ```
+
+    Isi nilainya dari konfigurasi Supabase dan Geoapify. Jangan menaruh secret di repository.
+
+4. Deploy project. Pastikan **Production Branch** disetel ke `main`. Commit baru yang di-push ke `main` akan memicu production deployment; pantau status dan **Build Logs** dari menu **Deployments**.
+
+Domain Vercel yang dikonfigurasi untuk project ini: [ptkhalisasumberrezeki.vercel.app](https://ptkhalisasumberrezeki.vercel.app). Domain dapat digunakan setelah deployment berhasil.
 
 ## Konfigurasi Supabase
 
