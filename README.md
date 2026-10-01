@@ -34,12 +34,14 @@ Website ini dibuat untuk PT Khalisa Sumber Rezeki. Pengunjung dapat melihat kend
 
 | Area | Kemampuan |
 | --- | --- |
-| Katalog | Menampilkan kendaraan aktif, kategori, stok, foto, ketersediaan, dan estimasi harga dari Supabase. |
-| Booking | Memilih jadwal dan durasi sewa, mengisi data kontak, serta mencari lokasi penjemputan di Jakarta dan sekitarnya. |
+| Katalog | Menggabungkan baris varian dengan nama model yang sama menjadi satu kartu. Detail mobil menampilkan foto, kategori, spesifikasi, varian yang stoknya dialokasikan, serta harga mulai. |
+| Booking | Wajib memilih tanggal dan jam sebelum memilih mobil. Kartu pesanan menampilkan tipe transmisi/mesin yang ready, jumlah unit, harga per unit, dan subtotal. |
 | Konfirmasi | Menyimpan permintaan booking ke Supabase dan menyediakan langkah lanjutan melalui WhatsApp. |
-| Reservasi unit | Booking pending menahan unit selama 30 menit; booking terkonfirmasi tetap menahan unit. Booking ditolak, dibatalkan, atau selesai melepaskan unit. |
-| Dashboard admin | Mengelola armada, foto kendaraan, dan status booking melalui `/admin`. |
+| Reservasi unit | Booking berstatus confirmed mengurangi stok. Booking pending belum mengunci unit; stok dicek kembali saat admin mengonfirmasi. Unit memerlukan jeda persiapan 5 jam setelah waktu selesai sebelum bisa disewa lagi. |
+| Dashboard admin | Mengelola armada, foto kendaraan, keuangan, tim supir, dan status booking melalui `/admin`. |
+| Kelola Supir | Memantau supir standby/kosong, bertugas, dan libur, serta menugaskan supir ke booking secara eksklusif oleh Admin. |
 | Akses admin | Login melalui `/adminlogin`; hak admin menggunakan klaim tepercaya `app_metadata.role = "admin"`. |
+| Akun admin | Hanya akun admin utama yang dapat melihat tab, menambah akun, atau menghapus admin tambahan melalui Edge Function Supabase. |
 
 ## Teknologi
 
@@ -114,14 +116,16 @@ Domain Vercel yang dikonfigurasi untuk project ini: [ptkhalisasumberrezeki.verce
 
 Sebelum menggunakan aplikasi, siapkan database dan akses Supabase berikut:
 
-1. Tabel `public.vehicles` dengan kolom yang digunakan aplikasi: `id` (integer), `name`, `price`, `category`, `seats`, `badge`, `is_active`, `sort_order`, `image_url`, dan `stock`.
-2. Tabel serta fungsi database untuk booking dan reservasi unit, termasuk RPC `expire_pending_booking_holds`.
-3. Row Level Security (RLS): katalog publik hanya dapat membaca kendaraan aktif; pengunjung dapat mengirim booking, sedangkan membaca inbox dan mengubah status booking dibatasi untuk admin.
-4. Bucket Storage `vehicle-images` dengan akses baca publik; upload, update, dan delete hanya untuk admin.
-5. Akun admin Supabase Auth dengan klaim tepercaya `app_metadata.role = "admin"`. Jangan menetapkan role admin melalui `user_metadata`.
-6. Site URL dan Redirect URLs di Supabase Auth untuk origin lokal, misalnya `http://localhost:5173/adminlogin`.
-
-> **Catatan:** folder `supabase/migrations` saat ini belum berisi file SQL. Pastikan schema, RPC, policy RLS, dan bucket di atas sudah disiapkan di project Supabase.
+1. Tabel `public.vehicles` harus memiliki kolom dasar `id`, `name`, `price`, `category`, `seats`, `badge`, `is_active`, `sort_order`, `image_url`, dan `stock`, serta kolom varian `transmission_options` (text array), `transmission_stock` (JSON object), `transmission_details`, dan `powertrain_type`.
+2. Tabel `public.booking_requests` harus menyimpan `vehicle_ids`, `vehicle_snapshot`, jadwal, status, dan hold kedaluwarsa. Snapshot tiap varian menyimpan `transmission_type`, `powertrain_type`, harga, dan kuantitas.
+3. RPC `vehicle_availability` harus menghitung booking confirmed yang rentangnya beririsan dengan jadwal ditambah buffer 5 jam. Trigger `guard_booking_vehicle_capacity` harus mengunci stok saat booking dikonfirmasi dan mencegah oversell, termasuk beberapa tipe dalam satu model.
+4. Booking pending tidak mengurangi stok; konfirmasi tetap harus lolos pengecekan kapasitas. Booking rejected/cancelled tidak dihitung. Setelah pengembalian, unit baru bisa disewa kembali setelah jeda 5 jam.
+5. **Migrasi database tidak tersedia di checkout ini:** folder `supabase/migrations` kosong. Jangan gunakan checkout ini untuk membuat project Supabase baru atau menjalankan `supabase db push` sebelum riwayat migrasi schema dan RPC dipulihkan. Pastikan schema dan fungsi di atas sudah diterapkan pada project Supabase yang dipakai.
+6. Row Level Security (RLS): katalog publik hanya dapat membaca kendaraan aktif; pengunjung dapat mengirim booking, sedangkan membaca inbox dan mengubah status booking dibatasi untuk admin.
+7. Bucket Storage `vehicle-images` dengan akses baca publik; upload, update, dan delete hanya untuk admin.
+8. Akun admin Supabase Auth dengan klaim tepercaya `app_metadata.role = "admin"`. Jangan menetapkan role admin melalui `user_metadata`.
+9. Site URL dan Redirect URLs di Supabase Auth untuk origin lokal, misalnya `http://localhost:5173/adminlogin`.
+10. Hubungkan Supabase CLI ke project yang benar dengan `supabase link --project-ref <project-ref>`, lalu deploy Edge Function dengan `supabase functions deploy create-admin` dan `supabase functions deploy manage-admins`. Function memakai `SUPABASE_SERVICE_ROLE_KEY` di lingkungan server Supabase; jangan pernah memasukkannya ke frontend atau variabel `VITE_*`. Admin tertua dilindungi sebagai akun utama secara default. Untuk mengunci akun tertentu, atur secret Edge Function `PRIMARY_ADMIN_EMAIL` atau `PRIMARY_ADMIN_USER_ID`. Hanya akun utama yang dapat melihat dan memakai tab pengelolaan admin.
 
 ## Perintah
 

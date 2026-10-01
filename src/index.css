@@ -77,6 +77,31 @@
   animation: tab-fade 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+@keyframes admin-modal-in {
+  from { opacity: 0; transform: translateY(24px) scale(.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.admin-modal-panel {
+  animation: admin-modal-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes admin-overlay-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.admin-modal-overlay {
+  animation: admin-overlay-in 200ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-modal-panel,
+  .admin-modal-overlay {
+    animation: none;
+  }
+}
+
 @keyframes hero-arrive {
   from { opacity: 0; transform: scale(1.08); }
   to { opacity: 1; transform: scale(1.12); }
@@ -132,7 +157,7 @@
 
 /* Polished surfaces and clearer hierarchy across the landing page. */
 .mobile-sidebar {
-  transform: translate3d(100%, 0, 0);
+  transform: translate3d(-100%, 0, 0);
   will-change: transform;
   transition: transform 430ms cubic-bezier(.22, 1, .36, 1);
 }
@@ -145,7 +170,7 @@
   visibility: hidden;
   opacity: 0;
   pointer-events: none;
-  transform: translate3d(0, 9px, 0) scale(.985);
+  transform: var(--picker-tx, translateX(-50%)) translateY(9px) scale(.985);
   transform-origin: top center;
   transition: opacity 240ms cubic-bezier(.22, 1, .36, 1), transform 300ms cubic-bezier(.22, 1, .36, 1), visibility 0s linear 300ms;
 }
@@ -154,8 +179,22 @@
   visibility: visible;
   opacity: 1;
   pointer-events: auto;
-  transform: translate3d(0, 0, 0) scale(1);
+  transform: var(--picker-tx, translateX(-50%)) translateY(0) scale(1);
   transition-delay: 0s, 0s, 0s;
+}
+
+/* Reset centering for very narrow screens */
+.picker-no-center {
+  left: 0 !important;
+  --picker-tx: translateX(0);
+}
+
+@media (max-width: 380px) {
+  .picker-popover {
+    left: 0 !important;
+    --picker-tx: translateX(0);
+    max-width: calc(100vw - 48px);
+  }
 }
 
 #mobile-nav-panel a,
@@ -168,7 +207,7 @@ body {
   background: #f8fafc;
 }
 
-header.sticky {
+header.public-site-header.sticky {
   border-color: rgb(255 255 255 / 12%);
   background: rgb(15 23 42 / 88%);
   box-shadow: 0 12px 34px rgb(15 23 42 / 18%);
@@ -293,7 +332,7 @@ header > a[href^="https://wa.me"] {
   box-shadow: 0 8px 20px rgb(225 29 72 / 18%);
 }
 
-footer {
+.public-site-footer {
   background: #0b1220;
 }
 
