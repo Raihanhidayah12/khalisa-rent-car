@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import { ArrowUpRight, CalendarDays, CarFront, Check, Clock3, Download, LayoutDashboard, LogOut, MapPin, MessageSquare, Phone, Plus, RefreshCw, Search, ShieldCheck, Trash2, UserCheck, UserRound, Wallet, X } from 'lucide-react'
+import ExcelJS from 'exceljs'
 import logo from './assets/Logo-cropped.png'
 import { adminReloadSessionStorageKey, supabase, supabaseAuthStorageKey } from './supabaseClient'
 import { formatJakartaDateTime } from './bookingUtils'
@@ -205,7 +206,7 @@ function driverStatusTone(status) {
   return 'border-slate-300 bg-slate-100 text-slate-700'
 }
 
-function StatCard({ label, value, tone = 'neutral' }) {
+function StatCard({ label, value, tone = 'neutral', onClick, active = false }) {
   const barTone = {
     neutral: 'before:bg-line',
     success: 'before:bg-emerald-500',
@@ -228,12 +229,19 @@ function StatCard({ label, value, tone = 'neutral' }) {
     accent: 'text-[#0369a1]',
   }
 
-  return (
-    <article className={`relative min-w-0 overflow-hidden rounded-2xl border border-line bg-white p-4 pl-5 shadow-[0_8px_24px_rgba(15,23,42,.04)] transition-shadow hover:shadow-[0_10px_28px_rgba(15,23,42,.08)] before:absolute before:inset-y-0 before:left-0 before:w-1 sm:p-5 sm:pl-6 ${barTone[tone]}`}>
+  const content = (
+    <>
       <span className={`block text-[.68rem] font-semibold ${labelTone[tone]}`}>{label}</span>
       <strong className={`mt-2 block break-words font-display text-[1.25rem] font-extrabold tracking-tight max-[520px]:text-[1.15rem] sm:text-[1.65rem] ${valueTone[tone]}`}>{value}</strong>
-    </article>
+    </>
   )
+  const className = `relative min-w-0 overflow-hidden rounded-2xl border bg-white p-4 pl-5 shadow-[0_8px_24px_rgba(15,23,42,.04)] transition-[box-shadow,border-color] hover:shadow-[0_10px_28px_rgba(15,23,42,.08)] before:absolute before:inset-y-0 before:left-0 before:w-1 sm:p-5 sm:pl-6 ${barTone[tone]} ${active ? 'border-cyan ring-2 ring-cyan/15' : 'border-line'}`
+
+  if (onClick) {
+    return <button className={`${className} w-full cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan focus-visible:ring-offset-2`} type="button" aria-pressed={active} onClick={onClick}>{content}</button>
+  }
+
+  return <article className={`${className} transition-shadow`}>{content}</article>
 }
 
 function AdminNavButton({ active, icon, label, count, alert, onClick }) {
@@ -664,18 +672,36 @@ function AdminDashboard() {
   const [driverDraft, setDriverDraft] = useState(emptyDriverDraft)
   const [savingDriver, setSavingDriver] = useState(false)
   const [driverFormError, setDriverFormError] = useState('')
+  const [selectedBooking, setSelectedBooking] = useState(null)
+  const [exportModalOpen, setExportModalOpen] = useState(false)
+  const [exportMode, setExportMode] = useState('month') // 'month' | 'range'
+  const [exportMonth, setExportMonth] = useState(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  })
+  const [exportRangeStart, setExportRangeStart] = useState(() => toDateKey(new Date()))
+  const [exportRangeEnd, setExportRangeEnd] = useState(() => toDateKey(new Date()))
+
+  // Sync selectedBooking dengan data terbaru dari bookings state
+  useEffect(() => {
+    if (!selectedBooking) return
+    const fresh = bookings.find((b) => b.id === selectedBooking.id)
+    if (fresh) setSelectedBooking(fresh)
+  }, [bookings])
 
   useEffect(() => () => {
     if (vehicleImage?.previewUrl) URL.revokeObjectURL(vehicleImage.previewUrl)
   }, [vehicleImage])
 
   useEffect(() => {
-    const overlayOpen = mobileNavOpen || vehicleFormOpen || driverFormOpen
+    const overlayOpen = mobileNavOpen || vehicleFormOpen || driverFormOpen || !!selectedBooking || exportModalOpen
     const closeOnEscape = (event) => {
       if (event.key !== 'Escape') return
       setMobileNavOpen(false)
       setVehicleFormOpen(false)
       setDriverFormOpen(false)
+      setSelectedBooking(null)
+      setExportModalOpen(false)
     }
     if (overlayOpen) document.body.style.overflow = 'hidden'
     window.addEventListener('keydown', closeOnEscape)
@@ -683,7 +709,7 @@ function AdminDashboard() {
       document.body.style.overflow = ''
       window.removeEventListener('keydown', closeOnEscape)
     }
-  }, [mobileNavOpen, vehicleFormOpen, driverFormOpen])
+  }, [mobileNavOpen, vehicleFormOpen, driverFormOpen, selectedBooking, exportModalOpen])
 
   useEffect(() => {
     if (mobileNavOpen) return
@@ -1143,34 +1169,131 @@ function AdminDashboard() {
     else setDrivers(driverList ?? [])
   }
 
-  function handleExportBookingsCsv() {
-    const header = ['ID Booking', 'Kode Booking', 'Dibuat', 'Pemesan', 'Telepon', 'Mulai', 'Selesai', 'Kendaraan', 'Layanan', 'Durasi', 'Status', 'Supir', 'Estimasi (Rp)']
-    const escapeCell = (value) => {
-      const text = String(value ?? '')
-      return /[";\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+  async function handleExportBookingsExcel(bookingsToExport, rangeLabel) {
+    const workbook = new ExcelJS.Workbook()
+    workbook.creator = 'Khalisa Rent Car'
+    workbook.created = new Date()
+
+    const sheet = workbook.addWorksheet('Booking', { views: [{ state: 'frozen', ySplit: 1 }] })
+
+    sheet.columns = [
+      { header: 'No.',           key: 'no',       width: 5  },
+      { header: 'Kode Booking',  key: 'code',     width: 14 },
+      { header: 'Dibuat',        key: 'created',  width: 20 },
+      { header: 'Pemesan',       key: 'name',     width: 22 },
+      { header: 'Telepon',       key: 'phone',    width: 18 },
+      { header: 'Mulai Sewa',    key: 'start',    width: 20 },
+      { header: 'Selesai Sewa',  key: 'end',      width: 20 },
+      { header: 'Kendaraan',     key: 'vehicle',  width: 36 },
+      { header: 'Layanan',       key: 'mode',     width: 22 },
+      { header: 'Durasi',        key: 'duration', width: 12 },
+      { header: 'Status',        key: 'status',   width: 14 },
+      { header: 'Supir',         key: 'driver',   width: 22 },
+      { header: 'Estimasi (Rp)', key: 'price',    width: 16 },
+    ]
+
+    const headerRow = sheet.getRow(1)
+    headerRow.eachCell((cell) => {
+      cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1E3A5F' } }
+      cell.font      = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10, name: 'Calibri' }
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: false }
+      cell.border    = {
+        top:    { style: 'thin', color: { argb: 'FF1E3A5F' } },
+        bottom: { style: 'thin', color: { argb: 'FF1E3A5F' } },
+        left:   { style: 'thin', color: { argb: 'FF1E3A5F' } },
+        right:  { style: 'thin', color: { argb: 'FF1E3A5F' } },
+      }
+    })
+    headerRow.height = 28
+
+    const statusColors = {
+      pending:   { bg: 'FFFFF3CD', fg: 'FF856404' },
+      confirmed: { bg: 'FFD1ECF1', fg: 'FF0C5460' },
+      completed: { bg: 'FFD4EDDA', fg: 'FF155724' },
+      rejected:  { bg: 'FFF8D7DA', fg: 'FF721C24' },
+      cancelled: { bg: 'FFE2E3E5', fg: 'FF383D41' },
     }
-    const rows = filteredBookings.map((booking) => [
-      booking.id,
-      booking.booking_code ?? '-',
-      formatJakartaDateTime(booking.created_at),
-      booking.customer_name,
-      booking.customer_phone,
-      formatJakartaDateTime(booking.start_at),
-      formatJakartaDateTime(booking.end_at),
-      (booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(' + '),
-      booking.booking_mode,
-      `${booking.duration} ${booking.duration_unit}`,
-      bookingStatusLabels[booking.status] ?? booking.status,
-      drivers.find((driver) => driver.id === booking.driver_id)?.name ?? '-',
-      Number(booking.estimated_price) || 0,
-    ])
-    const csv = `﻿${[header, ...rows].map((row) => row.map(escapeCell).join(';')).join('\r\n')}`
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `booking-khalisa-${toDateKey(new Date())}.csv`
+
+    bookingsToExport.forEach((booking, index) => {
+      const row = sheet.addRow({
+        no:       index + 1,
+        code:     booking.booking_code ?? '-',
+        created:  formatJakartaDateTime(booking.created_at),
+        name:     booking.customer_name,
+        phone:    booking.customer_phone,
+        start:    formatJakartaDateTime(booking.start_at),
+        end:      formatJakartaDateTime(booking.end_at),
+        vehicle:  (booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(' + '),
+        mode:     booking.booking_mode,
+        duration: `${booking.duration} ${booking.duration_unit}`,
+        status:   bookingStatusLabels[booking.status] ?? booking.status,
+        driver:   drivers.find((d) => d.id === booking.driver_id)?.name ?? '-',
+        price:    Number(booking.estimated_price) || 0,
+      })
+
+      const isEven = index % 2 === 1
+      const rowBg  = isEven ? 'FFF5F7FA' : 'FFFFFFFF'
+
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        cell.font      = { size: 10, name: 'Calibri' }
+        cell.alignment = { vertical: 'middle', horizontal: colNumber === 1 || colNumber === 13 ? 'center' : 'left' }
+        cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } }
+        cell.border    = {
+          top:    { style: 'hair', color: { argb: 'FFD0D7E0' } },
+          bottom: { style: 'hair', color: { argb: 'FFD0D7E0' } },
+          left:   { style: 'hair', color: { argb: 'FFD0D7E0' } },
+          right:  { style: 'hair', color: { argb: 'FFD0D7E0' } },
+        }
+      })
+
+      const statusCell = row.getCell('status')
+      const tone = statusColors[booking.status]
+      if (tone) {
+        statusCell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: tone.bg } }
+        statusCell.font      = { size: 10, name: 'Calibri', bold: true, color: { argb: tone.fg } }
+        statusCell.alignment = { vertical: 'middle', horizontal: 'center' }
+      }
+
+      const priceCell = row.getCell('price')
+      priceCell.numFmt    = '#,##0'
+      priceCell.font      = { size: 10, name: 'Calibri', bold: true }
+      priceCell.alignment = { vertical: 'middle', horizontal: 'right' }
+
+      row.height = 22
+    })
+
+    const totalRow = sheet.addRow({ no: '', price: bookingsToExport.reduce((sum, b) => sum + (Number(b.estimated_price) || 0), 0) })
+    totalRow.getCell('driver').value     = 'TOTAL ESTIMASI'
+    totalRow.getCell('driver').font      = { bold: true, size: 10, name: 'Calibri' }
+    totalRow.getCell('driver').alignment = { horizontal: 'right', vertical: 'middle' }
+    const totalPriceCell = totalRow.getCell('price')
+    totalPriceCell.numFmt    = '#,##0'
+    totalPriceCell.font      = { bold: true, size: 10, name: 'Calibri', color: { argb: 'FF1E3A5F' } }
+    totalPriceCell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF5' } }
+    totalPriceCell.alignment = { horizontal: 'right', vertical: 'middle' }
+    totalRow.height = 24
+    totalRow.eachCell({ includeEmpty: true }, (cell) => {
+      cell.border = {
+        top:    { style: 'medium', color: { argb: 'FF1E3A5F' } },
+        bottom: { style: 'medium', color: { argb: 'FF1E3A5F' } },
+        left:   { style: 'hair',   color: { argb: 'FFD0D7E0' } },
+        right:  { style: 'hair',   color: { argb: 'FFD0D7E0' } },
+      }
+    })
+
+    const buffer = await workbook.xlsx.writeBuffer()
+    const url    = URL.createObjectURL(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
+    const link   = document.createElement('a')
+    link.href     = url
+    link.download = `booking-khalisa-${rangeLabel}.xlsx`
     link.click()
     URL.revokeObjectURL(url)
+  }
+  function showBookingDetails(status) {
+    setBookingStatusFilter(status)
+    window.requestAnimationFrame(() => {
+      document.querySelector('[aria-label="Inbox booking"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
   }
 
   if (checkingSession) {
@@ -1327,10 +1450,10 @@ function AdminDashboard() {
 
         {activeTab === 'bookings' && (
           <section className="mb-6 grid grid-cols-4 gap-3 max-[900px]:grid-cols-2 max-[500px]:grid-cols-1" aria-label="Ringkasan booking">
-            <StatCard label="Total permintaan" value={loadingBookings ? '—' : bookings.length} />
-            <StatCard label="Menunggu" value={loadingBookings ? '—' : pendingBookings} tone="warn" />
-            <StatCard label="Dikonfirmasi" value={loadingBookings ? '—' : confirmedBookings} tone="info" />
-            <StatCard label="Selesai" value={loadingBookings ? '—' : completedBookings} tone="success" />
+            <StatCard label="Total permintaan" value={loadingBookings ? '—' : bookings.length} active={bookingStatusFilter === 'all'} onClick={() => showBookingDetails('all')} />
+            <StatCard label="Menunggu" value={loadingBookings ? '—' : pendingBookings} tone="warn" active={bookingStatusFilter === 'pending'} onClick={() => showBookingDetails('pending')} />
+            <StatCard label="Dikonfirmasi" value={loadingBookings ? '—' : confirmedBookings} tone="info" active={bookingStatusFilter === 'confirmed'} onClick={() => showBookingDetails('confirmed')} />
+            <StatCard label="Selesai" value={loadingBookings ? '—' : completedBookings} tone="success" active={bookingStatusFilter === 'completed'} onClick={() => showBookingDetails('completed')} />
           </section>
         )}
 
@@ -1417,7 +1540,7 @@ function AdminDashboard() {
                 <div><h2 className="m-0 font-display text-[.98rem] font-bold">Inbox booking</h2><p className="mb-0 mt-1 text-[.7rem] text-muted">Permintaan dari formulir website.</p></div>
                 <div className={toolbarClass}>
                   <SearchField value={bookingSearch} onChange={(event) => setBookingSearch(event.target.value)} placeholder="Cari pemesan/lokasi" label="Cari booking" />
-                  <button className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-line bg-white px-3.5 text-[.76rem] font-bold text-muted transition-colors hover:border-cyan/40 hover:text-cyan disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={handleExportBookingsCsv} disabled={filteredBookings.length === 0}><Download size={16} aria-hidden="true" />Export CSV</button>
+                  <button className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-line bg-white px-3.5 text-[.76rem] font-bold text-muted transition-colors hover:border-cyan/40 hover:text-cyan disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => setExportModalOpen(true)} disabled={bookings.length === 0}><Download size={16} aria-hidden="true" />Export Excel</button>
                 </div>
               </div>
               <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5" role="tablist" aria-label="Filter status booking">
@@ -1460,7 +1583,7 @@ function AdminDashboard() {
                   <thead><tr className="bg-slate-ice text-[.65rem] font-bold uppercase tracking-[.07em] text-muted"><th className="px-5 py-3">Pemesan</th><th className="px-5 py-3">Jadwal</th><th className="px-5 py-3">Kendaraan</th><th className="px-5 py-3">Penjemputan</th><th className="px-5 py-3">Supir</th><th className="px-5 py-3 text-right">Estimasi</th><th className="px-5 py-3">Status</th></tr></thead>
                   <tbody>
                     {filteredBookings.map((booking) => (
-                      <tr className={`border-t border-line align-top text-[.76rem] transition-colors hover:bg-slate-ice/80 ${booking.status === 'pending' ? 'bg-amber-50/50' : ''}`} key={booking.id}>
+                      <tr className={`cursor-pointer border-t border-line align-top text-[.76rem] transition-colors hover:bg-slate-ice/80 ${booking.status === 'pending' ? 'bg-amber-50/50' : ''}`} key={booking.id} onClick={(event) => { if (!event.target.closest('button, a, select, input')) setSelectedBooking(booking) }}>
                         <td className="px-5 py-4">
                           <strong className="block text-ink">{booking.customer_name}</strong>
                           {booking.booking_code && <span className="mt-0.5 block font-display text-[.66rem] font-bold tracking-wide text-cyan">{booking.booking_code}</span>}
@@ -1491,7 +1614,7 @@ function AdminDashboard() {
               </div>
               <div className="grid gap-3 p-4 lg:hidden">
                 {filteredBookings.map((booking) => (
-                  <article className={`rounded-xl border p-4 ${booking.status === 'pending' ? 'border-amber-200 bg-amber-50/40' : 'border-line'}`} key={booking.id}>
+                  <article className={`cursor-pointer rounded-xl border p-4 ${booking.status === 'pending' ? 'border-amber-200 bg-amber-50/40' : 'border-line'}`} key={booking.id} onClick={(event) => { if (!event.target.closest('button, a, select, input')) setSelectedBooking(booking) }}>
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <strong className="block text-[.86rem] text-ink">{booking.customer_name}</strong>
@@ -1723,6 +1846,282 @@ function AdminDashboard() {
         )}
           </div>
         </main>
+
+      {exportModalOpen && (() => {
+        // Hitung booking yang akan diexport berdasarkan mode dan rentang
+        const parseLocalDate = (dateStr) => {
+          const [y, m, d] = dateStr.split('-').map(Number)
+          return new Date(y, m - 1, d)
+        }
+        let exportBookings = []
+        let rangeLabel = ''
+        if (exportMode === 'month') {
+          const [y, m] = exportMonth.split('-').map(Number)
+          const start = new Date(y, m - 1, 1)
+          const end   = new Date(y, m, 0, 23, 59, 59, 999) // akhir bulan
+          exportBookings = bookings.filter((b) => {
+            const d = new Date(b.start_at)
+            return d >= start && d <= end
+          })
+          rangeLabel = exportMonth
+        } else {
+          if (!exportRangeStart || !exportRangeEnd) {
+            exportBookings = []
+          } else {
+            const start = parseLocalDate(exportRangeStart)
+            const end   = parseLocalDate(exportRangeEnd)
+            end.setHours(23, 59, 59, 999)
+            exportBookings = bookings.filter((b) => {
+              const d = new Date(b.start_at)
+              return d >= start && d <= end
+            })
+            rangeLabel = `${exportRangeStart}_sd_${exportRangeEnd}`
+          }
+        }
+        const isRangeInvalid = exportMode === 'range' && exportRangeStart && exportRangeEnd && exportRangeStart > exportRangeEnd
+
+        return (
+          <div
+            className="admin-modal-overlay fixed inset-0 z-50 flex items-end justify-center bg-ink/55 p-0 backdrop-blur-[3px] sm:items-center sm:p-4 max-[520px]:items-center max-[520px]:p-3"
+            role="presentation"
+            onMouseDown={(event) => { if (event.target === event.currentTarget) setExportModalOpen(false) }}
+          >
+            <section
+              className="admin-modal-panel scrollbar-none w-full max-w-[440px] overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="export-modal-title"
+            >
+              <header className="flex items-center justify-between border-b border-line px-5 py-4">
+                <div>
+                  <h2 className="m-0 font-display text-[1.05rem] font-bold" id="export-modal-title">Export Data Booking</h2>
+                  <p className="mb-0 mt-0.5 text-[.72rem] text-muted">Pilih periode yang ingin diunduh.</p>
+                </div>
+                <button className="grid size-9 place-items-center rounded-xl text-muted hover:bg-slate-ice hover:text-ink" type="button" aria-label="Tutup" onClick={() => setExportModalOpen(false)}><X size={18} aria-hidden="true" /></button>
+              </header>
+
+              <div className="grid gap-5 p-5">
+                {/* Pilih mode */}
+                <div className="grid grid-cols-2 gap-2">
+                  {[['month', 'Per Bulan'], ['range', 'Rentang Tanggal']].map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={`rounded-xl border px-4 py-2.5 text-[.78rem] font-bold transition-colors ${exportMode === mode ? 'border-cyan bg-cyan/10 text-cyan' : 'border-line bg-white text-muted hover:border-slate-300 hover:text-ink'}`}
+                      onClick={() => setExportMode(mode)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Input per bulan */}
+                {exportMode === 'month' && (
+                  <label className="grid gap-1.5">
+                    <span className="text-[.72rem] font-bold">Bulan</span>
+                    <input
+                      className="h-10 rounded-xl border border-line px-3 text-[.82rem] outline-none focus:border-cyan"
+                      type="month"
+                      value={exportMonth}
+                      onChange={(e) => setExportMonth(e.target.value)}
+                    />
+                  </label>
+                )}
+
+                {/* Input rentang tanggal */}
+                {exportMode === 'range' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="grid gap-1.5">
+                      <span className="text-[.72rem] font-bold">Dari</span>
+                      <input
+                        className="h-10 rounded-xl border border-line px-3 text-[.82rem] outline-none focus:border-cyan"
+                        type="date"
+                        value={exportRangeStart}
+                        onChange={(e) => setExportRangeStart(e.target.value)}
+                      />
+                    </label>
+                    <label className="grid gap-1.5">
+                      <span className="text-[.72rem] font-bold">Sampai</span>
+                      <input
+                        className={`h-10 rounded-xl border px-3 text-[.82rem] outline-none focus:border-cyan ${isRangeInvalid ? 'border-red-400 bg-red-50' : 'border-line'}`}
+                        type="date"
+                        value={exportRangeEnd}
+                        onChange={(e) => setExportRangeEnd(e.target.value)}
+                      />
+                    </label>
+                    {isRangeInvalid && <p className="col-span-2 m-0 text-[.72rem] text-red-600">Tanggal akhir harus sama atau setelah tanggal awal.</p>}
+                  </div>
+                )}
+
+                {/* Preview jumlah data */}
+                <div className={`rounded-xl border px-4 py-3 text-[.78rem] ${exportBookings.length === 0 ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-line bg-slate-ice/60 text-muted'}`}>
+                  {isRangeInvalid
+                    ? 'Perbaiki rentang tanggal terlebih dahulu.'
+                    : exportBookings.length === 0
+                      ? 'Tidak ada booking pada periode ini.'
+                      : <><strong className="text-ink">{exportBookings.length}</strong> booking ditemukan pada periode ini.</>
+                  }
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-line px-5 py-4">
+                <button className="h-10 rounded-xl border border-line px-4 text-[.76rem] font-bold text-muted hover:bg-slate-ice" type="button" onClick={() => setExportModalOpen(false)}>Batal</button>
+                <button
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-cyan px-4 text-[.76rem] font-bold text-white hover:bg-cyan/90 disabled:cursor-not-allowed disabled:opacity-50"
+                  type="button"
+                  disabled={exportBookings.length === 0 || !!isRangeInvalid}
+                  onClick={async () => {
+                    setExportModalOpen(false)
+                    await handleExportBookingsExcel(exportBookings, rangeLabel)
+                  }}
+                >
+                  <Download size={15} aria-hidden="true" />
+                  Unduh Excel ({exportBookings.length})
+                </button>
+              </div>
+            </section>
+          </div>
+        )
+      })()}
+
+      {selectedBooking && (
+        <div
+          className="admin-modal-overlay fixed inset-0 z-50 flex items-end justify-center bg-ink/55 p-0 backdrop-blur-[3px] sm:items-center sm:p-4 max-[520px]:items-center max-[520px]:p-3"
+          role="presentation"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedBooking(null) }}
+        >
+          <section
+            className="admin-modal-panel scrollbar-none max-h-[92vh] w-full max-w-[580px] overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:max-h-[min(820px,92vh)] sm:rounded-2xl max-[520px]:max-h-[88dvh] max-[520px]:rounded-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="booking-detail-title"
+          >
+            <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white px-5 py-4 max-[520px]:px-4 max-[520px]:py-3">
+              <div>
+                <h2 className="m-0 font-display text-[1.05rem] font-bold" id="booking-detail-title">Detail Booking</h2>
+                {selectedBooking.booking_code && (
+                  <span className="mt-0.5 block font-display text-[.68rem] font-bold tracking-wide text-cyan">{selectedBooking.booking_code}</span>
+                )}
+              </div>
+              <button
+                className="grid size-9 place-items-center rounded-xl text-muted hover:bg-slate-ice hover:text-ink"
+                type="button"
+                aria-label="Tutup detail booking"
+                onClick={() => setSelectedBooking(null)}
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </header>
+
+            <div className="grid gap-0 divide-y divide-line">
+              {/* Status badge */}
+              <div className="flex items-center justify-between gap-3 px-5 py-4 max-[520px]:px-4">
+                <span className="text-[.72rem] font-bold uppercase tracking-wide text-muted">Status</span>
+                <span className={`inline-flex rounded-full border px-3 py-1 text-[.68rem] font-bold ${bookingStatusTone(selectedBooking.status)}`}>
+                  {bookingStatusLabels[selectedBooking.status] ?? selectedBooking.status}
+                </span>
+              </div>
+
+              {/* Pemesan */}
+              <div className="px-5 py-4 max-[520px]:px-4">
+                <p className="mb-2 text-[.7rem] font-bold uppercase tracking-wide text-muted">Pemesan</p>
+                <p className="mb-0 text-[.88rem] font-bold text-ink">{selectedBooking.customer_name}</p>
+                <div className="mt-2">
+                  <CustomerContact booking={selectedBooking} />
+                </div>
+              </div>
+
+              {/* Jadwal */}
+              <div className="px-5 py-4 max-[520px]:px-4">
+                <p className="mb-2 text-[.7rem] font-bold uppercase tracking-wide text-muted">Jadwal Sewa</p>
+                <div className="grid gap-1.5">
+                  <span className="flex items-center gap-2 text-[.82rem] text-ink">
+                    <CalendarDays size={14} className="shrink-0 text-cyan" aria-hidden="true" />
+                    <span>
+                      {formatJakartaDateTime(selectedBooking.start_at, { day: 'numeric', month: 'long', year: 'numeric' })}{' '}
+                      <strong>{formatJakartaDateTime(selectedBooking.start_at, { hour: '2-digit', minute: '2-digit', hour12: false })}</strong>
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-2 text-[.82rem] text-muted">
+                    <Clock3 size={14} className="shrink-0" aria-hidden="true" />
+                    <span>
+                      s/d{' '}
+                      {formatJakartaDateTime(selectedBooking.end_at, { day: 'numeric', month: 'long', year: 'numeric' })}{' '}
+                      <strong>{formatJakartaDateTime(selectedBooking.end_at, { hour: '2-digit', minute: '2-digit', hour12: false })}</strong>
+                    </span>
+                  </span>
+                  <span className="mt-0.5 text-[.76rem] text-muted">
+                    {selectedBooking.duration} {selectedBooking.duration_unit} · {selectedBooking.booking_mode}
+                  </span>
+                </div>
+              </div>
+
+              {/* Kendaraan */}
+              <div className="px-5 py-4 max-[520px]:px-4">
+                <p className="mb-2 text-[.7rem] font-bold uppercase tracking-wide text-muted">Kendaraan</p>
+                <div className="grid gap-1.5">
+                  {(selectedBooking.vehicle_snapshot ?? []).map((v, i) => (
+                    <span key={i} className="flex items-center gap-2 text-[.82rem] text-ink">
+                      <CarFront size={14} className="shrink-0 text-cyan" aria-hidden="true" />
+                      {formatBookedVehicle(v)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Penjemputan */}
+              <div className="px-5 py-4 max-[520px]:px-4">
+                <p className="mb-2 text-[.7rem] font-bold uppercase tracking-wide text-muted">Lokasi Penjemputan</p>
+                <span className="flex items-start gap-2 text-[.82rem] text-ink">
+                  <MapPin size={14} className="mt-0.5 shrink-0 text-cyan" aria-hidden="true" />
+                  <span>{selectedBooking.pickup_address || '—'}</span>
+                </span>
+              </div>
+
+              {/* Supir */}
+              <div className="px-5 py-4 max-[520px]:px-4">
+                <p className="mb-2 text-[.7rem] font-bold uppercase tracking-wide text-muted">Supir</p>
+                <DriverAssignControls booking={selectedBooking} bookings={bookings} drivers={drivers} onAssign={handleAssignDriver} />
+              </div>
+
+              {/* Catatan */}
+              {selectedBooking.notes && (
+                <div className="px-5 py-4 max-[520px]:px-4">
+                  <p className="mb-2 text-[.7rem] font-bold uppercase tracking-wide text-muted">Catatan Pemesan</p>
+                  <p className="mb-0 text-[.82rem] leading-6 text-ink">{selectedBooking.notes}</p>
+                </div>
+              )}
+
+              {/* Harga */}
+              <div className="flex items-center justify-between gap-3 px-5 py-4 max-[520px]:px-4">
+                <span className="text-[.82rem] font-semibold text-muted">Estimasi Total</span>
+                <strong className="text-[1rem] text-ink">Rp {formatPrice(Number(selectedBooking.estimated_price) || 0)}</strong>
+              </div>
+
+              {/* Ubah status */}
+              <div className="flex items-center justify-between gap-3 px-5 py-4 max-[520px]:px-4">
+                <span className="text-[.72rem] font-bold uppercase tracking-wide text-muted">Ubah Status</span>
+                <div className="w-44">
+                  <BookingStatusSelect
+                    booking={selectedBooking}
+                    onChange={handleBookingStatusChange}
+                  />
+                </div>
+              </div>
+
+              {/* Waktu dibuat */}
+              {selectedBooking.created_at && (
+                <div className="px-5 py-4 max-[520px]:px-4">
+                  <p className="mb-0 text-[.72rem] text-muted">
+                    Dibuat pada{' '}
+                    {formatJakartaDateTime(selectedBooking.created_at, { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+                  </p>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
 
       {vehicleFormOpen && <div className="admin-modal-overlay fixed inset-0 z-50 flex items-end justify-center bg-ink/55 p-0 backdrop-blur-[3px] sm:items-center sm:p-4 max-[520px]:items-center max-[520px]:p-3" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setVehicleFormOpen(false) }}>
         <section className="admin-modal-panel scrollbar-none max-h-[92vh] w-full max-w-[650px] overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:max-h-[min(760px,92vh)] sm:rounded-2xl max-[520px]:max-h-[84dvh] max-[520px]:rounded-2xl" role="dialog" aria-modal="true" aria-labelledby="vehicle-editor-title">

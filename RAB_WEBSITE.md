@@ -3,10 +3,10 @@
 
 **Tanggal penyusunan:** 2 Oktober 2026  
 **Jenis anggaran:** Estimasi jasa pembuatan dan implementasi website, satu kali (one-time)  
-**Nilai jasa:** **Rp2.500.000**  
+**Nilai jasa:** **Rp2.600.000**  
 **Status domain khusus:** Tidak termasuk
 
-> Dokumen ini adalah estimasi penawaran jasa berdasarkan ruang lingkup fitur website yang tercantum, bukan bukti biaya historis atau invoice pembayaran. Total Rp2.500.000 hanya untuk jasa; biaya pembelian domain dan tagihan provider dibayar terpisah.
+> Dokumen ini adalah estimasi penawaran jasa berdasarkan ruang lingkup fitur website yang tercantum, bukan bukti biaya historis atau invoice pembayaran. Total Rp2.600.000 hanya untuk jasa; biaya pembelian domain dan tagihan provider dibayar terpisah.
 
 ## Ringkasan Anggaran
 
@@ -16,11 +16,11 @@
 | 2 | Desain UI/UX dan penyesuaian responsif | 5 jam | Rp60.000 | Rp300.000 |
 | 3 | Halaman publik, katalog, dan detail kendaraan | 9 jam | Rp50.000 | Rp450.000 |
 | 4 | Formulir booking, validasi, perhitungan, dan alur WhatsApp | 8 jam | Rp50.000 | Rp400.000 |
-| 5 | Dashboard admin dan pengelolaan operasional | 10 jam | Rp50.000 | Rp500.000 |
+| 5 | Dashboard admin dan pengelolaan operasional | 12 jam | Rp50.000 | Rp600.000 |
 | 6 | Integrasi Supabase dan kontrol akses aplikasi | 6 jam | Rp50.000 | Rp300.000 |
 | 7 | Pengujian, perbaikan bug, dan pemeriksaan tampilan perangkat | 4 jam | Rp50.000 | Rp200.000 |
 | 8 | Konfigurasi deployment, dokumentasi, dan serah terima | 3 jam | Rp50.000 | Rp150.000 |
-|  | **Total estimasi jasa (49 jam)** |  |  | **Rp2.500.000** |
+|  | **Total estimasi jasa (51 jam)** |  |  | **Rp2.600.000** |
 
 Rata-rata nilai jasa pada estimasi ini sekitar **Rp51.000 per jam**. Jam kerja merupakan dasar penyusunan anggaran, bukan pencatatan timesheet aktual.
 
@@ -28,11 +28,11 @@ Rata-rata nilai jasa pada estimasi ini sekitar **Rp51.000 per jam**. Jam kerja m
 
 | Komponen | Biaya dalam RAB | Keterangan |
 |---|---:|---|
-| Jasa analisis, desain, pembuatan, integrasi, pengujian, dan serah terima | Rp2.500.000 | Biaya satu kali sesuai rincian di atas. |
+| Jasa analisis, desain, pembuatan, integrasi, pengujian, dan serah terima | Rp2.600.000 | Biaya satu kali sesuai rincian di atas. |
 | Domain khusus, misalnya `namabisnis.com` atau `namabisnis.id` | Tidak termasuk | Pemilik membeli langsung melalui registrar. Biaya dan perpanjangan bergantung ekstensi dan registrar. |
 | Vercel, Supabase, dan Geoapify | Tidak ditagihkan dalam RAB ini | Diasumsikan memakai kuota/paket yang tersedia. Tagihan berbayar, jika ada, dibayar langsung ke provider. |
 | Pajak | Belum dihitung | Ditambahkan bila berlaku sesuai status penyedia jasa dan ketentuan perpajakan. |
-| **Jumlah jasa yang ditawarkan** | **Rp2.500.000** | **Belum termasuk domain, tagihan provider, dan pajak yang mungkin berlaku.** |
+| **Jumlah jasa yang ditawarkan** | **Rp2.600.000** | **Belum termasuk domain, tagihan provider, dan pajak yang mungkin berlaku.** |
 
 ## Rincian Lingkup Pekerjaan
 
@@ -56,10 +56,10 @@ Rata-rata nilai jasa pada estimasi ini sekitar **Rp51.000 per jam**. Jam kerja m
 - **Aktivitas:** pilihan layanan, tanggal, jam, dan durasi (2 jam × Rp50.000 = Rp100.000); pilihan model, varian, jumlah, dan kalkulasi harga (2 jam × Rp50.000 = Rp100.000); validasi pemesan, nomor telepon, dan lokasi jemput (2 jam × Rp50.000 = Rp100.000); penyimpanan booking, kode booking, dan tautan WhatsApp (2 jam × Rp50.000 = Rp100.000).
 - **Hasil:** pelanggan dapat mengirim permintaan booking dengan rincian kendaraan dan estimasi harga. Ini bukan pembayaran atau konfirmasi otomatis.
 
-### 5. Dashboard admin dan pengelolaan operasional — Rp500.000
+### 5. Dashboard admin dan pengelolaan operasional — Rp600.000
 
-- **Aktivitas:** akses dashboard dan sesi admin (2 jam × Rp50.000 = Rp100.000); pemrosesan booking serta penugasan supir (3 jam × Rp50.000 = Rp150.000); CRUD armada/foto dan profil supir (3 jam × Rp50.000 = Rp150.000); ringkasan keuangan, ekspor CSV, dan pengelolaan admin (2 jam × Rp50.000 = Rp100.000).
-- **Hasil:** dashboard `/admin` untuk operasional. Booking yang melewati waktu kembali ditandai Selesai saat dashboard dimuat/refresh; bukan proses latar belakang saat dashboard tertutup.
+- **Aktivitas:** akses dashboard dan sesi admin (2 jam × Rp50.000 = Rp100.000); pemrosesan booking serta penugasan supir (3 jam × Rp50.000 = Rp150.000); panel detail booking — klik baris untuk membuka modal berisi jadwal, kendaraan, penjemputan, supir, catatan, estimasi, dan ubah status (2 jam × Rp50.000 = Rp100.000); CRUD armada/foto dan profil supir (3 jam × Rp50.000 = Rp150.000); ringkasan keuangan, ekspor Excel dengan pilihan periode (per bulan atau rentang tanggal), dan pengelolaan admin (2 jam × Rp50.000 = Rp100.000).
+- **Hasil:** dashboard `/admin` untuk operasional, termasuk panel detail booking interaktif dan ekspor data booking ke file `.xlsx` berformat rapi dengan pilihan periode. Booking yang melewati waktu kembali ditandai Selesai saat dashboard dimuat/refresh; bukan proses latar belakang saat dashboard tertutup.
 
 ### 6. Integrasi Supabase dan kontrol akses — Rp300.000
 
@@ -116,7 +116,7 @@ flowchart TD
 
 ## Biaya Operasional di Luar Jasa
 
-Biaya berikut **tidak termasuk** dalam total jasa Rp2.500.000. Nilai aktual mengikuti provider, pilihan paket, pemakaian, dan tanggal pembelian.
+Biaya berikut **tidak termasuk** dalam total jasa Rp2.600.000. Nilai aktual mengikuti provider, pilihan paket, pemakaian, dan tanggal pembelian.
 
 | Komponen | Perkiraan perlakuan biaya | Catatan |
 |---|---|---|
@@ -126,10 +126,10 @@ Biaya berikut **tidak termasuk** dalam total jasa Rp2.500.000. Nilai aktual meng
 | API pencarian alamat Geoapify | Mengikuti kuota dan paket provider | Penggunaan berlebih atau kebutuhan komersial tertentu dapat dikenakan biaya. |
 | WhatsApp | Tautan `wa.me` untuk membuka aplikasi WhatsApp | Bukan integrasi WhatsApp Business API; pesan otomatis tanpa klik tidak termasuk. |
 
-## Kenapa Nilainya Bisa Rp2.500.000?
+## Kenapa Nilainya Bisa Rp2.600.000?
 
-1. **Ini harga jasa dengan lingkup yang dibatasi**, bukan biaya berlangganan atau harga infrastruktur khusus. Anggaran dibagi ke delapan kelompok pekerjaan dengan estimasi 49 jam.
-2. **Teknologi yang digunakan sudah tersedia dan banyak yang open source**, seperti React, Vite, dan Tailwind CSS. Pengerjaan tidak memerlukan pembelian lisensi framework.
+1. **Ini harga jasa dengan lingkup yang dibatasi**, bukan biaya berlangganan atau harga infrastruktur khusus. Anggaran dibagi ke delapan kelompok pekerjaan dengan estimasi 51 jam.
+2. **Teknologi yang digunakan sudah tersedia dan banyak yang open source**, seperti React, Vite, Tailwind CSS, dan ExcelJS. Pengerjaan tidak memerlukan pembelian lisensi framework.
 3. **Layanan backend dan hosting menggunakan platform terkelola**, yaitu Supabase dan Vercel. Pendekatan ini mengurangi kebutuhan membangun dan merawat server sendiri.
 4. **Alur komunikasi WhatsApp menggunakan tautan**, bukan chatbot atau WhatsApp Business API yang memerlukan setup dan biaya tambahan.
 5. **Tidak ada gateway pembayaran online** pada lingkup ini. Booking dikirim sebagai permintaan, kemudian dikonfirmasi admin.

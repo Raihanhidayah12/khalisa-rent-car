@@ -39,6 +39,8 @@ Website ini dibuat untuk PT Khalisa Sumber Rezeki. Pengunjung dapat melihat kend
 | Konfirmasi | Menyimpan permintaan booking ke Supabase dan menyediakan langkah lanjutan melalui WhatsApp. |
 | Reservasi unit | Booking berstatus confirmed mengurangi stok. Booking pending belum mengunci unit; stok dicek kembali saat admin mengonfirmasi. Unit memerlukan jeda persiapan 5 jam setelah waktu selesai sebelum bisa disewa lagi. |
 | Dashboard admin | Mengelola armada, foto kendaraan, keuangan, tim supir, dan status booking melalui `/admin`. Booking confirmed otomatis ditandai selesai setelah jadwal pengembalian lewat saat dashboard dimuat atau diperbarui. |
+| Detail booking | Klik baris tabel atau kartu booking untuk membuka panel detail lengkap: jadwal, kendaraan, lokasi penjemputan, penugasan supir, catatan pemesan, estimasi harga, dan perubahan status — tanpa meninggalkan halaman. |
+| Export Excel | Tombol di daftar booking membuka panel pilih periode (per bulan atau rentang tanggal bebas) sebelum mengunduh. File `.xlsx` berformat rapi: header berwarna, zebra stripe, badge status berwarna, format angka, dan baris total estimasi. Nama file menyertakan periode yang dipilih. |
 | Kelola Supir | Memantau supir standby/kosong, bertugas, dan libur, serta menugaskan supir ke booking secara eksklusif oleh Admin. |
 | Akses admin | Login melalui `/adminlogin`; hak admin menggunakan klaim tepercaya `app_metadata.role = "admin"`. |
 | Akun admin | Hanya akun admin utama yang dapat melihat tab, menambah akun, atau menghapus admin tambahan melalui Edge Function Supabase. |
@@ -52,6 +54,7 @@ Website ini dibuat untuk PT Khalisa Sumber Rezeki. Pengunjung dapat melihat kend
 | Supabase | Auth, PostgreSQL, dan Storage |
 | Geoapify | Pencarian alamat penjemputan |
 | `libphonenumber-js` | Validasi nomor telepon internasional |
+| ExcelJS | Generate file `.xlsx` untuk export data booking |
 
 ## Menjalankan Secara Lokal
 

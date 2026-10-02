@@ -27,11 +27,22 @@ Dokumen serah terima untuk pengelola website. Halaman publik: beranda (`/`), cek
 ## 3. Menu Booking
 
 - Daftar permintaan dari formulir website. Gunakan pencarian dan chip filter status.
-- Di bawah nama pemesan tertera **kode booking** (`KHS-XXXXXX`). Kode ini juga bisa dipakai sebagai kata kunci pencarian, dan ikut terbawa sebagai kolom "Kode Booking" di file CSV.
-- **Ganti status**: pilih pada dropdown status (Menunggu → Dikonfirmasi → Selesai, atau Ditolak/Dibatalkan). Booking berstatus Dikonfirmasi otomatis ditandai Selesai setelah waktu pengembalian lewat, saat dashboard dibuka atau refresh berkala berjalan. Otomatisasi ini berdasarkan jadwal, bukan konfirmasi fisik kendaraan telah diterima; dashboard tertutup tidak menjalankan proses latar belakang.
+- Di bawah nama pemesan tertera **kode booking** (`KHS-XXXXXX`). Kode ini juga bisa dipakai sebagai kata kunci pencarian, dan ikut terbawa sebagai kolom "Kode Booking" di file Excel yang dieksport.
+
+### Membuka detail booking
+
+- **Klik baris mana saja** di tabel (desktop) atau **kartu booking** (ponsel) untuk membuka panel detail lengkap.
+- Panel menampilkan: status terkini, nama dan kontak pemesan, jadwal sewa lengkap, kendaraan yang dipesan, lokasi penjemputan, penugasan supir, catatan dari pemesan, dan estimasi total biaya.
+- Di dalam panel ini admin dapat langsung **mengganti status** dan **menugaskan supir** tanpa menutup panel.
+- Tutup panel dengan tombol **✕** di pojok kanan atas, klik area abu-abu di luar panel, atau tekan **Escape**.
+- Perubahan yang dilakukan dari dalam panel (status, supir) langsung tercermin di daftar booking; tidak perlu memuat ulang halaman.
+
+### Aksi lain di daftar booking
+
+- **Ganti status**: selain dari dalam panel detail, status juga dapat diganti langsung melalui dropdown di baris tabel (Menunggu → Dikonfirmasi → Selesai, atau Ditolak/Dibatalkan). Booking berstatus Dikonfirmasi otomatis ditandai Selesai setelah waktu pengembalian lewat, saat dashboard dibuka atau refresh berkala berjalan. Otomatisasi ini berdasarkan jadwal, bukan konfirmasi fisik kendaraan telah diterima; dashboard tertutup tidak menjalankan proses latar belakang.
 - **Konfirmasi**: stok baru dikunci ketika booking dikonfirmasi. Jika unit/varian sudah dipakai booking confirmed lain atau melewati batas stok, konfirmasi ditolak dan booking tetap Menunggu. Hubungi pelanggan untuk memilih varian atau jadwal lain.
-- **Tugaskan supir**: pilih supir pada dropdown "Penugasan supir". Setelah ditugaskan muncul tautan "Kirim ke supir" yang membuka WhatsApp berisi rincian tugas (tamu, jadwal, alamat jemput, armada).
-- **Export CSV**: tombol di kanan atas tabel mengunduh data booking yang sedang tampil (sesuai filter/pencarian) dalam format yang langsung terbuka rapi di Excel.
+- **Tugaskan supir**: pilih supir pada dropdown "Penugasan supir" di baris tabel atau di dalam panel detail. Setelah ditugaskan muncul tautan "Kirim ke supir" yang membuka WhatsApp berisi rincian tugas (tamu, jadwal, alamat jemput, armada).
+- **Export Excel**: tombol di kanan atas tabel membuka panel pilih periode sebelum mengunduh. Tersedia dua mode: **Per Bulan** (pilih bulan dari `input[type=month]`) dan **Rentang Tanggal** (pilih dari–sampai dengan validasi urutan). Panel menampilkan pratinjau jumlah booking yang akan diexport sebelum tombol unduh diklik. File `.xlsx` yang dihasilkan berformat rapi: header berwarna, zebra stripe, warna badge status, format angka harga, dan baris total estimasi di bagian bawah. Nama file otomatis menyertakan periode, misalnya `booking-khalisa-2026-10.xlsx` atau `booking-khalisa-2026-10-01_sd_2026-10-15.xlsx`.
 
 ## 4. Menu Armada
 
