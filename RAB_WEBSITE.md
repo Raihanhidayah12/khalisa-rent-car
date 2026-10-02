@@ -3,13 +3,14 @@
 
 **Tanggal penyusunan:** 2 Oktober 2026  
 **Jenis anggaran:** Estimasi jasa pembuatan dan implementasi website, satu kali (one-time)  
-**Nilai jasa:** **Rp2.500.000**
+**Nilai jasa:** **Rp2.500.000**  
+**Status domain khusus:** Tidak termasuk
 
-> Dokumen ini adalah estimasi nilai jasa berdasarkan ruang lingkup dan teknologi yang terlihat pada proyek. Angka ini bukan bukti biaya historis atau invoice pembayaran. Biaya layanan pihak ketiga dibahas terpisah.
+> Dokumen ini adalah estimasi penawaran jasa berdasarkan ruang lingkup fitur website yang tercantum, bukan bukti biaya historis atau invoice pembayaran. Total Rp2.500.000 hanya untuk jasa; biaya pembelian domain dan tagihan provider dibayar terpisah.
 
 ## Ringkasan Anggaran
 
-| No. | Uraian pekerjaan | Volume | Tarif satuan | Jumlah |
+| No. | Uraian pekerjaan | Estimasi waktu | Tarif dasar | Jumlah |
 |---:|---|---:|---:|---:|
 | 1 | Analisis kebutuhan dan alur bisnis | 4 jam | Rp50.000 | Rp200.000 |
 | 2 | Desain UI/UX dan penyesuaian responsif | 5 jam | Rp60.000 | Rp300.000 |
@@ -23,63 +24,57 @@
 
 Rata-rata nilai jasa pada estimasi ini sekitar **Rp51.000 per jam**. Jam kerja merupakan dasar penyusunan anggaran, bukan pencatatan timesheet aktual.
 
+### Pemisahan total biaya
+
+| Komponen | Biaya dalam RAB | Keterangan |
+|---|---:|---|
+| Jasa analisis, desain, pembuatan, integrasi, pengujian, dan serah terima | Rp2.500.000 | Biaya satu kali sesuai rincian di atas. |
+| Domain khusus, misalnya `namabisnis.com` atau `namabisnis.id` | Tidak termasuk | Pemilik membeli langsung melalui registrar. Biaya dan perpanjangan bergantung ekstensi dan registrar. |
+| Vercel, Supabase, dan Geoapify | Tidak ditagihkan dalam RAB ini | Diasumsikan memakai kuota/paket yang tersedia. Tagihan berbayar, jika ada, dibayar langsung ke provider. |
+| Pajak | Belum dihitung | Ditambahkan bila berlaku sesuai status penyedia jasa dan ketentuan perpajakan. |
+| **Jumlah jasa yang ditawarkan** | **Rp2.500.000** | **Belum termasuk domain, tagihan provider, dan pajak yang mungkin berlaku.** |
+
 ## Rincian Lingkup Pekerjaan
 
 ### 1. Analisis kebutuhan dan alur bisnis — Rp200.000
 
-- Memetakan alur pelanggan dari melihat armada hingga mengirim permintaan booking.
-- Memetakan alur admin untuk mengelola kendaraan, booking, dan supir.
-- Menentukan informasi yang perlu tampil pada katalog, formulir, dan status booking.
+- **Aktivitas:** inventarisasi halaman dan peran pengguna (2 jam × Rp50.000 = Rp100.000); pemetaan proses booking serta keputusan admin (1 jam × Rp50.000 = Rp50.000); penetapan daftar kebutuhan dan batas pekerjaan (1 jam × Rp50.000 = Rp50.000).
+- **Hasil:** daftar halaman, kebutuhan pelanggan/admin, urutan status booking, dan batas fitur yang masuk ke estimasi.
 
 ### 2. Desain UI/UX dan penyesuaian responsif — Rp300.000
 
-- Menyusun tampilan halaman publik dan dashboard admin mengikuti identitas visual usaha.
-- Menyesuaikan layout untuk desktop dan ponsel.
-- Menata komponen seperti navigasi, filter kategori, kartu kendaraan, formulir, tabel, dan dialog.
+- **Aktivitas:** struktur halaman dan hierarki informasi (2 jam × Rp60.000 = Rp120.000); penataan komponen publik dan admin (2 jam × Rp60.000 = Rp120.000); penyesuaian breakpoint desktop/ponsel (1 jam × Rp60.000 = Rp60.000).
+- **Hasil:** sistem tampilan yang diterapkan pada halaman publik, form booking, dan dashboard; bukan paket file desain terpisah di Figma.
 
 ### 3. Halaman publik, katalog, dan detail kendaraan — Rp450.000
 
-- Membuat halaman beranda dan bagian informasi usaha.
-- Menampilkan katalog kendaraan yang menggabungkan varian dengan model sama.
-- Menampilkan foto, spesifikasi, kategori, transmisi, jenis mesin, stok, dan harga.
-- Menyediakan halaman syarat dan ketentuan serta halaman cek status booking.
+- **Aktivitas:** beranda, navigasi, dan bagian informasi usaha (2 jam × Rp50.000 = Rp100.000); katalog, filter kategori, dan pengelompokan model (2 jam × Rp50.000 = Rp100.000); kartu/detail kendaraan beserta varian, stok, dan harga (3 jam × Rp50.000 = Rp150.000); halaman syarat dan ketentuan serta cek booking (2 jam × Rp50.000 = Rp100.000).
+- **Hasil:** halaman publik yang menampilkan armada dari data Supabase dan menyediakan halaman informasi serta cek status.
 
 ### 4. Formulir booking dan alur WhatsApp — Rp400.000
 
-- Memilih tanggal, jam, durasi, jenis layanan, kendaraan, varian, dan jumlah unit.
-- Menghitung harga dan subtotal berdasarkan pilihan kendaraan.
-- Memvalidasi data pemesan, nomor WhatsApp, serta lokasi penjemputan.
-- Memeriksa ketersediaan kendaraan dan supir melalui fungsi aplikasi/database yang tersedia.
-- Menyimpan permintaan booking dan menyediakan tindak lanjut melalui tautan WhatsApp.
+- **Aktivitas:** pilihan layanan, tanggal, jam, dan durasi (2 jam × Rp50.000 = Rp100.000); pilihan model, varian, jumlah, dan kalkulasi harga (2 jam × Rp50.000 = Rp100.000); validasi pemesan, nomor telepon, dan lokasi jemput (2 jam × Rp50.000 = Rp100.000); penyimpanan booking, kode booking, dan tautan WhatsApp (2 jam × Rp50.000 = Rp100.000).
+- **Hasil:** pelanggan dapat mengirim permintaan booking dengan rincian kendaraan dan estimasi harga. Ini bukan pembayaran atau konfirmasi otomatis.
 
 ### 5. Dashboard admin dan pengelolaan operasional — Rp500.000
 
-- Mengelola data kendaraan, foto, varian, stok, harga, dan status publikasi.
-- Memproses status booking dan penugasan supir.
-- Menandai booking Dikonfirmasi sebagai Selesai setelah waktu pengembalian lewat saat dashboard dimuat atau diperbarui.
-- Mengelola profil serta status ketersediaan supir.
-- Menampilkan ringkasan estimasi keuangan dan menyediakan ekspor data booking ke CSV.
-- Mengelola akun admin tambahan melalui fungsi server yang disediakan.
-- Menyegarkan status supir yang masa tugasnya telah lewat saat dashboard dimuat atau diperbarui; ini bukan proses terjadwal yang berjalan saat dashboard tertutup.
+- **Aktivitas:** akses dashboard dan sesi admin (2 jam × Rp50.000 = Rp100.000); pemrosesan booking serta penugasan supir (3 jam × Rp50.000 = Rp150.000); CRUD armada/foto dan profil supir (3 jam × Rp50.000 = Rp150.000); ringkasan keuangan, ekspor CSV, dan pengelolaan admin (2 jam × Rp50.000 = Rp100.000).
+- **Hasil:** dashboard `/admin` untuk operasional. Booking yang melewati waktu kembali ditandai Selesai saat dashboard dimuat/refresh; bukan proses latar belakang saat dashboard tertutup.
 
 ### 6. Integrasi Supabase dan kontrol akses — Rp300.000
 
-- Menghubungkan antarmuka dengan Supabase Auth, PostgreSQL, dan Storage.
-- Menggunakan role admin untuk membatasi akses dashboard dan operasi sensitif.
-- Menghubungkan fungsi database untuk ketersediaan, reservasi, dan penugasan sesuai konfigurasi backend.
-- Nilai ini mengasumsikan project dan konfigurasi backend Supabase yang diperlukan sudah tersedia. Pemulihan riwayat migration atau pembangunan ulang database tidak termasuk.
+- **Aktivitas:** konfigurasi koneksi frontend dan environment (1 jam × Rp50.000 = Rp50.000); integrasi autentikasi/role admin (1 jam × Rp50.000 = Rp50.000); alur baca/tulis katalog, booking, supir, dan foto (2 jam × Rp50.000 = Rp100.000); integrasi RPC ketersediaan, konfirmasi, dan status booking (2 jam × Rp50.000 = Rp100.000).
+- **Hasil:** antarmuka terhubung dengan Supabase yang telah dikonfigurasi. Anggaran mengasumsikan schema, RLS, Storage, dan RPC backend tersedia; membuat ulang database atau memulihkan file migration tidak termasuk.
 
 ### 7. Pengujian dan perbaikan — Rp200.000
 
-- Menjalankan pemeriksaan build dan lint.
-- Memeriksa alur utama booking, dashboard, serta kondisi validasi.
-- Memeriksa layout desktop dan ponsel serta memperbaiki temuan dalam lingkup yang disepakati.
+- **Aktivitas:** build dan pemeriksaan kode (1 jam × Rp50.000 = Rp50.000); pengujian alur booking/admin dan validasi dasar (2 jam × Rp50.000 = Rp100.000); pemeriksaan tampilan ponsel/desktop dan perbaikan dalam lingkup (1 jam × Rp50.000 = Rp50.000).
+- **Hasil:** aplikasi lolos pemeriksaan build dan alur utama diperiksa. Uji penetrasi, load test, dan audit keamanan formal tidak termasuk.
 
 ### 8. Deployment dan serah terima — Rp150.000
 
-- Menyiapkan build dan konfigurasi deployment frontend ke Vercel.
-- Menyediakan panduan penggunaan admin dan catatan konfigurasi dasar.
-- Menyerahkan source code dan memberikan garansi perbaikan bug selama 30 hari untuk lingkup yang disepakati.
+- **Aktivitas:** konfigurasi build/deployment frontend (1 jam × Rp50.000 = Rp50.000); dokumentasi penggunaan dan catatan konfigurasi (1 jam × Rp50.000 = Rp50.000); serah terima source code dan akses yang disepakati (1 jam × Rp50.000 = Rp50.000).
+- **Hasil:** source code, panduan admin, deployment frontend sesuai akses yang tersedia, dan garansi perbaikan bug 30 hari. Pendaftaran domain khusus bukan bagian dari pos ini.
 
 ## Alur Kerja Website
 
