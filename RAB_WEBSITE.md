@@ -81,6 +81,44 @@ Rata-rata nilai jasa pada estimasi ini sekitar **Rp51.000 per jam**. Jam kerja m
 - Menyediakan panduan penggunaan admin dan catatan konfigurasi dasar.
 - Menyerahkan source code dan memberikan garansi perbaikan bug selama 30 hari untuk lingkup yang disepakati.
 
+## Alur Kerja Website
+
+### Alur booking dari pelanggan sampai selesai
+
+1. **Pelanggan memilih layanan dan jadwal.** Pelanggan memilih sewa dengan atau tanpa supir, tanggal, jam mulai, dan durasi. Sistem memeriksa ketersediaan supir bila layanan memakai supir.
+2. **Pelanggan memilih kendaraan.** Katalog menampilkan kendaraan dan varian yang sesuai. Pelanggan memilih transmisi/jenis mesin serta jumlah unit; harga dan subtotal dihitung sebelum permintaan dikirim.
+3. **Pelanggan mengisi data dan mengirim permintaan.** Nama, nomor WhatsApp, dan lokasi penjemputan divalidasi. Sistem menyimpan permintaan berstatus **Menunggu**, beserta jadwal, snapshot kendaraan/harga, dan kode booking. Tautan WhatsApp disediakan untuk komunikasi lanjutan.
+4. **Admin memeriksa permintaan.** Admin meninjau jadwal, armada, dan kebutuhan supir di dashboard. Booking Menunggu belum mengunci stok.
+5. **Admin mengonfirmasi atau menolak.** Saat dikonfirmasi, sistem memeriksa kapasitas sekali lagi. Jika jadwal atau stok bentrok, booking tetap Menunggu sampai admin menghubungi pelanggan. Jika lolos, status menjadi **Dikonfirmasi** dan unit dikunci untuk jadwal tersebut.
+6. **Admin menugaskan supir bila diperlukan.** Penugasan dilakukan terpisah dari konfirmasi booking. Sistem mencegah supir ditugaskan pada jadwal yang bertabrakan; admin dapat mengirim detail tugas melalui WhatsApp.
+7. **Booking selesai setelah jadwal pengembalian lewat.** Saat dashboard dimuat atau refresh berkala berjalan, booking Dikonfirmasi yang `end_at`-nya telah lewat dikirim ke RPC untuk diubah menjadi **Selesai**. Jika dashboard tertutup, pemrosesan berlangsung saat dashboard dibuka kembali. Ini berdasarkan jadwal dan tidak menggantikan pemeriksaan fisik kendaraan oleh admin.
+8. **Ketersediaan diperbarui.** Setelah booking selesai, supir dapat kembali **Tersedia** jika tidak memiliki tugas lain yang sedang berlangsung. Kendaraan memiliki jeda persiapan **5 jam** setelah jadwal pengembalian sebelum dapat disewa lagi.
+9. **Pelanggan mengecek status.** Pelanggan membuka halaman cek booking dan memasukkan nomor WhatsApp serta kode booking untuk melihat status, jadwal, kendaraan, dan estimasi biaya.
+
+```mermaid
+flowchart TD
+	A[Pelanggan pilih layanan dan jadwal] --> B{Ketersediaan sesuai?}
+	B -- Tidak --> A
+	B -- Ya --> C[Pilih kendaraan, varian, dan jumlah]
+	C --> D[Isi kontak dan lokasi penjemputan]
+	D --> E[Permintaan tersimpan: Menunggu + kode booking]
+	E --> F[Admin meninjau booking]
+	F --> G{Admin konfirmasi?}
+	G -- Ditolak / dibatalkan --> H[Booking ditolak atau dibatalkan]
+	G -- Konfirmasi --> I{Stok dan jadwal valid?}
+	I -- Tidak --> F
+	I -- Ya --> J[Booking Dikonfirmasi dan stok dikunci]
+	J --> K[Admin menugaskan supir jika diperlukan]
+	K --> L[Waktu pengembalian lewat]
+	L --> M[Dashboard memanggil RPC: status Selesai]
+	M --> N[Supir tersedia jika tidak ada tugas lain]
+	M --> O[Kendaraan tersedia setelah jeda persiapan 5 jam]
+	E -. Cek status dengan nomor WhatsApp + kode .-> P[Halaman cek booking]
+	M -. Status terbaru .-> P
+```
+
+**Catatan otomatisasi:** perubahan booking ke Selesai dan sinkronisasi status supir berjalan ketika dashboard admin melakukan pemuatan/refresh. Keduanya belum dijalankan oleh scheduler/server saat dashboard tertutup.
+
 ## Biaya Operasional di Luar Jasa
 
 Biaya berikut **tidak termasuk** dalam total jasa Rp2.500.000. Nilai aktual mengikuti provider, pilihan paket, pemakaian, dan tanggal pembelian.
