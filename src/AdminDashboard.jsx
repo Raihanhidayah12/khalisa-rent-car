@@ -70,6 +70,39 @@ function isDriverBookedForWindow(driverId, booking, bookings) {
   })
 }
 
+async function releaseExpiredDrivers(drivers, bookings) {
+  const now = Date.now()
+  const driverIds = drivers
+    .filter((driver) => {
+      if (driver.status !== 'on_duty') return false
+      const assignments = bookings.filter((booking) => booking.driver_id === driver.id)
+      const hasEndedAssignment = assignments.some((booking) =>
+        ['confirmed', 'completed'].includes(booking.status) && Number.isFinite(Date.parse(booking.end_at)) && Date.parse(booking.end_at) <= now
+      )
+      const hasCurrentAssignment = assignments.some((booking) => {
+        if (!['pending', 'confirmed'].includes(booking.status)) return false
+        const startAt = Date.parse(booking.start_at)
+        const endAt = Date.parse(booking.end_at)
+        return Number.isFinite(startAt) && Number.isFinite(endAt) && startAt <= now && endAt > now
+      })
+      return hasEndedAssignment && !hasCurrentAssignment
+    })
+    .map((driver) => driver.id)
+
+  if (driverIds.length === 0) return drivers
+
+  const { data, error } = await supabase
+    .from('drivers')
+    .update({ status: 'available' })
+    .in('id', driverIds)
+    .eq('status', 'on_duty')
+    .select('*')
+
+  if (error || !data) return drivers
+  const updatedDrivers = new Map(data.map((driver) => [driver.id, driver]))
+  return drivers.map((driver) => updatedDrivers.get(driver.id) ?? driver)
+}
+
 const promoBadgeOptions = ['', 'Promo', 'Favorit', 'Terlaris', 'Unit baru', 'Harga spesial']
 const bookingStatusLabels = {
   pending: 'Menunggu',
@@ -724,7 +757,7 @@ function AdminDashboard() {
           .order('name', { ascending: true })
 
         if (active && driversErrorRes) setDriversError(driversErrorRes.message)
-        if (active && !driversErrorRes) setDrivers(driverList ?? [])
+        if (active && !driversErrorRes) setDrivers(await releaseExpiredDrivers(driverList ?? [], requests ?? []))
       } catch (error) {
         if (active) setVehiclesError(error.message || 'Gagal memuat data armada.')
       } finally {
@@ -749,7 +782,7 @@ function AdminDashboard() {
       if (!active) return
       if (!fleetError) setVehicles(fleet ?? [])
       if (!requestsError) setBookings(requests ?? [])
-      if (!driversLoadError) setDrivers(driverList ?? [])
+      if (!driversLoadError) setDrivers(await releaseExpiredDrivers(driverList ?? [], requests ?? []))
     }
 
     loadDashboard()
@@ -931,10 +964,11 @@ function AdminDashboard() {
       return
     }
 
-    setBookings((current) => current.map((booking) => booking.id === bookingId ? data : booking))
+    const updatedBookings = bookings.map((booking) => booking.id === bookingId ? data : booking)
+    setBookings(updatedBookings)
     const { data: driverList, error: driversError } = await supabase.from('drivers').select('*').order('name', { ascending: true })
     if (driversError) setBookingActionError('Status booking tersimpan, tetapi daftar supir gagal diperbarui. Muat ulang dashboard.')
-    else setDrivers(driverList ?? [])
+    else setDrivers(await releaseExpiredDrivers(driverList ?? [], updatedBookings))
   }
 
   function openDriverForm(driver = null) {
