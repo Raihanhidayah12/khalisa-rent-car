@@ -38,7 +38,7 @@ Website ini dibuat untuk PT Khalisa Sumber Rezeki. Pengunjung dapat melihat kend
 | Booking | Wajib memilih tanggal dan jam sebelum memilih mobil. Kartu pesanan menampilkan tipe transmisi/mesin yang ready, jumlah unit, harga per unit, dan subtotal. |
 | Konfirmasi | Menyimpan permintaan booking ke Supabase dan menyediakan langkah lanjutan melalui WhatsApp. |
 | Reservasi unit | Booking berstatus confirmed mengurangi stok. Booking pending belum mengunci unit; stok dicek kembali saat admin mengonfirmasi. Unit memerlukan jeda persiapan 5 jam setelah waktu selesai sebelum bisa disewa lagi. |
-| Dashboard admin | Mengelola armada, foto kendaraan, keuangan, tim supir, dan status booking melalui `/admin`. |
+| Dashboard admin | Mengelola armada, foto kendaraan, keuangan, tim supir, dan status booking melalui `/admin`. Booking confirmed otomatis ditandai selesai setelah jadwal pengembalian lewat saat dashboard dimuat atau diperbarui. |
 | Kelola Supir | Memantau supir standby/kosong, bertugas, dan libur, serta menugaskan supir ke booking secara eksklusif oleh Admin. |
 | Akses admin | Login melalui `/adminlogin`; hak admin menggunakan klaim tepercaya `app_metadata.role = "admin"`. |
 | Akun admin | Hanya akun admin utama yang dapat melihat tab, menambah akun, atau menghapus admin tambahan melalui Edge Function Supabase. |

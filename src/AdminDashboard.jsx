@@ -70,6 +70,33 @@ function isDriverBookedForWindow(driverId, booking, bookings) {
   })
 }
 
+async function completeExpiredBookings(bookings) {
+  const now = Date.now()
+  const expiredBookings = bookings.filter((booking) =>
+    booking.status === 'confirmed' && Number.isFinite(Date.parse(booking.end_at)) && Date.parse(booking.end_at) <= now
+  )
+
+  if (expiredBookings.length === 0) return { bookings, failed: false }
+
+  const results = await Promise.all(expiredBookings.map(async (booking) => {
+    try {
+      const { data, error } = await supabase.rpc('update_booking_status', {
+        p_booking_id: String(booking.id),
+        p_status: 'completed',
+      })
+      return { id: booking.id, data, error }
+    } catch (error) {
+      return { id: booking.id, data: null, error }
+    }
+  }))
+
+  const completed = new Map(results.filter((result) => result.data && !result.error).map((result) => [result.id, result.data]))
+  return {
+    bookings: bookings.map((booking) => completed.get(booking.id) ?? booking),
+    failed: results.some((result) => result.error || !result.data),
+  }
+}
+
 async function releaseExpiredDrivers(drivers, bookings) {
   const now = Date.now()
   const driverIds = drivers
@@ -749,7 +776,11 @@ function AdminDashboard() {
           .order('created_at', { ascending: false })
 
         if (active && requestsError) setBookingsError(requestsError.message)
-        if (active && !requestsError) setBookings(requests ?? [])
+        const bookingResult = requestsError
+          ? { bookings: requests ?? [], failed: false }
+          : await completeExpiredBookings(requests ?? [])
+        if (active && bookingResult.failed) setBookingActionError('Sebagian booking lewat jadwal belum bisa otomatis diselesaikan. Periksa izin RPC dan status booking di Supabase.')
+        if (active && !requestsError) setBookings(bookingResult.bookings)
 
         const { data: driverList, error: driversErrorRes } = await supabase
           .from('drivers')
@@ -757,7 +788,7 @@ function AdminDashboard() {
           .order('name', { ascending: true })
 
         if (active && driversErrorRes) setDriversError(driversErrorRes.message)
-        if (active && !driversErrorRes) setDrivers(await releaseExpiredDrivers(driverList ?? [], requests ?? []))
+        if (active && !driversErrorRes) setDrivers(await releaseExpiredDrivers(driverList ?? [], bookingResult.bookings))
       } catch (error) {
         if (active) setVehiclesError(error.message || 'Gagal memuat data armada.')
       } finally {
@@ -779,10 +810,15 @@ function AdminDashboard() {
         supabase.from('drivers').select('*').order('name', { ascending: true }),
       ])
 
+      const bookingResult = requestsError
+        ? { bookings: requests ?? [], failed: false }
+        : await completeExpiredBookings(requests ?? [])
+
       if (!active) return
       if (!fleetError) setVehicles(fleet ?? [])
-      if (!requestsError) setBookings(requests ?? [])
-      if (!driversLoadError) setDrivers(await releaseExpiredDrivers(driverList ?? [], requests ?? []))
+      if (!requestsError) setBookings(bookingResult.bookings)
+      if (bookingResult.failed) setBookingActionError('Sebagian booking lewat jadwal belum bisa otomatis diselesaikan. Periksa izin RPC dan status booking di Supabase.')
+      if (!driversLoadError) setDrivers(await releaseExpiredDrivers(driverList ?? [], bookingResult.bookings))
     }
 
     loadDashboard()

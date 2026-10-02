@@ -28,7 +28,7 @@ Dokumen serah terima untuk pengelola website. Halaman publik: beranda (`/`), cek
 
 - Daftar permintaan dari formulir website. Gunakan pencarian dan chip filter status.
 - Di bawah nama pemesan tertera **kode booking** (`KHS-XXXXXX`). Kode ini juga bisa dipakai sebagai kata kunci pencarian, dan ikut terbawa sebagai kolom "Kode Booking" di file CSV.
-- **Ganti status**: pilih pada dropdown status (Menunggu → Dikonfirmasi → Selesai, atau Ditolak/Dibatalkan). Booking ditolak/dibatalkan tidak bisa diubah jadi selesai.
+- **Ganti status**: pilih pada dropdown status (Menunggu → Dikonfirmasi → Selesai, atau Ditolak/Dibatalkan). Booking berstatus Dikonfirmasi otomatis ditandai Selesai setelah waktu pengembalian lewat, saat dashboard dibuka atau refresh berkala berjalan. Otomatisasi ini berdasarkan jadwal, bukan konfirmasi fisik kendaraan telah diterima; dashboard tertutup tidak menjalankan proses latar belakang.
 - **Konfirmasi**: stok baru dikunci ketika booking dikonfirmasi. Jika unit/varian sudah dipakai booking confirmed lain atau melewati batas stok, konfirmasi ditolak dan booking tetap Menunggu. Hubungi pelanggan untuk memilih varian atau jadwal lain.
 - **Tugaskan supir**: pilih supir pada dropdown "Penugasan supir". Setelah ditugaskan muncul tautan "Kirim ke supir" yang membuka WhatsApp berisi rincian tugas (tamu, jadwal, alamat jemput, armada).
 - **Export CSV**: tombol di kanan atas tabel mengunduh data booking yang sedang tampil (sesuai filter/pencarian) dalam format yang langsung terbuka rapi di Excel.
