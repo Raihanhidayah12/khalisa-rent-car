@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ArrowLeft, CalendarDays, CarFront, Hash, MapPin, MessageSquare, Search, Wallet } from 'lucide-react'
 import logo from './assets/Logo-cropped.png'
 import { supabase } from './supabaseClient'
-import { formatPrice } from './vehicleUtils'
+import { formatDuration, formatPrice } from './vehicleUtils'
 import { formatJakartaDateTime, maskPickupAddress } from './bookingUtils'
 
 const statusLabels = {
@@ -79,7 +79,7 @@ function BookingCard({ booking }) {
           <div className="min-w-0">
             <span className="block text-[.61rem] font-bold tracking-[.1em] text-muted">JADWAL SEWA</span>
             <p className="mb-0 mt-1 text-[.78rem] leading-5 text-ink">{bookingTime}</p>
-            <p className="mb-0 mt-1 text-[.7rem] text-muted">{booking.booking_mode} · {booking.duration} {booking.duration_unit}</p>
+            <p className="mb-0 mt-1 text-[.7rem] text-muted">{booking.booking_mode} · {formatDuration(booking.duration, booking.duration_unit)}</p>
           </div>
         </div>
         <div className="flex min-w-0 items-start gap-3 border-b border-line px-5 py-4 sm:px-6">

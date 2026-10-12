@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowRight, ArrowUpRight, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Eye, EyeOff, Fuel, LockKeyhole, Mail, Minus, Plus, Search, Settings2, UserRoundCheck, UsersRound, X } from 'lucide-react'
+﻿import { useEffect, useRef, useState } from 'react'
+import { ArrowDown, ArrowRight, ArrowUpRight, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Eye, EyeOff, Fuel, LocateFixed, LockKeyhole, Mail, Minus, Plus, Search, Settings2, UserRoundCheck, UsersRound, X } from 'lucide-react'
 import logo from './assets/Logo-cropped.png'
 import waLogo from './assets/Wa.png'
 import heroBackground from './assets/Latar.png'
@@ -8,7 +8,7 @@ import AdminDashboard from './AdminDashboard'
 import BookingTracker from './BookingTracker'
 import LegalPage from './LegalPage'
 import { supabase } from './supabaseClient'
-import { formatPrice, isVehicleReady, parsePrice } from './vehicleUtils'
+import { formatDuration, formatPrice, isVehicleReady, parsePrice, getActivePriceInfo } from './vehicleUtils'
 import { formatJakartaDateTime, generateBookingCode, toJakartaISOString } from './bookingUtils'
 
 function getVehiclesByCategory(vehicles, category) {
@@ -136,28 +136,14 @@ async function fetchActiveVehicles() {
   return data.map((vehicle) => ({ ...vehicle, image: vehicle.image_url ?? null }))
 }
 
-const durasiLabel = {
-  1: '12 jam',
-  2: '24 jam',
-  14: '7 hari',
-  60: '30 hari',
-}
-
 function hitungMultiplier(mode, durasi) {
   // Base price = per 12 jam
-  const d = Math.max(mode.min, durasi)
-  switch (mode.unit) {
-    case 'jam':   return d / 12           // 12 jam = ×1, 24 jam = ×2, dst
-    case 'hari':  return d * 2            // 1 hari (24 jam) = ×2
-    case 'bulan': return d * 30 * 2      // 1 bulan = 30 hari = ×60
-    default:      return 1
-  }
+  return Math.max(mode.min, durasi) / 12
 }
 
-function getEndDateTime(date, time, mode, durasi) {
-  const hoursPerUnit = mode.unit === 'jam' ? 1 : mode.unit === 'hari' ? 24 : 30 * 24
+function getEndDateTime(date, time, durasi) {
   const start = new Date(toJakartaISOString(date, time))
-  const end = new Date(start.getTime() + durasi * hoursPerUnit * 60 * 60 * 1000)
+  const end = new Date(start.getTime() + durasi * 60 * 60 * 1000)
 
   return {
     date: formatJakartaDateTime(end, { day: 'numeric', month: 'long', year: 'numeric' }),
@@ -166,17 +152,29 @@ function getEndDateTime(date, time, mode, durasi) {
   }
 }
 
-const bookingModes = [
-  { label: 'Sewa mobil + Supir', unit: 'jam',   min: 12, step: 12 },
-  { label: 'Sewa mobil harian',  unit: 'jam',   min: 12, step: 12 },
-  { label: 'Sewa mobil mingguan', unit: 'hari', min: 1,  step: 1  },
-  { label: 'Sewa mobil bulanan', unit: 'bulan', min: 1,  step: 1  },
-]
+const bookingMode = { label: 'Sewa mobil', unit: 'jam', min: 12 }
 const navigationLinks = [
   { label: 'Beranda', href: '#beranda' },
   { label: 'Armada', href: '#armada' },
   { label: 'Tentang kami', href: '#tentang' },
+  { label: 'Paket Acara', href: '#acara' },
   { label: 'Layanan', href: '#layanan' },
+]
+
+const eventTypes = [
+  { emoji: '💍', label: 'Pernikahan', desc: 'Mobil pengantin dengan dekorasi bunga segar, pita, dan papan nama pengantin.', accent: 'rgba(244,63,94,.14)' },
+  { emoji: '🎓', label: 'Wisuda', desc: 'Kendaraan representatif untuk hari kelulusan. Bisa ditambah bunga dan banner.', accent: 'rgba(139,92,246,.14)' },
+  { emoji: '🏢', label: 'Korporat', desc: 'Armada bersih untuk keperluan bisnis, kantor, dan perjalanan klien VIP.', accent: 'rgba(14,165,233,.14)' },
+  { emoji: '🎉', label: 'Ulang Tahun & Lainnya', desc: 'Dekorasi balon, pita, atau kustom sesuai tema acara yang kamu minta.', accent: 'rgba(245,158,11,.14)' },
+]
+
+const addonOptions = [
+  { id: 'bunga_segar',    emoji: '💐', label: 'Bunga segar' },
+  { id: 'bunga_artif',   emoji: '🌸', label: 'Bunga artifisial' },
+  { id: 'pita',          emoji: '🎀', label: 'Pita dekorasi' },
+  { id: 'papan_nama',    emoji: '📛', label: 'Papan nama pengantin' },
+  { id: 'balon',         emoji: '🎈', label: 'Balon' },
+  { id: 'kustom',        emoji: '✨', label: 'Kustom / lainnya' },
 ]
 
 const benefits = [
@@ -188,6 +186,29 @@ const benefits = [
 
 const scrollRevealClasses = 'translate-y-10 opacity-0 scale-[0.98] transition-[opacity,transform] duration-[900ms] [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] data-[reveal=visible]:translate-y-0 data-[reveal=visible]:opacity-100 data-[reveal=visible]:scale-100 motion-reduce:translate-y-0 motion-reduce:opacity-100 motion-reduce:scale-100 motion-reduce:transition-none'
 const geoapifyApiKey = import.meta.env.VITE_GEOAPIFY_API_KEY
+
+function formatPickupAddress(location) {
+  const street = [location.housenumber, location.street].filter(Boolean).join(' ')
+  const candidates = [
+    location.name,
+    street,
+    location.suburb ?? location.neighbourhood ?? location.quarter,
+    location.county ?? location.city_district ?? location.district ?? location.city,
+    location.postcode,
+    location.country_code === 'id' ? null : location.country,
+  ]
+  const seen = new Set()
+  const parts = candidates
+    .map((part) => String(part ?? '').trim())
+    .filter((part) => {
+      const normalized = part.toLocaleLowerCase('id')
+      if (!part || seen.has(normalized)) return false
+      seen.add(normalized)
+      return true
+    })
+
+  return parts.join(', ') || location.formatted
+}
 
 function usePopoverDismiss(ref, onDismiss) {
   useEffect(() => {
@@ -413,68 +434,6 @@ function TimePicker({ selectedDate, value, onTimeChange }) {
   )
 }
 
-function BookingTabs({ bookingMode, setBookingMode, hasAvailableDriver, loadingDriverAvailability }) {
-  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 })
-  const tabRefs = useRef({})
-
-  useEffect(() => {
-    const el = tabRefs.current[bookingMode.label]
-    if (el) {
-      setIndicatorStyle({ left: el.offsetLeft, width: el.offsetWidth })
-    }
-  }, [bookingMode])
-
-  return (
-    <div className="relative flex min-h-[62px] items-center gap-6 overflow-x-auto border-b border-line scrollbar-none max-[600px]:min-h-[49px] max-[600px]:gap-4" role="tablist" aria-label="Jenis layanan">
-      {bookingModes.map((mode) => {
-        const isDriverMode = mode.label === 'Sewa mobil + Supir'
-        const isDisabled = isDriverMode && !loadingDriverAvailability && !hasAvailableDriver
-        return (
-          <div key={mode.label} className="relative shrink-0 group">
-            <button
-              ref={(el) => { tabRefs.current[mode.label] = el }}
-              type="button"
-              role="tab"
-              aria-selected={bookingMode.label === mode.label}
-              aria-disabled={isDisabled}
-              disabled={isDisabled}
-              className={`relative h-[62px] border-0 bg-transparent px-0.5 text-[.8rem] font-bold transition-colors duration-300 max-[600px]:h-[49px] max-[600px]:text-[.68rem] ${
-                isDisabled
-                  ? 'cursor-not-allowed text-[#b0bec5]'
-                  : bookingMode.label === mode.label
-                    ? 'text-crimson'
-                    : 'text-[#74807c] hover:text-ink'
-              }`}
-              onClick={() => {
-                if (!isDisabled) { setBookingMode(mode); setDurasi(mode.min) }
-              }}
-            >
-              {mode.label}
-              {isDisabled && (
-                <span className="ml-1 inline-flex size-3.5 items-center justify-center rounded-full bg-slate-300 text-[9px] font-extrabold text-slate-600" aria-hidden="true">!</span>
-              )}
-            </button>
-            {isDisabled && (
-              <div
-                className="pointer-events-none absolute left-0 top-full z-50 mt-1.5 hidden w-max max-w-[220px] rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[.69rem] font-medium leading-snug text-amber-900 shadow-md group-hover:block"
-                role="tooltip"
-              >
-                ⚠️ Supir sedang tidak tersedia.<br />Silakan pilih layanan sewa tanpa supir.
-              </div>
-            )}
-          </div>
-        )
-      })}
-      {/* Indicator geser smooth */}
-      <span
-        className="absolute bottom-[-1px] h-0.5 rounded-full bg-crimson transition-all duration-300 [transition-timing-function:cubic-bezier(0.22,1,0.36,1)]"
-        style={{ left: indicatorStyle.left, width: indicatorStyle.width }}
-        aria-hidden="true"
-      />
-    </div>
-  )
-}
-
 function CategorySelect({ value, onChange, className, id, ariaLabel }) {
   const [open, setOpen, mounted] = useAnimatedPopover()
   const pickerRef = useRef(null)
@@ -547,6 +506,7 @@ function LocationAutocomplete({ value, onChange, onSelect, inputRef, hasError })
   const [suggestions, setSuggestions] = useState([])
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [locating, setLocating] = useState(false)
   const [message, setMessage] = useState('')
   const containerRef = useRef(null)
   const skipNextLookup = useRef(false)
@@ -616,13 +576,68 @@ function LocationAutocomplete({ value, onChange, onSelect, inputRef, hasError })
   }, [])
 
   function selectLocation(location) {
+    const formatted = formatPickupAddress(location)
     skipNextLookup.current = true
-    onChange(location.formatted)
-    onSelect({ formatted: location.formatted, lat: location.lat, lon: location.lon })
+    onChange(formatted)
+    onSelect({ formatted, lat: location.lat, lon: location.lon })
     setSuggestions([])
     setOpen(false)
     setLoading(false)
+    setLocating(false)
     setMessage('')
+  }
+
+  function useCurrentLocation() {
+    if (!navigator.geolocation) {
+      setMessage('Browser ini tidak mendukung akses lokasi.')
+      setOpen(true)
+      return
+    }
+    if (!geoapifyApiKey) {
+      setMessage('Pencarian alamat lokasi terkini belum dikonfigurasi.')
+      setOpen(true)
+      return
+    }
+
+    setSuggestions([])
+    setLoading(false)
+    setLocating(true)
+    setMessage('Mengambil lokasi terkini...')
+    setOpen(true)
+    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+      const params = new URLSearchParams({
+        lat: String(coords.latitude),
+        lon: String(coords.longitude),
+        lang: 'id',
+        format: 'json',
+        apiKey: geoapifyApiKey,
+      })
+
+      try {
+        const response = await fetch(`https://api.geoapify.com/v1/geocode/reverse?${params}`)
+        if (!response.ok) throw new Error('Alamat lokasi terkini tidak dapat ditemukan.')
+
+        const data = await response.json()
+        const location = data.results?.[0] ?? data.features?.[0]?.properties
+        if (!location) throw new Error('Alamat lokasi terkini tidak dapat ditemukan.')
+
+        selectLocation({
+          ...location,
+          lat: coords.latitude,
+          lon: coords.longitude,
+        })
+      } catch (error) {
+        setLocating(false)
+        setMessage(error instanceof Error ? error.message : 'Gagal mencari alamat lokasi terkini.')
+      }
+    }, (error) => {
+      setLocating(false)
+      setMessage(error.code === error.PERMISSION_DENIED
+        ? 'Izin lokasi ditolak. Aktifkan izin lokasi browser atau masukkan alamat secara manual.'
+        : error.code === error.TIMEOUT
+          ? 'Waktu untuk mengambil lokasi habis. Coba lagi.'
+          : 'Lokasi terkini tidak dapat diakses. Coba lagi atau masukkan alamat secara manual.')
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 })
   }
 
   function handleInputChange(nextValue) {
@@ -639,32 +654,42 @@ function LocationAutocomplete({ value, onChange, onSelect, inputRef, hasError })
 
   return (
     <div className="relative min-w-0" ref={containerRef}>
-      <input
-        ref={inputRef}
-        className="w-full min-w-0 border-0 bg-transparent p-0 text-[.79rem] text-muted outline-none placeholder:text-[#64748b] max-[600px]:text-[.7rem]"
-        name="pickup"
-        value={value}
-        placeholder="Ketik alamat atau tempat"
-        autoComplete="off"
-        role="combobox"
-        aria-autocomplete="list"
-        aria-expanded={open}
-        aria-controls="pickup-suggestions"
-        aria-invalid={hasError}
-        onFocus={() => { if (value.trim().length >= 3) setOpen(true) }}
-        onChange={(event) => handleInputChange(event.target.value)}
-      />
-      {open && <div className="absolute left-0 top-[calc(100%+14px)] z-50 max-h-[min(320px,55vh)] w-[min(420px,calc(100vw-40px))] overflow-y-auto rounded-xl border border-line bg-white p-1.5 text-left shadow-[0_18px_50px_rgba(15,23,42,.18)]" id="pickup-suggestions" role="listbox" aria-label="Saran lokasi Jakarta dan sekitarnya">
-        {loading ? <p className="px-3 py-2.5 text-[.76rem] text-muted" role="status">Mencari lokasi...</p> : displayMessage ? <p className="px-3 py-2.5 text-[.72rem] leading-5 text-muted" role="status">{displayMessage}</p> : suggestions.map((location, index) => (
+      <div className="flex h-10 min-w-0 items-center gap-2 border-b border-line focus-within:border-cyan">
+        <input
+          ref={inputRef}
+          className="h-full w-full min-w-0 border-0 bg-transparent p-0 text-[.79rem] text-muted outline-none placeholder:text-[#64748b] max-[600px]:text-[.7rem]"
+          name="pickup"
+          value={value}
+          placeholder="Ketik alamat atau tempat"
+          autoComplete="off"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={open}
+          aria-controls="pickup-suggestions"
+          aria-invalid={hasError}
+          onFocus={() => { if (value.trim().length >= 3) setOpen(true) }}
+          onChange={(event) => handleInputChange(event.target.value)}
+        />
+        <button
+          className="grid size-8 shrink-0 place-items-center rounded-md text-cyan transition-colors hover:bg-cyan/10 disabled:cursor-wait disabled:opacity-60"
+          type="button"
+          aria-label="Gunakan lokasi terkini"
+          title="Gunakan lokasi terkini"
+          disabled={locating}
+          onClick={useCurrentLocation}
+        ><LocateFixed size={17} aria-hidden="true" /></button>
+      </div>
+      {open && <div className="absolute left-0 top-[calc(100%+4px)] z-50 max-h-[min(320px,55vh)] w-full min-w-0 overflow-y-auto rounded-xl border border-line bg-white p-1.5 text-left shadow-[0_18px_50px_rgba(15,23,42,.18)]" id="pickup-suggestions" role="listbox" aria-label="Saran lokasi Jakarta dan sekitarnya">
+        {loading || locating ? <p className="px-3 py-2.5 text-[.76rem] text-muted" role="status">{locating ? 'Mengambil lokasi terkini...' : 'Mencari lokasi...'}</p> : displayMessage ? <p className="px-3 py-2.5 text-[.72rem] leading-5 text-muted" role="status">{displayMessage}</p> : suggestions.map((location, index) => (
           <button
-            className="block w-full rounded-lg px-3 py-2.5 text-left text-[.76rem] leading-5 text-muted transition-colors hover:bg-slate-ice hover:text-ink focus:bg-slate-ice focus:outline-none"
+            className="block w-full whitespace-normal break-words rounded-lg px-3 py-2.5 text-left text-[.76rem] leading-5 text-muted transition-colors hover:bg-slate-ice hover:text-ink focus:bg-slate-ice focus:outline-none"
             type="button"
             role="option"
             aria-selected="false"
             key={`${location.place_id ?? location.formatted}-${index}`}
             onPointerDown={(event) => event.preventDefault()}
             onClick={() => selectLocation(location)}
-          >{location.formatted}</button>
+          >{formatPickupAddress(location)}</button>
         ))}
       </div>}
     </div>
@@ -831,8 +856,10 @@ function AdminLogin() {
 }
 
 function RentalHome() {
-  const [bookingMode, setBookingMode] = useState(bookingModes[0])
-  const [durasi, setDurasi] = useState(bookingModes[0].min)
+  const [durasi, setDurasi] = useState(bookingMode.min)
+  const [durationMonths, setDurationMonths] = useState('0')
+  const [durationDays, setDurationDays] = useState('0')
+  const [extraDurationHours, setExtraDurationHours] = useState(String(bookingMode.min))
   const [selectedVehicleModelKeys, setSelectedVehicleModelKeys] = useState([])
   const [vehicleDetailGroup, setVehicleDetailGroup] = useState(null)
   const [selectedVehicles, setSelectedVehicles] = useState([])
@@ -862,9 +889,68 @@ function RentalHome() {
   const windowAvailability = currentAvailability?.data ?? null
   const availabilityStatus = !selectedDate || !selectedTime ? 'idle' : currentAvailability?.status ?? 'loading'
   const [vehicleTransition, setVehicleTransition] = useState('idle')
-  const [hasAvailableDriver, setHasAvailableDriver] = useState(true)
-  const [loadingDriverAvailability, setLoadingDriverAvailability] = useState(true)
+  const driverAvailabilityKey = `${selectedDate}|${selectedTime}|${durasi}|${availabilityRefresh}`
+  const [driverAvailability, setDriverAvailability] = useState({ key: '', status: 'idle', available: false })
+  const currentDriverAvailability = driverAvailability.key === driverAvailabilityKey ? driverAvailability : null
+  const driverAvailabilityStatus = !selectedDate || !selectedTime ? 'idle' : currentDriverAvailability?.status ?? 'loading'
+
+  // State field acara di form pemesanan utama
+  const [bookingEventType, setBookingEventType] = useState('Pernikahan')
+  const [bookingEventTypeOther, setBookingEventTypeOther] = useState('')
+  const [bookingEventAddons, setBookingEventAddons] = useState([])
+  const [bookingEventAddonCustom, setBookingEventAddonCustom] = useState('')
+  const [isEventBooking, setIsEventBooking] = useState(false)
+  const [withDriver, setWithDriver] = useState(false)
+  const [includeToll, setIncludeToll] = useState(true)  // Default: dengan tol
+  const [useCustomToll, setUseCustomToll] = useState(false)
+  const [customTollAmount, setCustomTollAmount] = useState('')
   const categoryInitialized = useRef(false)
+
+  function updateDurationParts(months, days, hours) {
+    const parsedMonths = Number.parseInt(months, 10)
+    const parsedDays = Number.parseInt(days, 10)
+    const parsedHours = Number.parseInt(hours, 10)
+    if (
+      !Number.isSafeInteger(parsedMonths) || parsedMonths < 0
+      || !Number.isSafeInteger(parsedDays) || parsedDays < 0
+      || !Number.isSafeInteger(parsedHours) || parsedHours < 0
+    ) return
+
+    const nextDuration = parsedMonths * 30 * 24 + parsedDays * 24 + parsedHours
+    if (Number.isSafeInteger(nextDuration) && nextDuration >= bookingMode.min) setDurasi(nextDuration)
+  }
+
+  function updateDurasi(nextDurasi) {
+    const normalized = Math.max(bookingMode.min, Math.floor(nextDurasi))
+    setDurasi(normalized)
+    const months = Math.floor(normalized / (30 * 24))
+    const remainingHours = normalized % (30 * 24)
+    const days = Math.floor(remainingHours / 24)
+    const hours = remainingHours % 24
+    setDurationMonths(String(months))
+    setDurationDays(String(days))
+    setExtraDurationHours(String(hours))
+  }
+
+  function commitDurationParts(months, days, hours) {
+    const parsedParts = [months, days, hours].map((part) => Number.parseInt(part, 10) || 0)
+    if (parsedParts.some((part) => !Number.isSafeInteger(part) || part < 0)) return
+
+    const nextDuration = parsedParts[0] * 30 * 24 + parsedParts[1] * 24 + parsedParts[2]
+    if (Number.isSafeInteger(nextDuration)) updateDurasi(nextDuration)
+  }
+
+  // Helper: ambil harga aktif (promo kalau sedang aktif, atau harga normal sesuai toggle tol)
+  const getVehiclePrice = (vehicle) => {
+    if (!vehicle) return '0'
+    return getActivePriceInfo(vehicle, includeToll, selectedDate || null, bookingMode.unit, durasi).price
+  }
+
+  // Helper: ambil info lengkap harga (untuk tampilkan harga coret)
+  const getVehiclePriceInfo = (vehicle) => {
+    if (!vehicle) return { price: '0', originalPrice: null, isPromo: false, isSpecial: false }
+    return getActivePriceInfo(vehicle, includeToll, selectedDate || null, bookingMode.unit, durasi)
+  }
 
   useEffect(() => {
     let active = true
@@ -885,48 +971,45 @@ function RentalHome() {
     return () => { active = false }
   }, [])
 
-  // Fetch ketersediaan supir — lewat RPC boolean karena tabel `drivers`
-  // tidak dibuka ke anon (RLS). Query langsung ke tabel selalu mengembalikan
-  // count 0 sehingga opsi "+ Supir" ikut terkunci.
+  // Check driver availability for the selected rental window through a public boolean RPC.
   useEffect(() => {
     let active = true
 
     async function checkDriverAvailability() {
+      if (!selectedDate || !selectedTime) return
+      const queryKey = `${selectedDate}|${selectedTime}|${durasi}|${availabilityRefresh}`
+      const startTs = toJakartaISOString(selectedDate, selectedTime)
+      const endTs = getEndDateTime(selectedDate, selectedTime, durasi).timestamp
+
       try {
-        const { data, error } = await supabase.rpc('driver_availability')
+        const { data, error } = await supabase.rpc('driver_availability_for_window', {
+          start_ts: startTs,
+          end_ts: endTs,
+        })
 
         if (!active) return
 
         if (error) {
-          // RPC belum dibuat di database — tetap aktifkan opsi supir (fail-safe)
-          setHasAvailableDriver(true)
+          setDriverAvailability({ key: queryKey, status: 'error', available: false })
+          return
+        } else if (typeof data === 'boolean') {
+          const available = data
+          setDriverAvailability({ key: queryKey, status: 'ready', available })
         } else {
-          setHasAvailableDriver(data !== false)
+          setDriverAvailability({ key: queryKey, status: 'error', available: false })
         }
       } catch {
-        if (active) setHasAvailableDriver(true)
-      } finally {
-        if (active) setLoadingDriverAvailability(false)
+        if (active) setDriverAvailability({ key: queryKey, status: 'error', available: false })
       }
     }
 
     checkDriverAvailability()
-    // Refresh setiap 60 detik agar sinkron dengan perubahan admin di dashboard
     const timer = window.setInterval(checkDriverAvailability, 60_000)
     return () => {
       active = false
       window.clearInterval(timer)
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Kalau mode "+ Supir" sedang aktif lalu semua supir habis, geser ke mode
-  // berikutnya supaya user tidak terjebak di tab yang non-interaktif.
-  useEffect(() => {
-    if (loadingDriverAvailability || hasAvailableDriver) return
-    if (bookingMode.label !== 'Sewa mobil + Supir') return
-    setBookingMode(bookingModes[1])
-    setDurasi(bookingModes[1].min)
-  }, [loadingDriverAvailability, hasAvailableDriver, bookingMode, setBookingMode])
+  }, [selectedDate, selectedTime, durasi, availabilityRefresh])
 
   // Fetch data kendaraan dari Supabase
   useEffect(() => {
@@ -1064,7 +1147,7 @@ function RentalHome() {
     if (!selectedDate || !selectedTime) return undefined
     const queryKey = `${selectedDate}|${selectedTime}|${bookingMode.label}|${durasi}|${availabilityRefresh}`
     const startTs = toJakartaISOString(selectedDate, selectedTime)
-    const endTs = getEndDateTime(selectedDate, selectedTime, bookingMode, durasi).timestamp
+    const endTs = getEndDateTime(selectedDate, selectedTime, durasi).timestamp
 
     async function loadAvailability() {
       try {
@@ -1087,7 +1170,7 @@ function RentalHome() {
     loadAvailability()
 
     return () => { active = false }
-  }, [selectedDate, selectedTime, bookingMode, durasi, availabilityRefresh])
+  }, [selectedDate, selectedTime, durasi, availabilityRefresh])
 
   async function handleSearch(event) {
     event.preventDefault()
@@ -1113,6 +1196,13 @@ function RentalHome() {
     if (!pickup || !selectedPickup) errors.pickup = 'Pilih lokasi dari saran di Jakarta dan sekitarnya'
     if (!date) errors.date = 'Pilih tanggal'
     if (!time) errors.time = 'Pilih waktu'
+    if (withDriver && date && time && driverAvailabilityStatus !== 'ready') {
+      errors.booking = driverAvailabilityStatus === 'error'
+        ? 'Ketersediaan supir belum bisa diperiksa. Muat ulang halaman atau pilih tanpa supir.'
+        : 'Tunggu sampai pemeriksaan ketersediaan supir selesai.'
+    } else if (withDriver && date && time && !currentDriverAvailability?.available) {
+      errors.booking = 'Tidak ada supir tersedia pada tanggal dan waktu tersebut. Pilih jadwal lain atau lanjutkan tanpa supir.'
+    }
     if (selectedVehicleModelKeys.length === 0) errors.vehicles = 'Pilih minimal 1 kendaraan dari daftar armada'
     else if (selectedVehicles.length === 0) errors.vehicles = 'Pilih tipe transmisi dan jumlah unit di kartu pesanan.'
     else if (date && availabilityStatus === 'error') errors.vehicles = 'Ketersediaan unit belum bisa diperiksa. Coba ubah jadwal atau muat ulang halaman.'
@@ -1130,10 +1220,39 @@ function RentalHome() {
       return
     }
 
+    if (withDriver) {
+      const queryKey = `${date}|${time}|${durasi}|${availabilityRefresh}`
+      try {
+        const { data, error } = await supabase.rpc('driver_availability_for_window', {
+          start_ts: toJakartaISOString(date, time),
+          end_ts: getEndDateTime(date, time, durasi).timestamp,
+        })
+        if (error || typeof data !== 'boolean') throw error ?? new Error('Respons ketersediaan supir tidak valid.')
+        setDriverAvailability({ key: queryKey, status: 'ready', available: data })
+        if (!data) {
+          setWithDriver(false)
+          setFormErrors({ booking: 'Supir untuk jadwal ini baru saja tidak tersedia. Pilih jadwal lain atau lanjutkan tanpa supir.' })
+          return
+        }
+      } catch {
+        setDriverAvailability({ key: queryKey, status: 'error', available: false })
+        setFormErrors({ booking: 'Ketersediaan supir belum bisa dipastikan. Permintaan belum dikirim; coba lagi atau pilih tanpa supir.' })
+        return
+      }
+    }
+
     setFormErrors({})
     const tanggalFormatted = formatJakartaDateTime(toJakartaISOString(date, '00:00'), { day: 'numeric', month: 'long', year: 'numeric' })
-    const selesai = getEndDateTime(date, time, bookingMode, durasi)
-    const estimatedPrice = selectedVehicles.reduce((total, vehicle) => total + Math.round(parsePrice(vehicle.price) * hitungMultiplier(bookingMode, durasi) * vehicle.quantity), 0)
+    const selesai = getEndDateTime(date, time, durasi)
+    const basePrice = selectedVehicles.reduce((total, vehicle) => total + Math.round(parsePrice(getVehiclePrice(vehicle)) * hitungMultiplier(bookingMode, durasi) * vehicle.quantity), 0)
+    
+    // Harga tol sudah embedded di vehicle.price kalau includeToll = true
+    // toll_amount = selisih harga dengan tol vs tanpa tol (untuk tracking admin)
+    const priceWithToll = selectedVehicles.reduce((total, vehicle) => total + Math.round(parsePrice(vehicle.price) * hitungMultiplier(bookingMode, durasi) * vehicle.quantity), 0)
+    const priceWithoutToll = selectedVehicles.reduce((total, vehicle) => total + Math.round(parsePrice(vehicle.price_without_toll || vehicle.price) * hitungMultiplier(bookingMode, durasi) * vehicle.quantity), 0)
+    const tollCost = includeToll ? (priceWithToll - priceWithoutToll) : 0
+    
+    const estimatedPrice = basePrice
     let bookingCode = generateBookingCode()
     const bookingRequest = {
       customer_name: customerName,
@@ -1143,7 +1262,7 @@ function RentalHome() {
       pickup_lon: Number(selectedPickup.lon),
       start_at: toJakartaISOString(date, time),
       end_at: selesai.timestamp,
-      booking_mode: bookingMode.label,
+      booking_mode: isEventBooking ? 'Rental Acara' : withDriver ? 'Sewa mobil + Supir' : bookingMode.label,
       duration: durasi,
       duration_unit: bookingMode.unit,
       vehicle_ids: [...new Set(selectedVehicles.map((vehicle) => vehicle.id))],
@@ -1152,12 +1271,24 @@ function RentalHome() {
         name: vehicle.name,
         transmission_type: vehicle.transmission_type,
         powertrain_type: vehicle.powertrain_type,
-        price: Math.round(parsePrice(vehicle.price) * hitungMultiplier(bookingMode, durasi) * vehicle.quantity),
+        price: Math.round(parsePrice(getVehiclePrice(vehicle)) * hitungMultiplier(bookingMode, durasi) * vehicle.quantity),
         quantity: vehicle.quantity,
       })),
       estimated_price: estimatedPrice,
+      toll_amount: tollCost,
+      toll_included: includeToll,
+      toll_type: includeToll ? 'standard' : null,
       privacy_consent: true,
       booking_code: bookingCode,
+      ...(isEventBooking ? {
+        notes: [
+          `[PAKET ACARA – ${(bookingEventType === 'Lainnya' ? (bookingEventTypeOther.trim() || 'Lainnya') : bookingEventType).toUpperCase()}]`,
+          bookingEventAddons.length > 0 ? `Add-on: ${bookingEventAddons.map((id) => {
+            if (id === 'kustom') return bookingEventAddonCustom.trim() || 'Kustom / lainnya'
+            return addonOptions.find((opt) => opt.id === id)?.label
+          }).filter(Boolean).join(', ')}` : null,
+        ].filter(Boolean).join('\n'),
+      } : {}),
     }
 
     const whatsappWindow = window.open('about:blank', '_blank')
@@ -1167,12 +1298,23 @@ function RentalHome() {
       .from('booking_requests')
       .insert(bookingRequest)
 
+    // Log detail error untuk debugging
+    if (bookingError) console.error('[booking insert error]', JSON.stringify({ code: bookingError.code, message: bookingError.message, details: bookingError.details, hint: bookingError.hint }))
+
     // Kode booking bentrok (sangat jarang) — buat ulang sekali lalu coba lagi.
     if (bookingError?.code === '23505' && bookingError.message?.includes('booking_code')) {
       bookingCode = generateBookingCode()
       ;({ error: bookingError } = await supabase
         .from('booking_requests')
         .insert({ ...bookingRequest, booking_code: bookingCode }))
+    }
+
+    // Kolom notes belum ada di database — retry tanpa field notes, info acara tetap terkirim via WhatsApp.
+    if (bookingError && 'notes' in bookingRequest) {
+      const { notes: _omitNotes, ...withoutNotes } = bookingRequest
+      ;({ error: bookingError } = await supabase
+        .from('booking_requests')
+        .insert(withoutNotes))
     }
 
     // Kolom booking_code belum ada (migrasi belum dijalankan) atau permission insert booking_code belum di-grant ke role anon (42501/401) — simpan tanpa kode.
@@ -1223,7 +1365,7 @@ function RentalHome() {
 
     const totalSelectedUnits = selectedVehicles.reduce((total, vehicle) => total + vehicle.quantity, 0)
     const kendaraanLines = selectedVehicles.map((vehicle, index) =>
-      `${index + 1}. ${vehicle.name} (${getVehicleVariantLabel(vehicle, vehicle.transmission_type)}) x ${vehicle.quantity}\n   Estimasi biaya: Rp ${formatPrice(vehicle.price)} / ${durasi} ${bookingMode.unit}`
+      `${index + 1}. ${vehicle.name} (${getVehicleVariantLabel(vehicle, vehicle.transmission_type)}) x ${vehicle.quantity}\n   Estimasi biaya: Rp ${formatPrice(vehicle.price)} / ${formatDuration(durasi, bookingMode.unit)}`
     ).join('\n')
 
     const lines = [
@@ -1234,12 +1376,12 @@ function RentalHome() {
       '',
       `Nama pemesan: ${customerName}`,
       `Nomor WhatsApp: ${normalizedPhone}`,
-      `Jenis layanan: ${bookingMode.label}`,
-      `Durasi sewa: ${durasi} ${bookingMode.unit}`,
+      `Jenis layanan: ${isEventBooking ? 'Rental Acara' : withDriver ? 'Sewa mobil + Supir' : bookingMode.label}`,
+      `Durasi sewa: ${formatDuration(durasi, bookingMode.unit)}`,
       '',
       'Lokasi penjemputan:',
       selectedPickup.formatted,
-      `Google Maps: https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedPickup.formatted)}`,
+      `Google Maps: https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(Number.isFinite(Number(selectedPickup.lat)) && Number.isFinite(Number(selectedPickup.lon)) ? `${selectedPickup.lat},${selectedPickup.lon}` : selectedPickup.formatted)}`,
       '',
       'Jadwal:',
       `Tanggal mulai: ${tanggalFormatted}`,
@@ -1257,6 +1399,7 @@ function RentalHome() {
     setBookingConfirmation({ waUrl, bookingCode })
     if (whatsappWindow) whatsappWindow.location.href = waUrl
   }
+
 
   function handleSelectVehicle(vehicleGroup) {
     const alreadySelected = selectedVehicleModelKeys.includes(vehicleGroup.key)
@@ -1388,29 +1531,82 @@ function RentalHome() {
         </section>
 
         <section ref={formRef} className={`relative z-10 mx-auto -mt-[32px] w-[min(1240px,87.2%)] rounded-[10px] border border-line bg-white px-8 pb-6 shadow-[0_18px_48px_rgba(15,23,42,.1)] max-[900px]:w-[92%] max-[600px]:-mt-[27px] max-[600px]:w-[calc(100%-28px)] max-[600px]:px-[15px] max-[600px]:pb-[15px] ${scrollRevealClasses}`} aria-label="Pencarian kendaraan" data-scroll-reveal data-reveal="hidden">
-          <BookingTabs bookingMode={bookingMode} setBookingMode={setBookingMode} hasAvailableDriver={hasAvailableDriver} loadingDriverAvailability={loadingDriverAvailability} />
-          {/* Input durasi */}
           <div className="flex flex-wrap items-center gap-3 border-b border-line py-3 max-[600px]:gap-x-2 max-[600px]:gap-y-1.5">
-            <span className="text-[.72rem] font-bold text-crimson">{bookingMode.label}</span>
-            <span className="text-[.72rem] text-muted">·</span>
-            <span className="text-[.72rem] text-muted">Durasi:</span>
-            <div className="flex items-center gap-1.5">
-              <button type="button" className="grid size-6 place-items-center rounded-full border border-line text-[.8rem] font-bold text-muted transition hover:border-crimson hover:text-crimson" onClick={() => setDurasi((d) => Math.max(bookingMode.min, d - bookingMode.step))}>−</button>
+            <span className="text-[.72rem] font-bold text-crimson">Durasi sewa</span>
+            <label className="flex items-center gap-1.5 text-[.7rem] text-muted">
               <input
                 type="number"
-                min={bookingMode.min}
-                step={bookingMode.step}
-                value={durasi}
-                onChange={(e) => {
-                  const val = parseInt(e.target.value) || bookingMode.min
-                  const snapped = Math.max(bookingMode.min, Math.round(val / bookingMode.step) * bookingMode.step)
-                  setDurasi(snapped)
+                aria-label="Durasi sewa dalam bulan"
+                min="0"
+                step="1"
+                value={durationMonths}
+                onChange={(event) => {
+                  setDurationMonths(event.target.value)
+                  updateDurationParts(event.target.value, durationDays, extraDurationHours)
                 }}
-                className="w-10 border-0 bg-transparent p-0 text-center text-[.8rem] font-bold text-ink outline-none"
+                onBlur={() => commitDurationParts(durationMonths, durationDays, extraDurationHours)}
+                className="w-12 rounded border border-line bg-white px-1.5 py-1 text-center text-[.78rem] font-bold text-ink outline-none focus:border-crimson"
               />
-              <button type="button" className="grid size-6 place-items-center rounded-full border border-line text-[.8rem] font-bold text-muted transition hover:border-crimson hover:text-crimson" onClick={() => setDurasi((d) => d + bookingMode.step)}>+</button>
+              bulan
+            </label>
+            <label className="flex items-center gap-1.5 text-[.7rem] text-muted">
+              <input
+                type="number"
+                aria-label="Durasi sewa dalam hari"
+                min="0"
+                step="1"
+                value={durationDays}
+                onChange={(event) => {
+                  setDurationDays(event.target.value)
+                  updateDurationParts(durationMonths, event.target.value, extraDurationHours)
+                }}
+                onBlur={() => commitDurationParts(durationMonths, durationDays, extraDurationHours)}
+                className="w-12 rounded border border-line bg-white px-1.5 py-1 text-center text-[.78rem] font-bold text-ink outline-none focus:border-crimson"
+              />
+              hari
+            </label>
+            <label className="flex items-center gap-1.5 text-[.7rem] text-muted">
+              <input
+                type="number"
+                aria-label="Jam tambahan durasi sewa"
+                min={Number(durationMonths) === 0 && Number(durationDays) === 0 ? bookingMode.min : 0}
+                max="23"
+                step="1"
+                value={extraDurationHours}
+                onChange={(event) => {
+                  const nextHours = event.target.value
+                  const hoursOnly = Number(durationMonths) === 0 && Number(durationDays) === 0
+                  const isPartialMinimum = String(bookingMode.min).startsWith(nextHours)
+                  if (hoursOnly && nextHours !== '' && Number(nextHours) < bookingMode.min && !isPartialMinimum) {
+                    updateDurasi(bookingMode.min)
+                    return
+                  }
+                  setExtraDurationHours(nextHours)
+                  updateDurationParts(durationMonths, durationDays, nextHours)
+                }}
+                onBlur={() => commitDurationParts(durationMonths, durationDays, extraDurationHours)}
+                className="w-12 rounded border border-line bg-white px-1.5 py-1 text-center text-[.78rem] font-bold text-ink outline-none focus:border-crimson"
+              />
+              jam
+            </label>
+            <span className="text-[.72rem] text-muted">·</span>
+            <span className="text-[.72rem] font-semibold text-ink">{formatDuration(durasi, bookingMode.unit)} total</span>
+            <div className="flex flex-wrap gap-1.5" aria-label="Pilihan durasi cepat">
+              {[
+                { label: '12 jam', hours: 12 },
+                { label: '1 hari', hours: 24 },
+                { label: '1 minggu', hours: 168 },
+                { label: '1 bulan', hours: 30 * 24 },
+              ].map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  className={`rounded-full border px-2.5 py-1 text-[.65rem] font-semibold transition ${durasi === preset.hours ? 'border-crimson bg-crimson/5 text-crimson' : 'border-line text-muted hover:border-crimson hover:text-crimson'}`}
+                  aria-pressed={durasi === preset.hours}
+                  onClick={() => updateDurasi(preset.hours)}
+                >{preset.label}</button>
+              ))}
             </div>
-            <span className="text-[.72rem] font-semibold text-muted">{bookingMode.unit}</span>
           </div>
           <form id="booking-request-form" className="booking-request-form grid grid-cols-6 items-start gap-x-4 gap-y-4 py-6 max-[900px]:grid-cols-3 max-[600px]:grid-cols-1 max-[600px]:gap-x-3 max-[600px]:gap-y-3 max-[600px]:py-4" onSubmit={handleSearch}>
             <label className="col-span-2 grid min-w-0 gap-1.5 max-[900px]:col-span-1">
@@ -1427,7 +1623,7 @@ function RentalHome() {
               {formErrors.customerPhone && <span className="text-[.62rem] text-red-500">{formErrors.customerPhone}</span>}
               {!formErrors.customerPhone && <span className="text-[.61rem] text-[#64748b]">Pilih negara lalu masukkan nomor WhatsApp sesuai format negara yang dipilih.</span>}
             </label>
-            <label className="col-span-2 grid min-w-0 gap-1.5 max-[900px]:col-span-1 max-[600px]:col-span-1">
+            <div className="col-span-2 grid min-w-0 gap-1.5 max-[900px]:col-span-1 max-[600px]:col-span-1">
               <span className={`text-[.7rem] font-bold max-[600px]:text-[.64rem] ${formErrors.pickup ? 'text-red-500' : 'text-crimson'}`}>Lokasi penjemputan</span>
               <LocationAutocomplete
                 value={pickupLocation}
@@ -1444,9 +1640,9 @@ function RentalHome() {
                 }}
               />
               {formErrors.pickup && <span className="text-[.62rem] text-red-500">{formErrors.pickup}</span>}
-            </label>
-            <div className="col-span-2 grid min-w-0 gap-1.5 max-[900px]:col-span-1 max-[600px]:col-span-1"><span className={`text-[.7rem] font-bold max-[600px]:text-[.64rem] ${formErrors.date ? 'text-red-500' : 'text-crimson'}`}>Tanggal mulai</span><DatePicker onDateChange={(date) => { setSelectedDate(date); setSelectedTime(''); if (!date) { setSelectedVehicleModelKeys([]); setSelectedVehicles([]) } setFormErrors((errors) => ({ ...errors, date: undefined, time: undefined })) }} />{formErrors.date && <span className="text-[.62rem] text-red-500">{formErrors.date}</span>}</div>
-            <div className="col-span-1 grid min-w-0 gap-1.5"><span className={`text-[.7rem] font-bold max-[600px]:text-[.64rem] ${formErrors.time ? 'text-red-500' : 'text-crimson'} max-[600px]:text-[.64rem]`}>Waktu</span><TimePicker selectedDate={selectedDate} value={selectedTime} onTimeChange={(time) => { setSelectedTime(time); setFormErrors((errors) => ({ ...errors, time: undefined })) }} />{formErrors.time && <span className="text-[.62rem] text-red-500">{formErrors.time}</span>}</div>
+            </div>
+            <div className="col-span-2 grid min-w-0 gap-1.5 max-[900px]:col-span-1 max-[600px]:col-span-1"><span className={`text-[.7rem] font-bold max-[600px]:text-[.64rem] ${formErrors.date ? 'text-red-500' : 'text-crimson'}`}>Tanggal mulai</span><DatePicker onDateChange={(date) => { setSelectedDate(date); setSelectedTime(''); if (!date) { setSelectedVehicleModelKeys([]); setSelectedVehicles([]) } setFormErrors((errors) => ({ ...errors, date: undefined, time: undefined, booking: undefined })) }} />{formErrors.date && <span className="text-[.62rem] text-red-500">{formErrors.date}</span>}</div>
+            <div className="col-span-1 grid min-w-0 gap-1.5"><span className={`text-[.7rem] font-bold max-[600px]:text-[.64rem] ${formErrors.time ? 'text-red-500' : 'text-crimson'} max-[600px]:text-[.64rem]`}>Waktu</span><TimePicker selectedDate={selectedDate} value={selectedTime} onTimeChange={(time) => { setSelectedTime(time); setFormErrors((errors) => ({ ...errors, time: undefined, booking: undefined })) }} />{formErrors.time && <span className="text-[.62rem] text-red-500">{formErrors.time}</span>}</div>
             <div className="col-span-2 grid min-w-0 gap-1.5 max-[900px]:col-span-1 max-[600px]:col-span-1">
               <span className={`text-[.7rem] font-bold max-[600px]:text-[.64rem] ${formErrors.vehicles ? 'text-red-500' : 'text-crimson'}`}>Kendaraan</span>
               {selectedVehicleModels.length > 0 ? (
@@ -1459,7 +1655,7 @@ function RentalHome() {
                           vehicle,
                           transmissionType,
                           available: getWindowRemaining(windowAvailability, vehicle, transmissionType) ?? 0,
-                          unitPrice: Math.round(parsePrice(vehicle.price) * hitungMultiplier(bookingMode, durasi)),
+                          unitPrice: Math.round(parsePrice(getVehiclePrice(vehicle)) * hitungMultiplier(bookingMode, durasi)),
                         })).filter((variant) => variant.available > 0)
                       })
                       : []
@@ -1497,6 +1693,112 @@ function RentalHome() {
               {formErrors.vehicles && <span className="text-[.62rem] text-red-500">{formErrors.vehicles}</span>}
             </div>
 
+            <div className="col-span-6 grid gap-3 rounded-xl border border-purple-200 bg-purple-50/60 p-4 max-[900px]:col-span-3 max-[600px]:col-span-1">
+              <label className="flex items-start gap-2.5 text-[.7rem] leading-5 text-purple-700">
+              <input
+                className="mt-1 size-4 shrink-0 accent-crimson"
+                type="checkbox"
+                checked={isEventBooking}
+                onChange={(event) => {
+                  setIsEventBooking(event.target.checked)
+                  if (event.target.checked) setWithDriver(false)
+                }}
+              />
+              <span><strong>Paket acara</strong> <span className="font-normal text-purple-500">(opsional — pilih jika ingin dekorasi atau kebutuhan khusus acara)</span></span>
+              </label>
+              {isEventBooking && (
+                <div className="grid gap-4">
+                  <div className="flex items-center gap-2">
+                  <span className="text-base" aria-hidden="true">🎉</span>
+                  <span className="text-[.72rem] font-bold text-purple-700">Detail Acara <span className="font-normal text-purple-500">(opsional — isi untuk mempermudah admin)</span></span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 max-[600px]:grid-cols-1">
+                  <div className="grid gap-1.5">
+                    <span className="text-[.68rem] font-bold text-purple-700">Jenis acara</span>
+                    <select
+                      className="h-9 rounded-lg border border-purple-200 bg-white px-2.5 text-[.78rem] text-ink outline-none focus:border-purple-400"
+                      value={bookingEventType}
+                      onChange={(e) => setBookingEventType(e.target.value)}
+                    >
+                      {eventTypes.map((t) => <option key={t.label} value={t.label}>{t.emoji} {t.label}</option>)}
+                      <option value="Lainnya">✏️ Lainnya</option>
+                    </select>
+                    {bookingEventType === 'Lainnya' && (
+                      <input
+                        className="h-9 rounded-lg border border-purple-200 bg-white px-2.5 text-[.78rem] text-ink outline-none placeholder:text-slate-400 focus:border-purple-400"
+                        type="text"
+                        placeholder="Tulis jenis acara kamu..."
+                        maxLength={80}
+                        value={bookingEventTypeOther}
+                        onChange={(e) => setBookingEventTypeOther(e.target.value)}
+                        autoFocus
+                      />
+                    )}
+                  </div>
+                  <div className="grid gap-1.5">
+                    <span className="text-[.68rem] font-bold text-purple-700">Add-on dekorasi</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {addonOptions.map((opt) => {
+                        const active = bookingEventAddons.includes(opt.id)
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[.68rem] font-semibold transition-all ${active ? 'border-purple-400 bg-purple-100 text-purple-700' : 'border-line bg-white text-muted hover:border-purple-300 hover:text-purple-600'}`}
+                            onClick={() => setBookingEventAddons((prev) => active ? prev.filter((id) => id !== opt.id) : [...prev, opt.id])}
+                            aria-pressed={active}
+                          >
+                            <span aria-hidden="true">{opt.emoji}</span>{opt.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {bookingEventAddons.includes('kustom') && (
+                      <input
+                        className="h-9 rounded-lg border border-purple-200 bg-white px-2.5 text-[.78rem] text-ink outline-none placeholder:text-slate-400 focus:border-purple-400"
+                        type="text"
+                        placeholder="Tulis add-on kustom kamu..."
+                        maxLength={120}
+                        value={bookingEventAddonCustom}
+                        onChange={(e) => setBookingEventAddonCustom(e.target.value)}
+                        autoFocus
+                      />
+                    )}
+                  </div>
+                </div>
+                </div>
+              )}
+            </div>
+
+            {!isEventBooking && (
+              <div className="col-span-6 grid gap-1 max-[900px]:col-span-3 max-[600px]:col-span-1">
+                <label className="flex items-start gap-2.5 text-[.7rem] leading-5 text-muted">
+                  <input
+                    className="mt-1 size-4 shrink-0 accent-crimson"
+                    type="checkbox"
+                    checked={withDriver}
+                    disabled={!withDriver && (driverAvailabilityStatus !== 'ready' || !currentDriverAvailability?.available)}
+                    onChange={(event) => {
+                      setWithDriver(event.target.checked)
+                      setFormErrors((errors) => ({ ...errors, booking: undefined }))
+                    }}
+                  />
+                  <span>Butuh supir profesional untuk perjalanan ini</span>
+                </label>
+                <span className="pl-[26px] text-[.62rem] leading-4 text-muted" role="status">
+                  {driverAvailabilityStatus === 'idle'
+                    ? 'Pilih tanggal dan waktu untuk memeriksa ketersediaan supir.'
+                    : driverAvailabilityStatus === 'loading'
+                      ? 'Sedang memeriksa ketersediaan supir untuk jadwal ini…'
+                      : driverAvailabilityStatus === 'error'
+                        ? 'Ketersediaan supir belum dapat diperiksa. Silakan coba muat ulang halaman.'
+                        : currentDriverAvailability?.available
+                          ? 'Supir tersedia untuk jadwal yang dipilih. Admin akan menetapkan supir setelah permintaan masuk.'
+                          : 'Tidak ada supir tersedia pada jadwal ini. Pilih waktu lain atau lanjutkan tanpa supir.'}
+                </span>
+              </div>
+            )}
+
             <label className="col-span-6 flex items-start gap-2.5 text-[.7rem] leading-5 text-muted max-[900px]:col-span-3 max-[600px]:col-span-1">
               <input className="mt-1 size-4 shrink-0 accent-crimson" type="checkbox" name="privacy_consent" required />
               <span>Saya setuju data kontak dan perjalanan digunakan untuk memproses permintaan sewa ini sesuai <a className="font-semibold text-crimson underline" href="/syarat-ketentuan">syarat & kebijakan privasi</a>.</span>
@@ -1525,6 +1827,33 @@ function RentalHome() {
             <div><h2 className="m-0 font-display text-[clamp(1.8rem,3.2vw,2.8rem)] font-bold leading-[1.16] max-[600px]:text-[1.85rem]">Pilih kendaraan untuk perjalananmu</h2><p className="mt-[10px] text-[.88rem] text-muted max-[600px]:text-[.8rem]">Armada tersedia untuk perjalanan harian, keluarga, dan rombongan.</p></div>
             <div className="flex shrink-0 items-center max-[600px]:w-full"><CategorySelect id="fleet-category-options" ariaLabel="Filter kategori kendaraan" className="min-w-[190px] rounded-xl border border-line bg-white px-3.5 py-2.5 text-[.8rem] font-medium text-ink shadow-[0_4px_14px_rgba(15,23,42,.045)] outline-none transition-[border-color,box-shadow] duration-300 hover:border-cyan/50 hover:shadow-[0_6px_18px_rgba(15,23,42,.08)] focus:border-cyan focus:ring-4 focus:ring-cyan/10 max-[600px]:min-w-0 max-[600px]:flex-1" value={category} onChange={setCategory} /></div>
           </div>
+
+          {/* Toggle Paket Kartu Tol */}
+          <div className="mt-8 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-4 max-[600px]:flex-col">
+              <div>
+                <h3 className="m-0 text-[.95rem] font-bold text-amber-900">💳 Paket Kartu Tol & Parkir</h3>
+                <p className="mb-0 mt-1 text-[.75rem] leading-relaxed text-amber-800">Pilih paket sebelum memilih armada. Harga yang ditampilkan akan menyesuaikan.</p>
+              </div>
+              <div className="flex shrink-0 gap-2 rounded-lg bg-white p-1 shadow-sm max-[600px]:w-full">
+                <button
+                  type="button"
+                  className={`flex-1 rounded-md px-4 py-2 text-[.75rem] font-semibold transition-all ${!includeToll ? 'bg-slate-100 text-slate-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+                  onClick={() => setIncludeToll(false)}
+                >
+                  Tanpa Tol
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 rounded-md px-4 py-2 text-[.75rem] font-semibold transition-all ${includeToll ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+                  onClick={() => setIncludeToll(true)}
+                >
+                  Dengan Tol
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="mt-10 grid grid-cols-3 gap-x-9 gap-y-12 max-[900px]:grid-cols-2 max-[600px]:grid-cols-1 max-[600px]:gap-[14px]" data-vehicle-transition={vehicleTransition}>
             {(!selectedDate || !selectedTime) && (
               <div className="col-span-3 rounded-lg border border-line bg-white px-5 py-8 text-center max-[900px]:col-span-2 max-[600px]:col-span-1" role="status">
@@ -1579,15 +1908,29 @@ function RentalHome() {
                 ), 0)
                 return total + Math.max(0, totalAvailable - allocatedAvailable)
               }, 0)
-              const modelPrice = Math.min(...variants.map((variant) => Math.round(parsePrice(variant.price) * hitungMultiplier(bookingMode, durasi))))
+              const modelPrice = Math.min(...variants.map((variant) => Math.round(parsePrice(getVehiclePrice(variant)) * hitungMultiplier(bookingMode, durasi))))
+              // Cek promo dari variant pertama yang punya promo aktif
+              const promoVariant = variants.find((v) => getActivePriceInfo(v, includeToll, selectedDate || null, bookingMode.unit, durasi).isPromo)
+              const specialVariant = !promoVariant && variants.find((v) => getActivePriceInfo(v, includeToll, selectedDate || null, bookingMode.unit, durasi).isSpecial)
+              const modelOriginalPrice = (promoVariant || specialVariant)
+                ? Math.min(...variants.map((variant) => Math.round(parsePrice(getActivePriceInfo(variant, includeToll, selectedDate || null, bookingMode.unit, durasi).originalPrice || getVehiclePrice(variant)) * hitungMultiplier(bookingMode, durasi))))
+                : null
               const isSelected = selectedVehicleModelKeys.includes(vehicleGroup.key)
               const readyForWindow = hasSelectedSchedule && availabilityStatus === 'ready' && variants.some((variant) => isVehicleReadyForWindow(variant, windowAvailability))
               const canSelect = readyForWindow || isSelected
               return (
-              <article className={`group min-w-0 cursor-pointer overflow-hidden border-b border-line bg-transparent pb-5 transition duration-200 hover:-translate-y-1 hover:border-crimson/40 ${isSelected ? 'border-crimson/60 ring-2 ring-crimson/20' : ''}`} style={{ '--vehicle-delay': `${Math.min(index * 100, 700)}ms` }} key={`${vehicleTransition === 'enter' ? 'enter' : 'stable'}-${vehicleGroup.key}`} onClick={(event) => handleVehicleCardClick(event, vehicleGroup)}>
+              <article className={`group min-w-0 cursor-pointer overflow-hidden border-b pb-5 transition duration-200 hover:-translate-y-1 ${
+                isSelected
+                  ? 'border-crimson/60 bg-transparent ring-2 ring-crimson/20'
+                  : promoVariant
+                    ? 'promo-card border-yellow-400 bg-gradient-to-b from-yellow-50 to-transparent hover:border-yellow-500'
+                    : specialVariant
+                      ? 'special-card border-blue-400 bg-gradient-to-b from-blue-50 to-transparent hover:border-blue-500'
+                      : 'border-line bg-transparent hover:border-crimson/40'
+              }`} style={{ '--vehicle-delay': `${Math.min(index * 100, 700)}ms` }} key={`${vehicleTransition === 'enter' ? 'enter' : 'stable'}-${vehicleGroup.key}`} onClick={(event) => handleVehicleCardClick(event, vehicleGroup)}>
                 <div className="relative block h-[242px] overflow-hidden bg-transparent max-[600px]:h-[205px]">
                   {badge && (
-                    <span className="absolute left-2 top-2 z-10 rounded-full bg-crimson px-2.5 py-1 text-[.6rem] font-bold uppercase tracking-[.07em] text-white shadow-sm">
+                    <span className={`absolute left-2 top-2 z-10 rounded-full px-2.5 py-1 text-[.6rem] font-bold uppercase tracking-[.07em] text-white shadow-sm ${promoVariant ? 'bg-yellow-500' : (specialVariant || variants.some((v) => v.special_price && !v.promo_price)) ? 'bg-blue-500' : 'bg-crimson'}`}>
                       {badge}
                     </span>
                   )}
@@ -1606,16 +1949,65 @@ function RentalHome() {
                     <div className="flex min-w-0 items-center gap-[10px]"><UsersRound className="box-content shrink-0 rounded-[5px] bg-cyan/10 p-[5px] text-cyan" aria-hidden="true" size={17} /><span className="grid min-w-0 gap-[2px]"><small className="text-[.56rem] font-semibold tracking-[.03em] text-[#64748b]">TEMPAT DUDUK</small><strong className="truncate text-[.63rem] font-semibold text-muted">{vehicle.seats}</strong></span></div>
                     {variantLabels.length > 0 && <div className="flex min-w-0 items-center gap-[10px]"><Settings2 className="box-content shrink-0 rounded-[5px] bg-cyan/10 p-[5px] text-cyan" aria-hidden="true" size={17} /><span className="grid min-w-0 gap-[2px]"><small className="text-[.56rem] font-semibold tracking-[.03em] text-[#64748b]">VARIAN TERSEDIA</small><strong className="truncate text-[.63rem] font-semibold text-muted">{variantLabels.join(', ')}</strong>{transmissionDetails.length > 0 && <small className="truncate text-[.56rem] text-[#64748b]">{transmissionDetails.join(' · ')}</small>}</span></div>}
                     {unallocatedUnits > 0 && <div className="flex min-w-0 items-center gap-[10px]"><Fuel className="box-content shrink-0 rounded-[5px] bg-amber-100 p-[5px] text-amber-800" aria-hidden="true" size={17} /><span className="grid min-w-0 gap-[2px]"><small className="text-[.56rem] font-semibold tracking-[.03em] text-[#64748b]">TIPE UNIT</small><strong className="truncate text-[.63rem] font-semibold text-amber-900">Belum dialokasikan</strong><small className="text-[.56rem] text-slate-600">{unallocatedUnits} unit ready</small></span></div>}
-                    <div className="flex min-w-0 items-center gap-[10px]"><Clock3 className="box-content shrink-0 rounded-[5px] bg-cyan/10 p-[5px] text-cyan" aria-hidden="true" size={17} /><span className="grid min-w-0 gap-[2px]"><small className="text-[.56rem] font-semibold tracking-[.03em] text-[#64748b]">DURASI SEWA</small><strong className="truncate text-[.63rem] font-semibold text-muted">{durasi} {bookingMode.unit}</strong></span></div>
+                    <div className="flex min-w-0 items-center gap-[10px]"><Clock3 className="box-content shrink-0 rounded-[5px] bg-cyan/10 p-[5px] text-cyan" aria-hidden="true" size={17} /><span className="grid min-w-0 gap-[2px]"><small className="text-[.56rem] font-semibold tracking-[.03em] text-[#64748b]">DURASI SEWA</small><strong className="truncate text-[.63rem] font-semibold text-muted">{formatDuration(durasi, bookingMode.unit)}</strong></span></div>
                     <div className="flex min-w-0 items-center gap-[10px]"><UserRoundCheck className="box-content shrink-0 rounded-[5px] bg-cyan/10 p-[5px] text-cyan" aria-hidden="true" size={17} /><span className="grid min-w-0 gap-[2px]"><small className="text-[.56rem] font-semibold tracking-[.03em] text-[#64748b]">LAYANAN</small><strong className="truncate text-[.63rem] font-semibold text-muted">Supir tersedia</strong></span></div>
                     <div className="flex min-w-0 items-center gap-[10px]"><UsersRound className="box-content shrink-0 rounded-[5px] bg-cyan/10 p-[5px] text-cyan" aria-hidden="true" size={17} /><span className="grid min-w-0 gap-[2px]"><small className="text-[.56rem] font-semibold tracking-[.03em] text-[#64748b]">UNIT DI JADWAL INI</small><strong className="truncate text-[.63rem] font-semibold text-muted">{countWindowReadyUnits(allVehicles, availabilityStatus === 'ready' ? windowAvailability : null, vehicleGroup.name)} unit</strong></span></div>
                   </div>
                   <div className="mt-[17px] flex items-end justify-between gap-2 border-t border-line pt-[11px]">
                     <div>
                       <span className="text-[.68rem] text-[#64748b]">{variants.length > 1 ? 'Harga mulai' : 'Harga per unit'}</span>
-                      <strong className="block text-[.89rem] text-crimson">Rp {formatPrice(modelPrice)}<small className="text-[.67rem] font-medium text-[#64748b]"> / {durasi} {bookingMode.unit}</small></strong>
+                      {modelOriginalPrice && (
+                        <span className="block text-[.7rem] text-slate-400 line-through">Rp {formatPrice(modelOriginalPrice)}</span>
+                      )}
+                      <strong className={`block text-[.89rem] ${promoVariant ? 'text-yellow-600' : specialVariant ? 'text-blue-600' : 'text-crimson'}`}>Rp {formatPrice(modelPrice)}<small className="text-[.67rem] font-medium text-[#64748b]"> / {formatDuration(durasi, bookingMode.unit)}</small></strong>
+                      {modelOriginalPrice && promoVariant && (
+                        <span className="text-[.65rem] font-semibold text-yellow-600">Hemat Rp {formatPrice(modelOriginalPrice - modelPrice)}</span>
+                      )}
+                      {!promoVariant && variants.some((v) => v.promo_price) && (() => {
+                        const promoVehicle = variants.find((v) => v.promo_price)
+                        const promoEnd = promoVehicle?.promo_end
+                        const promoStart = promoVehicle?.promo_start
+                        const endLabel = promoEnd
+                          ? formatJakartaDateTime(new Date(promoEnd).toISOString(), { day: 'numeric', month: 'long', year: 'numeric' })
+                          : null
+                        const startLabel = promoStart
+                          ? formatJakartaDateTime(new Date(promoStart).toISOString(), { day: 'numeric', month: 'long', year: 'numeric' })
+                          : null
+                        return (
+                          <span className="mt-[3px] block text-[.6rem] leading-[1.5] text-slate-400">
+                            {endLabel
+                              ? `Promo hanya berlaku s/d ${endLabel}`
+                              : startLabel
+                                ? `Promo berlaku mulai ${startLabel}`
+                                : 'Ada promo untuk tanggal tertentu'}
+                          </span>
+                        )
+                      })()}
+                      {modelOriginalPrice && specialVariant && (() => {
+                        const specialInfo = getActivePriceInfo(specialVariant, includeToll, selectedDate || null, bookingMode.unit, durasi)
+                        const minDays = Number(specialVariant.special_min_days) || 3
+                        return (
+                          <span className="mt-[3px] block">
+                            <span className="text-[.65rem] font-semibold text-blue-600">{specialInfo.specialLabel ?? 'Harga Spesial'}</span>
+                            <span className="mt-[2px] block text-[.6rem] leading-[1.5] text-slate-500">Harga ini berlaku saat sewa ≥ {minDays} hari berturut-turut</span>
+                          </span>
+                        )
+                      })()}
+                      {!modelOriginalPrice && !promoVariant && (() => {
+                        // Hanya tampil teaser kalau kendaraan memang punya special_price
+                        // DAN tidak punya promo sama sekali (promo_price null/kosong)
+                        const anySpecialVehicle = variants.find((v) => v.special_price && !v.promo_price)
+                        if (!anySpecialVehicle) return null
+                        const minDays = Number(anySpecialVehicle.special_min_days) || 3
+                        const specialLabel = anySpecialVehicle.special_label || `Min. ${minDays} hari`
+                        return (
+                          <span className="mt-[3px] block">
+                            <span className="text-[.65rem] font-semibold text-blue-500">{specialLabel}</span>
+                            <span className="mt-[2px] block text-[.6rem] leading-[1.5] text-slate-500">Sewa ≥ {minDays} hari dapat harga spesial</span>
+                          </span>
+                        )
+                      })()}
                     </div>
-                    <button className="grid size-9 shrink-0 place-items-center rounded-lg border border-line bg-white text-muted transition-colors hover:border-cyan/50 hover:text-cyan" type="button" title={`Detail ${vehicleGroup.name}`} aria-label={`Detail ${vehicleGroup.name}`} onClick={(event) => { event.stopPropagation(); setVehicleDetailGroup(vehicleGroup) }}><Eye size={16} aria-hidden="true" /></button>
                     <button type="button" disabled={!canSelect} onClick={(event) => { event.stopPropagation(); handleSelectVehicle(vehicleGroup) }} className={`shrink-0 rounded-lg px-4 py-2 text-[.75rem] font-bold transition-colors duration-200 ${!canSelect ? 'cursor-not-allowed bg-slate-100 text-slate-400' : isSelected ? 'bg-cyan text-white' : 'bg-crimson/10 text-crimson hover:bg-crimson hover:text-white'}`}>
                       {isSelected ? 'Batalkan' : 'Pilih mobil'}
                     </button>
@@ -1645,6 +2037,99 @@ function RentalHome() {
         <section className={`mx-auto mb-[78px] mt-[88px] w-[min(1240px,87.2%)] max-[900px]:w-[92%] max-[600px]:mb-[54px] max-[600px]:mt-[58px] ${scrollRevealClasses}`} id="layanan" data-scroll-reveal data-reveal="hidden">
           <div className="mb-8 flex items-end justify-between gap-8 max-[700px]:mb-6 max-[700px]:block"><div><span className="mb-[10px] block text-[.67rem] font-extrabold tracking-[.15em] text-crimson">LAYANAN PT KHALISA SUMBER REZEKI</span><h2 className="m-0 max-w-[630px] font-display text-[clamp(1.8rem,3.2vw,2.65rem)] font-bold leading-[1.14] tracking-[-.025em] max-[600px]:text-[1.8rem]">Perjalanan terasa mudah sejak awal</h2></div><p className="mb-1 max-w-[330px] text-[.82rem] leading-6 text-muted max-[700px]:mt-3">Dukungan yang membuat setiap tahap perjalanan lebih nyaman dan jelas.</p></div>
           <div className="grid grid-cols-4 gap-4 max-[900px]:grid-cols-2 max-[600px]:gap-3">{benefits.map((benefit) => <article className="group relative flex min-h-[205px] flex-col rounded-xl border border-line bg-white p-6 transition duration-200 hover:-translate-y-1 hover:border-cyan/50 hover:shadow-[0_16px_40px_rgba(15,23,42,.07)] max-[600px]:min-h-[190px] max-[600px]:p-4" key={benefit.number}><div className="flex items-center justify-between"><span className="grid size-10 place-items-center rounded-lg bg-cyan/10 font-display text-[.78rem] font-extrabold text-cyan">{benefit.number}</span><ArrowUpRight className="text-[#9aa6b5] transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-cyan" aria-hidden="true" size={17} /></div><h3 className="mb-2 mt-6 font-display text-[.98rem] font-bold text-ink max-[600px]:mt-5 max-[600px]:text-[.89rem]">{benefit.title}</h3><p className="m-0 text-[.76rem] leading-[1.7] text-muted max-[600px]:text-[.71rem]">{benefit.description}</p></article>)}</div>
+        </section>
+
+        <section className={`relative overflow-hidden bg-ink px-[max(6.4%,calc((100%-1240px)/2))] py-[88px] max-[600px]:px-[18px] max-[600px]:py-[64px] ${scrollRevealClasses}`} id="acara" data-scroll-reveal data-reveal="hidden">
+          {/* Background glow */}
+          <div className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 700px 500px at 90% 50%, rgba(14,165,233,.10), transparent), radial-gradient(ellipse 500px 400px at 8% 80%, rgba(225,29,72,.09), transparent)' }} aria-hidden="true" />
+
+          <div className="relative mx-auto max-w-[1240px]">
+            {/* Heading */}
+            <span className="mb-3 inline-flex items-center gap-2 text-[.67rem] font-extrabold tracking-[.15em] text-crimson"><span className="h-px w-7 bg-crimson" aria-hidden="true" />PAKET ACARA SPESIAL</span>
+            <h2 className="m-0 max-w-[580px] font-display text-[clamp(2rem,3.8vw,3rem)] font-extrabold leading-[1.1] tracking-[-0.03em] text-white max-[600px]:text-[2rem]">
+              Momen berharga, armada yang <span className="text-cyan">sesuai suasana</span>
+            </h2>
+            <p className="mb-12 mt-4 max-w-[520px] text-[.88rem] leading-[1.75] text-slate-400 max-[600px]:mb-8 max-[600px]:text-[.82rem]">
+              Dari pernikahan hingga acara korporat — kami siapkan kendaraan dengan dekorasi dan perlengkapan sesuai tema. Konsultasikan kebutuhan acara kamu langsung dengan tim kami.
+            </p>
+
+            {/* Kartu tipe acara */}
+            <div className="mb-12 grid grid-cols-4 gap-4 max-[900px]:grid-cols-2 max-[600px]:gap-3 max-[440px]:grid-cols-2">
+              {eventTypes.map((type) => (
+                <button
+                  key={type.label}
+                  type="button"
+                  className={`group relative overflow-hidden rounded-2xl border p-6 text-left transition duration-200 hover:-translate-y-1 max-[600px]:p-4 ${isEventBooking && bookingEventType === type.label ? 'border-cyan/50 bg-cyan/10' : 'border-white/10 bg-white/5 hover:border-white/20'}`}
+                  onClick={() => {
+                    setIsEventBooking(true)
+                    setWithDriver(false)
+                    setBookingEventType(type.label)
+                    setBookingEventTypeOther('')
+                    document.querySelector('#beranda')?.scrollIntoView({ behavior: 'smooth' })
+                  }}
+                  aria-pressed={isEventBooking && bookingEventType === type.label}
+                >
+                  <div className="mb-3 grid size-11 place-items-center rounded-xl text-[1.4rem] max-[600px]:mb-2.5" style={{ background: type.accent }}>{type.emoji}</div>
+                  <h3 className="mb-1.5 font-display text-[.95rem] font-bold text-white max-[600px]:text-[.86rem]">{type.label}</h3>
+                  <p className="m-0 text-[.74rem] leading-[1.65] text-slate-400 max-[600px]:text-[.7rem]">{type.desc}</p>
+                  {isEventBooking && bookingEventType === type.label && <span className="absolute right-3 top-3 grid size-5 place-items-center rounded-full bg-cyan text-white"><Check size={11} strokeWidth={3} aria-hidden="true" /></span>}
+                </button>
+              ))}
+            </div>
+
+            {/* Add-on strip */}
+            <div className="mb-10 rounded-2xl border border-white/10 bg-white/[.04] p-7 max-[600px]:p-5">
+              <span className="mb-2 block text-[.67rem] font-extrabold tracking-[.13em] text-cyan">DEKORASI &amp; ADD-ON</span>
+              <p className="mb-4 font-display text-[1rem] font-bold text-white">Tambahkan sentuhan spesial</p>
+              <div className="flex flex-wrap gap-2">
+                {addonOptions.map((opt) => (
+                  <span
+                    key={opt.id}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/7 px-3.5 py-1.5 text-[.76rem] font-semibold text-slate-300"
+                  >
+                    <span aria-hidden="true">{opt.emoji}</span>{opt.label}
+                  </span>
+                ))}
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/7 px-3.5 py-1.5 text-[.76rem] font-semibold text-slate-300">
+                  <span aria-hidden="true">✏️</span>Lainnya (tulis sendiri)
+                </span>
+              </div>
+              <p className="mb-0 mt-4 text-[.72rem] leading-[1.7] text-slate-500">Pilih add-on saat mengisi form pemesanan. Harga dikonfirmasi admin setelah request diterima.</p>
+            </div>
+
+            {/* CTA ke form pemesanan */}
+            <div className="rounded-2xl border border-cyan/20 bg-white/[.04] p-7 max-[600px]:p-5">
+              <span className="mb-2 block text-[.67rem] font-extrabold tracking-[.13em] text-cyan">CARA PESAN</span>
+              <p className="mb-6 font-display text-[1rem] font-bold text-white">Tiga langkah mudah untuk booking acara</p>
+              <ol className="mb-8 grid gap-4">
+                {[
+                  { n: '01', text: 'Aktifkan opsi **Paket acara (opsional)** di form pemesanan di atas.' },
+                  { n: '02', text: 'Pilih tanggal, kendaraan, dan isi detail jenis acara + add-on dekorasi.' },
+                  { n: '03', text: 'Submit — booking masuk ke sistem dan admin akan konfirmasi via WhatsApp.' },
+                ].map(({ n, text }) => (
+                  <li key={n} className="flex items-start gap-4">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-cyan/15 font-display text-[.75rem] font-extrabold text-cyan">{n}</span>
+                    <span className="mt-1.5 text-[.83rem] leading-[1.65] text-slate-300">
+                      {text.split('**').map((part, i) => i % 2 === 1 ? <strong key={i} className="text-white">{part}</strong> : part)}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              <a
+                href="#beranda"
+                className="inline-flex items-center gap-2.5 rounded-xl bg-crimson px-6 py-3.5 text-[.84rem] font-bold text-white shadow-[0_8px_24px_rgba(225,29,72,.25)] transition duration-200 hover:-translate-y-0.5 hover:bg-crimson-deep hover:shadow-[0_12px_30px_rgba(225,29,72,.35)] max-[600px]:w-full max-[600px]:justify-center"
+                onClick={(e) => {
+                  e.preventDefault()
+                  setIsEventBooking(true)
+                  setWithDriver(false)
+                  document.querySelector('#beranda')?.scrollIntoView({ behavior: 'smooth' })
+                }}
+              >
+                <ArrowUpRight size={15} aria-hidden="true" />
+                Pesan Sekarang
+              </a>
+            </div>
+          </div>
         </section>
 
         <section className={`relative overflow-hidden bg-slate-ice px-[max(6.4%,calc((100%-1240px)/2))] py-[80px] max-[600px]:px-[18px] max-[600px]:py-[56px] ${scrollRevealClasses}`} id="kontak" data-scroll-reveal data-reveal="hidden">
@@ -1683,7 +2168,7 @@ function RentalHome() {
       </main>
 
       {vehicleDetailGroup && <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/65 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setVehicleDetailGroup(null) }}>
-        <section className="max-h-[92dvh] w-full max-w-[900px] overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl max-[600px]:max-h-[90dvh]" role="dialog" aria-modal="true" aria-labelledby="vehicle-detail-title">
+        <section className="max-h-[92dvh] w-full max-w-[900px] overflow-y-auto scrollbar-none rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl max-[600px]:max-h-[90dvh]" role="dialog" aria-modal="true" aria-labelledby="vehicle-detail-title">
           <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white px-5 py-4 max-[600px]:px-4 max-[600px]:py-3">
             <div><span className="text-[.64rem] font-bold uppercase text-muted">Detail armada</span><h2 className="m-0 mt-1 font-display text-[1.08rem] font-bold text-ink" id="vehicle-detail-title">{vehicleDetailGroup.name}</h2></div>
             <button className="grid size-9 place-items-center rounded-lg text-muted hover:bg-slate-ice" type="button" aria-label="Tutup detail kendaraan" onClick={() => setVehicleDetailGroup(null)}><X size={18} aria-hidden="true" /></button>
@@ -1704,13 +2189,54 @@ function RentalHome() {
               </div>
             </div>
             <div className="grid content-start gap-4">
-              <div className="flex items-start justify-between gap-3 border-b border-line pb-3"><div><span className="text-[.68rem] text-muted">Harga mulai</span><strong className="mt-1 block font-display text-[1.25rem] text-crimson">Rp {formatPrice(Math.min(...vehicleDetailGroup.variants.map((variant) => Math.round(parsePrice(variant.price) * hitungMultiplier(bookingMode, durasi)))))}<small className="text-[.72rem] font-medium text-muted"> / {durasi} {bookingMode.unit}</small></strong></div><span className="rounded-full bg-cyan/10 px-2.5 py-1 text-[.64rem] font-bold uppercase text-[#0369a1]">{vehicleDetailGroup.variants[0].category}</span></div>
+              <div className="flex items-start justify-between gap-3 border-b border-line pb-3"><div><span className="text-[.68rem] text-muted">Harga mulai</span>{(() => {
+                const detailPriceInfo = getActivePriceInfo(vehicleDetailGroup.variants[0], includeToll, selectedDate || null, bookingMode.unit, durasi)
+                const detailActiveVariant = vehicleDetailGroup.variants.find((v) => {
+                  const info = getActivePriceInfo(v, includeToll, selectedDate || null, bookingMode.unit, durasi)
+                  return info.isPromo || info.isSpecial
+                })
+                const detailPrice = Math.min(...vehicleDetailGroup.variants.map((v) => Math.round(parsePrice(getVehiclePrice(v)) * hitungMultiplier(bookingMode, durasi))))
+                const detailOrigPrice = detailActiveVariant
+                  ? Math.min(...vehicleDetailGroup.variants.map((v) => Math.round(parsePrice(getActivePriceInfo(v, includeToll, selectedDate || null, bookingMode.unit, durasi).originalPrice || getVehiclePrice(v)) * hitungMultiplier(bookingMode, durasi))))
+                  : null
+                const isPromo = detailActiveVariant && getActivePriceInfo(detailActiveVariant, includeToll, selectedDate || null, bookingMode.unit, durasi).isPromo
+                const isSpecial = detailActiveVariant && getActivePriceInfo(detailActiveVariant, includeToll, selectedDate || null, bookingMode.unit, durasi).isSpecial
+                const specialLabel = isSpecial && getActivePriceInfo(detailActiveVariant, includeToll, selectedDate || null, bookingMode.unit, durasi).specialLabel
+                return (<>
+                  {detailOrigPrice && <span className="block text-[.78rem] text-slate-400 line-through">Rp {formatPrice(detailOrigPrice)}</span>}
+                  <strong className={`mt-0.5 block font-display text-[1.25rem] ${isPromo ? 'text-yellow-600' : isSpecial ? 'text-blue-600' : 'text-crimson'}`}>Rp {formatPrice(detailPrice)}<small className="text-[.72rem] font-medium text-muted"> / {formatDuration(durasi, bookingMode.unit)}</small></strong>
+                  {detailOrigPrice && isPromo && <span className="text-[.7rem] font-semibold text-yellow-600">Hemat Rp {formatPrice(detailOrigPrice - detailPrice)}</span>}
+                  {isSpecial && (() => {
+                    const minDays = Number(detailActiveVariant.special_min_days) || 3
+                    return (
+                      <span className="mt-[3px] block">
+                        <span className="text-[.7rem] font-semibold text-blue-600">{specialLabel || 'Harga Spesial'}</span>
+                        <span className="mt-[2px] block text-[.62rem] leading-[1.5] text-slate-500">Harga ini berlaku saat sewa ≥ {minDays} hari berturut-turut</span>
+                      </span>
+                    )
+                  })()}
+                  {!detailOrigPrice && !isPromo && (() => {
+                    const anySpecial = vehicleDetailGroup.variants.find((v) => v.special_price)
+                    if (!anySpecial) return null
+                    const minDays = Number(anySpecial.special_min_days) || 3
+                    const label = anySpecial.special_label || `Min. ${minDays} hari`
+                    return (
+                      <span className="mt-[3px] block">
+                        <span className="text-[.7rem] font-semibold text-blue-500">{label}</span>
+                        <span className="mt-[2px] block text-[.62rem] leading-[1.5] text-slate-500">Sewa ≥ {minDays} hari dapat harga spesial</span>
+                      </span>
+                    )
+                  })()}
+                </>)
+              })()}</div><span className="rounded-full bg-cyan/10 px-2.5 py-1 text-[.64rem] font-bold uppercase text-[#0369a1]">{vehicleDetailGroup.variants[0].category}</span></div>
               <div className="grid gap-2">
                 <h3 className="m-0 font-display text-[.88rem] font-bold text-ink">Pilihan unit</h3>
                 {detailVariants.map(({ vehicle, transmissionType, available, unallocated }) => {
                   const label = unallocated ? 'Tipe belum dialokasikan' : getVehicleVariantLabel(vehicle, transmissionType)
-                  const unitPrice = Math.round(parsePrice(vehicle.price) * hitungMultiplier(bookingMode, durasi))
-                  return <article className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2.5" key={`${vehicle.id}-${transmissionType ?? 'unallocated'}`}><div className="grid min-w-0 gap-1"><strong className={`text-[.76rem] ${unallocated ? 'text-amber-900' : 'text-ink'}`}>{label}</strong>{vehicle.transmission_details && <span className="truncate text-[.68rem] text-muted">{vehicle.transmission_details}</span>}<span className="text-[.68rem] text-slate-700">{hasSelectedSchedule && availabilityStatus === 'ready' ? `${available} unit tersedia di jadwal ini` : `${available} unit terdaftar`}</span></div><strong className="shrink-0 text-right text-[.76rem] text-crimson">Rp {formatPrice(unitPrice)}<small className="block text-[.64rem] font-medium text-muted">per unit</small></strong></article>
+                  const priceInfo = getVehiclePriceInfo(vehicle)
+                  const unitPrice = Math.round(parsePrice(priceInfo.price) * hitungMultiplier(bookingMode, durasi))
+                  const unitOriginalPrice = (priceInfo.isPromo || priceInfo.isSpecial) ? Math.round(parsePrice(priceInfo.originalPrice) * hitungMultiplier(bookingMode, durasi)) : null
+                  return <article className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2.5" key={`${vehicle.id}-${transmissionType ?? 'unallocated'}`}><div className="grid min-w-0 gap-1"><strong className={`text-[.76rem] ${unallocated ? 'text-amber-900' : 'text-ink'}`}>{label}</strong>{vehicle.transmission_details && <span className="truncate text-[.68rem] text-muted">{vehicle.transmission_details}</span>}<span className="text-[.68rem] text-slate-700">{hasSelectedSchedule && availabilityStatus === 'ready' ? `${available} unit tersedia di jadwal ini` : `${available} unit terdaftar`}</span></div><div className="shrink-0 text-right">{unitOriginalPrice && <span className="block text-[.64rem] text-slate-400 line-through">Rp {formatPrice(unitOriginalPrice)}</span>}<strong className={`text-[.76rem] ${priceInfo.isPromo ? 'text-yellow-600' : priceInfo.isSpecial ? 'text-blue-600' : 'text-crimson'}`}>Rp {formatPrice(unitPrice)}</strong><small className="block text-[.64rem] font-medium text-muted">per unit</small>{unitOriginalPrice && priceInfo.isPromo && <span className="block text-[.6rem] font-semibold text-yellow-600">Hemat Rp {formatPrice(unitOriginalPrice - unitPrice)}</span>}{unitOriginalPrice && priceInfo.isSpecial && <span className="block text-[.6rem] font-semibold text-blue-600">{priceInfo.specialLabel || 'Harga Spesial'}</span>}</div></article>
                 })}
                 {detailVariants.length === 0 && <p className="m-0 rounded-lg bg-slate-ice px-3 py-3 text-[.74rem] text-slate-700">Tidak ada unit untuk jadwal ini.</p>}
               </div>

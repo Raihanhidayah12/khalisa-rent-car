@@ -449,3 +449,35 @@ main > section[aria-label="Pencarian kendaraan"][data-reveal="hidden"] {
 }
 
 
+
+/* Promo card - border pulse animation */
+@keyframes promo-pulse {
+  0%, 100% { border-color: rgb(250 204 21 / 60%); box-shadow: 0 0 0 0 rgb(250 204 21 / 0%); }
+  50% { border-color: rgb(234 179 8); box-shadow: 0 0 0 4px rgb(250 204 21 / 20%); }
+}
+
+.promo-card {
+  animation: promo-pulse 2.4s ease-in-out infinite;
+}
+
+.promo-card:hover {
+  animation: none;
+  border-color: rgb(234 179 8);
+  box-shadow: 0 0 0 4px rgb(250 204 21 / 25%);
+}
+
+/* Special price card - cyan pulse animation */
+@keyframes special-pulse {
+  0%, 100% { border-color: rgb(96 165 250 / 60%); box-shadow: 0 0 0 0 rgb(96 165 250 / 0%); }
+  50% { border-color: rgb(59 130 246); box-shadow: 0 0 0 4px rgb(96 165 250 / 20%); }
+}
+
+.special-card {
+  animation: special-pulse 2.4s ease-in-out infinite;
+}
+
+.special-card:hover {
+  animation: none;
+  border-color: rgb(59 130 246);
+  box-shadow: 0 0 0 4px rgb(96 165 250 / 25%);
+}

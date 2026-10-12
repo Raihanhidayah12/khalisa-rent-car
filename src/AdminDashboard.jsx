@@ -1,14 +1,21 @@
-﻿import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ArrowUpRight, CalendarDays, CarFront, Check, Clock3, Download, LayoutDashboard, LogOut, MapPin, MessageSquare, Phone, Plus, RefreshCw, Search, ShieldCheck, Trash2, UserCheck, UserRound, Wallet, X } from 'lucide-react'
 import ExcelJS from 'exceljs'
 import logo from './assets/Logo-cropped.png'
 import { adminReloadSessionStorageKey, supabase, supabaseAuthStorageKey } from './supabaseClient'
 import { formatJakartaDateTime } from './bookingUtils'
-import { formatPrice, getAvailableVehicleStock, getVehicleStock, isVehicleReady, parsePrice } from './vehicleUtils'
+import { formatDuration, formatPrice, getAvailableVehicleStock, getVehicleStock, isVehicleReady, parsePrice, getActivePromo } from './vehicleUtils'
 
 const emptyVehicleDraft = {
   name: '',
   price: '',
+  price_without_toll: '',
+  promo_price: '',
+  promo_start: '',
+  promo_end: '',
+  special_price: '',
+  special_min_days: 3,
+  special_label: '',
   category: 'MPV',
   transmission_options: [],
   transmission_stock: {},
@@ -29,6 +36,21 @@ const emptyDriverDraft = {
   sim_type: 'SIM A',
   notes: '',
 }
+const isEventBooking = (booking) => String(booking?.booking_mode ?? '').toLowerCase().startsWith('acara')
+function parseEventNotes(notes) {
+  if (!notes) return { eventType: null, addons: null, catatan: null }
+  const lines = notes.split('\n')
+  const typeLine = lines.find((l) => l.startsWith('[PAKET ACARA'))
+  const addonLine = lines.find((l) => l.startsWith('Add-on:'))
+  const catatanLine = lines.find((l) => l.startsWith('Catatan:'))
+  const eventType = typeLine ? typeLine.replace(/^\[PAKET ACARA\s*[–-]\s*/i, '').replace(/\]$/, '').trim() : null
+  return {
+    eventType: eventType ? eventType.charAt(0) + eventType.slice(1).toLowerCase() : null,
+    addons: addonLine ? addonLine.replace('Add-on:', '').trim() : null,
+    catatan: catatanLine ? catatanLine.replace('Catatan:', '').trim() : null,
+  }
+}
+
 function formatBookedVehicle(vehicle) {
   const transmission = vehicle.transmission_type === 'automatic' ? 'Matic' : vehicle.transmission_type === 'manual' ? 'Manual' : ''
   const powertrain = { gasoline: 'Bensin', hybrid: 'Hybrid', ev_phev: 'EV / PHEV' }[vehicle.powertrain_type] ?? ''
@@ -71,33 +93,6 @@ function isDriverBookedForWindow(driverId, booking, bookings) {
   })
 }
 
-async function completeExpiredBookings(bookings) {
-  const now = Date.now()
-  const expiredBookings = bookings.filter((booking) =>
-    booking.status === 'confirmed' && Number.isFinite(Date.parse(booking.end_at)) && Date.parse(booking.end_at) <= now
-  )
-
-  if (expiredBookings.length === 0) return { bookings, failed: false }
-
-  const results = await Promise.all(expiredBookings.map(async (booking) => {
-    try {
-      const { data, error } = await supabase.rpc('update_booking_status', {
-        p_booking_id: String(booking.id),
-        p_status: 'completed',
-      })
-      return { id: booking.id, data, error }
-    } catch (error) {
-      return { id: booking.id, data: null, error }
-    }
-  }))
-
-  const completed = new Map(results.filter((result) => result.data && !result.error).map((result) => [result.id, result.data]))
-  return {
-    bookings: bookings.map((booking) => completed.get(booking.id) ?? booking),
-    failed: results.some((result) => result.error || !result.data),
-  }
-}
-
 async function releaseExpiredDrivers(drivers, bookings) {
   const now = Date.now()
   const driverIds = drivers
@@ -105,15 +100,10 @@ async function releaseExpiredDrivers(drivers, bookings) {
       if (driver.status !== 'on_duty') return false
       const assignments = bookings.filter((booking) => booking.driver_id === driver.id)
       const hasEndedAssignment = assignments.some((booking) =>
-        ['confirmed', 'completed'].includes(booking.status) && Number.isFinite(Date.parse(booking.end_at)) && Date.parse(booking.end_at) <= now
+        booking.status === 'completed' && Number.isFinite(Date.parse(booking.end_at)) && Date.parse(booking.end_at) <= now
       )
-      const hasCurrentAssignment = assignments.some((booking) => {
-        if (!['pending', 'confirmed'].includes(booking.status)) return false
-        const startAt = Date.parse(booking.start_at)
-        const endAt = Date.parse(booking.end_at)
-        return Number.isFinite(startAt) && Number.isFinite(endAt) && startAt <= now && endAt > now
-      })
-      return hasEndedAssignment && !hasCurrentAssignment
+      const hasActiveAssignment = assignments.some((booking) => ['pending', 'confirmed'].includes(booking.status))
+      return hasEndedAssignment && !hasActiveAssignment
     })
     .map((driver) => driver.id)
 
@@ -131,7 +121,7 @@ async function releaseExpiredDrivers(drivers, bookings) {
   return drivers.map((driver) => updatedDrivers.get(driver.id) ?? driver)
 }
 
-const promoBadgeOptions = ['', 'Promo', 'Favorit', 'Terlaris', 'Unit baru', 'Harga spesial']
+const promoBadgeOptions = ['', 'Promo', 'Favorit', 'Harga spesial']
 const bookingStatusLabels = {
   pending: 'Menunggu',
   confirmed: 'Dikonfirmasi',
@@ -142,6 +132,19 @@ const bookingStatusLabels = {
 
 function toDateKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function getJakartaDateKey(value) {
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) return ''
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+  const dateParts = Object.fromEntries(parts.map(({ type, value: partValue }) => [type, partValue]))
+  return `${dateParts.year}-${dateParts.month}-${dateParts.day}`
 }
 
 function shiftDateKey(dateKey, dayOffset) {
@@ -342,12 +345,15 @@ function QuickJump({ icon, label, value, tone = 'neutral', onClick }) {
 
 function BookingStatusSelect({ booking, onChange }) {
   const isActive = ['pending', 'confirmed'].includes(booking.status)
-  const canComplete = booking.status === 'confirmed'
+  const endPassed = booking.end_at ? new Date() >= new Date(booking.end_at) : true
+  const canComplete = booking.status === 'confirmed' && endPassed
 
   return (
+    <>
     <select
       className="h-9 w-full min-w-[148px] rounded-lg border border-line bg-white px-2.5 text-[.72rem] font-semibold text-ink outline-none focus:border-cyan"
       value={booking.status}
+      title={booking.status === 'confirmed' && !endPassed ? `Bisa diselesaikan setelah ${new Date(booking.end_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}` : undefined}
       disabled={!isActive}
       aria-label={`Status booking ${booking.customer_name}`}
       onChange={(event) => onChange(booking.id, event.target.value)}
@@ -358,6 +364,12 @@ function BookingStatusSelect({ booking, onChange }) {
       <option value="completed" disabled={!canComplete}>Selesai</option>
       <option value="cancelled" disabled={!isActive}>Dibatalkan</option>
     </select>
+    {booking.status === 'confirmed' && !endPassed && booking.end_at && (
+      <span className="mt-1 block text-[.62rem] leading-tight text-amber-600">
+        Selesai tersedia setelah {new Date(booking.end_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+      </span>
+    )}
+    </>
   )
 }
 
@@ -754,8 +766,9 @@ function AdminDashboard() {
         if (import.meta.env.DEV && window.location.hash === '#ui-preview') {
           if (active) {
             const currentDate = new Date()
-            setFinanceTodayKey(toDateKey(currentDate))
-            setFinanceMonthKey(`${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`)
+            const currentDateKey = getJakartaDateKey(currentDate)
+            setFinanceTodayKey(currentDateKey)
+            setFinanceMonthKey(currentDateKey.slice(0, 7))
             setCheckingSession(false)
             setLoadingVehicles(false)
             setLoadingBookings(false)
@@ -780,8 +793,8 @@ function AdminDashboard() {
         await supabase.rpc('expire_pending_booking_holds')
 
         const currentDate = new Date()
-        const currentDateKey = toDateKey(currentDate)
-        const currentMonthKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`
+        const currentDateKey = getJakartaDateKey(currentDate)
+        const currentMonthKey = currentDateKey.slice(0, 7)
         if (active) {
           setFinanceTodayKey(currentDateKey)
           setFinanceMonthKey(currentMonthKey)
@@ -802,11 +815,8 @@ function AdminDashboard() {
           .order('created_at', { ascending: false })
 
         if (active && requestsError) setBookingsError(requestsError.message)
-        const bookingResult = requestsError
-          ? { bookings: requests ?? [], failed: false }
-          : await completeExpiredBookings(requests ?? [])
-        if (active && bookingResult.failed) setBookingActionError('Sebagian booking lewat jadwal belum bisa otomatis diselesaikan. Periksa izin RPC dan status booking di Supabase.')
-        if (active && !requestsError) setBookings(bookingResult.bookings)
+        const currentBookings = requests ?? []
+        if (active && !requestsError) setBookings(currentBookings)
 
         const { data: driverList, error: driversErrorRes } = await supabase
           .from('drivers')
@@ -814,7 +824,7 @@ function AdminDashboard() {
           .order('name', { ascending: true })
 
         if (active && driversErrorRes) setDriversError(driversErrorRes.message)
-        if (active && !driversErrorRes) setDrivers(await releaseExpiredDrivers(driverList ?? [], bookingResult.bookings))
+        if (active && !driversErrorRes) setDrivers(await releaseExpiredDrivers(driverList ?? [], currentBookings))
       } catch (error) {
         if (active) setVehiclesError(error.message || 'Gagal memuat data armada.')
       } finally {
@@ -836,15 +846,11 @@ function AdminDashboard() {
         supabase.from('drivers').select('*').order('name', { ascending: true }),
       ])
 
-      const bookingResult = requestsError
-        ? { bookings: requests ?? [], failed: false }
-        : await completeExpiredBookings(requests ?? [])
-
       if (!active) return
       if (!fleetError) setVehicles(fleet ?? [])
-      if (!requestsError) setBookings(bookingResult.bookings)
-      if (bookingResult.failed) setBookingActionError('Sebagian booking lewat jadwal belum bisa otomatis diselesaikan. Periksa izin RPC dan status booking di Supabase.')
-      if (!driversLoadError) setDrivers(await releaseExpiredDrivers(driverList ?? [], bookingResult.bookings))
+      const currentBookings = requests ?? []
+      if (!requestsError) setBookings(currentBookings)
+      if (!driversLoadError) setDrivers(await releaseExpiredDrivers(driverList ?? [], currentBookings))
     }
 
     loadDashboard()
@@ -854,6 +860,82 @@ function AdminDashboard() {
       window.clearInterval(refreshTimer)
     }
   }, [])
+
+  // Auto badge - priority: Promo aktif > Unit Baru (7 hari) > Terlaris (top 3) > badge manual
+  useEffect(() => {
+    if (loadingVehicles || loadingBookings || vehicles.length === 0) return
+
+    const now = new Date()
+    const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000)
+
+    // --- Hitung top 3 Terlaris ---
+    const completedBookings = bookings.filter((b) => b.status === 'completed')
+    const countByName = {}
+    for (const booking of completedBookings) {
+      for (const v of (booking.vehicle_snapshot ?? [])) {
+        if (!v.name) continue
+        countByName[v.name] = (countByName[v.name] ?? 0) + (v.quantity ?? 1)
+      }
+    }
+    const top3Names = Object.entries(countByName)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([name]) => name)
+
+    // --- Generate badge per vehicle ---
+    const autoBadges = ['Promo', 'Terlaris', 'Matic Baru', 'Manual Baru', 'Hybrid Baru', 'EV Baru', 'Unit Baru']
+    const updates = []
+
+    for (const vehicle of vehicles) {
+      let newBadge = null
+
+      // Priority 1: Promo aktif
+      if (getActivePromo(vehicle)) {
+        newBadge = 'Promo'
+      }
+      // Priority 2: Unit Baru (7 hari sejak unit_added_at)
+      else {
+        const addedAt = vehicle.unit_added_at ? new Date(vehicle.unit_added_at) : null
+        if (addedAt && addedAt >= sevenDaysAgo) {
+          const transmissions = vehicle.transmission_options ?? []
+          const powertrain = vehicle.powertrain_type
+          if (transmissions.length >= 2) newBadge = 'Unit Baru'
+          else if (powertrain === 'hybrid') newBadge = 'Hybrid Baru'
+          else if (powertrain === 'ev_phev') newBadge = 'EV Baru'
+          else if (transmissions.includes('automatic') && !transmissions.includes('manual')) newBadge = 'Matic Baru'
+          else if (transmissions.includes('manual') && !transmissions.includes('automatic')) newBadge = 'Manual Baru'
+          else newBadge = 'Unit Baru'
+        }
+        // Priority 3: Terlaris
+        else if (top3Names.includes(vehicle.name)) {
+          newBadge = 'Terlaris'
+        }
+        // Priority 4: badge manual (tidak diubah sistem)
+        else {
+          newBadge = autoBadges.includes(vehicle.badge) ? null : vehicle.badge
+        }
+      }
+
+      if (newBadge !== vehicle.badge) {
+        updates.push({ id: vehicle.id, badge: newBadge })
+      }
+    }
+
+    if (updates.length === 0) return
+
+    Promise.all(
+      updates.map(({ id, badge }) =>
+        supabase.from('vehicles').update({ badge }).eq('id', id)
+      )
+    ).then(() => {
+      setVehicles((current) =>
+        current.map((vehicle) => {
+          const update = updates.find((u) => u.id === vehicle.id)
+          return update ? { ...vehicle, badge: update.badge } : vehicle
+        })
+      )
+    })
+  }, [loadingVehicles, loadingBookings, vehicles.length, bookings.length])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -876,6 +958,13 @@ function AdminDashboard() {
     setVehicleDraft(vehicle ? {
       name: vehicle.name ?? '',
       price: vehicle.price ?? '',
+      price_without_toll: vehicle.price_without_toll ?? '',
+      promo_price: vehicle.promo_price ?? '',
+      promo_start: vehicle.promo_start ? vehicle.promo_start.slice(0, 10) : '',
+      promo_end: vehicle.promo_end ? vehicle.promo_end.slice(0, 10) : '',
+      special_price: vehicle.special_price ?? '',
+      special_min_days: vehicle.special_min_days ?? 3,
+      special_label: vehicle.special_label ?? '',
       category: vehicle.category ?? 'MPV',
       transmission_options: transmissionOptions,
       transmission_stock: Object.fromEntries(transmissionOptions.map((type) => [
@@ -933,13 +1022,27 @@ function AdminDashboard() {
 
     const transmissionStock = Object.fromEntries(vehicleDraft.transmission_options.map((type) => [type, Number(vehicleDraft.transmission_stock[type])]))
     const availableTransmissionOptions = vehicleDraft.transmission_options.filter((type) => transmissionStock[type] > 0)
+    const newTotalStock = Object.values(transmissionStock).reduce((total, quantity) => total + quantity, 0)
+
+    // Set unit_added_at kalau: insert baru ATAU stok bertambah dari sebelumnya
+    const existingVehicle = editingVehicleId ? vehicles.find((v) => v.id === editingVehicleId) : null
+    const oldTotalStock = existingVehicle ? getVehicleStock(existingVehicle) : 0
+    const stockIncreased = !editingVehicleId || newTotalStock > oldTotalStock
+    
     const payload = {
       name: vehicleDraft.name.trim(),
       price: vehicleDraft.price.trim(),
+      price_without_toll: vehicleDraft.price_without_toll.trim() || null,
+      promo_price: vehicleDraft.promo_price.trim() || null,
+      promo_start: vehicleDraft.promo_start || null,
+      promo_end: vehicleDraft.promo_end || null,
+      special_price: vehicleDraft.special_price.trim() || null,
+      special_min_days: vehicleDraft.special_price.trim() ? (Number(vehicleDraft.special_min_days) || 3) : null,
+      special_label: vehicleDraft.special_label.trim() || null,
       category: vehicleDraft.category,
       transmission_options: availableTransmissionOptions,
       transmission_stock: transmissionStock,
-      stock: Object.values(transmissionStock).reduce((total, quantity) => total + quantity, 0),
+      stock: newTotalStock,
       transmission_details: vehicleDraft.transmission_details.trim() || null,
       powertrain_type: vehicleDraft.powertrain_type || null,
       seats: vehicleDraft.seats.trim(),
@@ -948,6 +1051,7 @@ function AdminDashboard() {
       status: vehicleDraft.status,
       sort_order: Number(vehicleDraft.sort_order),
       is_active: vehicleDraft.is_active,
+      ...(stockIncreased ? { unit_added_at: new Date().toISOString() } : {}),
     }
 
     setSavingVehicle(true)
@@ -1061,10 +1165,10 @@ function AdminDashboard() {
       setDriverFormError('Nomor telepon / WhatsApp wajib diisi.')
       return
     }
-    if (editingDriverId && driverDraft.status === 'available' && bookings.some(
+    if (editingDriverId && driverDraft.status !== 'on_duty' && bookings.some(
       (booking) => booking.driver_id === editingDriverId && ['pending', 'confirmed'].includes(booking.status)
     )) {
-      setDriverFormError('Supir masih memiliki booking aktif dan belum bisa ditandai tersedia.')
+      setDriverFormError('Supir masih memiliki booking aktif dan statusnya belum bisa diubah menjadi tersedia atau libur.')
       return
     }
 
@@ -1113,10 +1217,10 @@ function AdminDashboard() {
   }
 
   async function handleDriverStatusChange(driverId, newStatus) {
-    if (newStatus === 'available' && bookings.some(
+    if (newStatus !== 'on_duty' && bookings.some(
       (booking) => booking.driver_id === driverId && ['pending', 'confirmed'].includes(booking.status)
     )) {
-      alert('Supir masih memiliki booking aktif dan belum bisa ditandai tersedia.')
+      alert('Supir masih memiliki booking aktif dan belum bisa ditandai tersedia atau libur.')
       return
     }
 
@@ -1225,7 +1329,7 @@ function AdminDashboard() {
         end:      formatJakartaDateTime(booking.end_at),
         vehicle:  (booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(' + '),
         mode:     booking.booking_mode,
-        duration: `${booking.duration} ${booking.duration_unit}`,
+        duration: formatDuration(booking.duration, booking.duration_unit),
         status:   bookingStatusLabels[booking.status] ?? booking.status,
         driver:   drivers.find((d) => d.id === booking.driver_id)?.name ?? '-',
         price:    Number(booking.estimated_price) || 0,
@@ -1312,8 +1416,28 @@ function AdminDashboard() {
   const totalUnits = activeVehicles.reduce((total, vehicle) => total + getVehicleStock(vehicle), 0)
   const readyUnits = activeVehicles.reduce((total, vehicle) => total + (isVehicleReady(vehicle) ? getAvailableVehicleStock(vehicle) : 0), 0)
   const filteredVehicles = vehicles.filter((vehicle) => `${vehicle.name} ${vehicle.category}`.toLowerCase().includes(vehicleSearch.trim().toLowerCase()))
+
+  // Hitung top 3 terlaris untuk penanda di tabel armada
+  const fleetTop3Names = (() => {
+    const completedBookings = bookings.filter((b) => b.status === 'completed')
+    const countByName = {}
+    for (const booking of completedBookings) {
+      for (const v of (booking.vehicle_snapshot ?? [])) {
+        if (!v.name) continue
+        countByName[v.name] = (countByName[v.name] ?? 0) + (v.quantity ?? 1)
+      }
+    }
+    return Object.entries(countByName)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([name]) => name)
+  })()
   const filteredBookings = bookings.filter((booking) => {
-    const matchesStatus = bookingStatusFilter === 'all' || booking.status === bookingStatusFilter
+    const matchesStatus = bookingStatusFilter === 'all'
+      ? true
+      : bookingStatusFilter === 'acara'
+        ? isEventBooking(booking)
+        : booking.status === bookingStatusFilter
     const searchText = `${booking.customer_name} ${booking.customer_phone} ${booking.booking_code ?? ''} ${booking.pickup_address}`.toLowerCase()
     return matchesStatus && searchText.includes(bookingSearch.trim().toLowerCase())
   })
@@ -1327,22 +1451,28 @@ function AdminDashboard() {
   const financeRangeIncomplete = financePeriod === 'custom' && (!financeStartDate || !financeEndDate)
   const financialBookings = bookings.filter((booking) => {
     if (!financeDateRange) return true
-    const startDate = booking.start_at?.slice(0, 10)
+    const startDate = getJakartaDateKey(booking.start_at)
     return Boolean(startDate && financeDateRange.start && financeDateRange.end && financeDateRange.start <= financeDateRange.end && startDate >= financeDateRange.start && startDate <= financeDateRange.end)
   })
   const financeSummary = financialBookings.reduce((summary, booking) => {
     const amount = Number(booking.estimated_price)
     const estimate = Number.isFinite(amount) ? amount : 0
-    if (['pending', 'confirmed', 'completed'].includes(booking.status)) summary.total += estimate
+    const tollAmount = Number(booking.toll_amount) || 0
+    
+    if (['pending', 'confirmed', 'completed'].includes(booking.status)) {
+      summary.total += estimate
+      if (booking.toll_included) summary.totalToll += tollAmount
+    }
     if (booking.status in summary) summary[booking.status] += estimate
     return summary
-  }, { total: 0, pending: 0, confirmed: 0, completed: 0 })
+  }, { total: 0, totalToll: 0, pending: 0, confirmed: 0, completed: 0 })
   const pendingBookings = bookings.filter((booking) => booking.status === 'pending').length
   const confirmedBookings = bookings.filter((booking) => booking.status === 'confirmed').length
   const completedBookings = bookings.filter((booking) => booking.status === 'completed').length
   const availableDrivers = drivers.filter((driver) => driver.status === 'available').length
   const bookingFilterCounts = {
     all: bookings.length,
+    acara: bookings.filter((booking) => isEventBooking(booking)).length,
     pending: pendingBookings,
     confirmed: confirmedBookings,
     completed: completedBookings,
@@ -1427,18 +1557,131 @@ function AdminDashboard() {
         </div>
 
         {activeTab === 'finance' && (
-          <>
-            <section className="mb-4 grid grid-cols-4 gap-3 max-[900px]:grid-cols-2 max-[520px]:grid-cols-1" aria-label="Ringkasan keuangan">
+            <>
+            {/* Baris 1: 5 stat cards sejajar */}
+            <section className="mb-3 grid grid-cols-5 gap-3 max-[900px]:grid-cols-3 max-[560px]:grid-cols-2" aria-label="Ringkasan keuangan">
               <StatCard label="Total estimasi aktif" value={loadingBookings ? '—' : `Rp ${formatPrice(financeSummary.total)}`} tone="accent" />
+              <StatCard label="Total biaya tol" value={loadingBookings ? '—' : `Rp ${formatPrice(financeSummary.totalToll)}`} tone="warn" />
               <StatCard label="Booking selesai" value={loadingBookings ? '—' : `Rp ${formatPrice(financeSummary.completed)}`} tone="success" />
               <StatCard label="Dikonfirmasi" value={loadingBookings ? '—' : `Rp ${formatPrice(financeSummary.confirmed)}`} tone="info" />
               <StatCard label="Menunggu konfirmasi" value={loadingBookings ? '—' : `Rp ${formatPrice(financeSummary.pending)}`} tone="warn" />
             </section>
-            <section className="mb-6 grid grid-cols-3 gap-3 max-[900px]:grid-cols-2 max-[620px]:grid-cols-1" aria-label="Pintasan operasional">
+
+            {/* Baris 2: 3 quick jump sejajar */}
+            <section className="mb-6 grid grid-cols-3 gap-3 max-[560px]:grid-cols-1" aria-label="Pintasan operasional">
               <QuickJump icon={<CalendarDays size={16} aria-hidden="true" />} label="Booking menunggu" value={loadingBookings ? '—' : `${pendingBookings} permintaan`} tone={pendingBookings > 0 ? 'warn' : 'neutral'} onClick={() => setActiveTab('bookings')} />
               <QuickJump icon={<CarFront size={16} aria-hidden="true" />} label="Unit ready" value={loadingVehicles ? '—' : `${readyUnits} / ${totalUnits} unit`} tone={readyUnits > 0 ? 'success' : 'neutral'} onClick={() => setActiveTab('fleet')} />
               <QuickJump icon={<UserCheck size={16} aria-hidden="true" />} label="Supir tersedia" value={loadingDrivers ? '—' : `${availableDrivers} orang`} tone={availableDrivers > 0 ? 'info' : 'neutral'} onClick={() => setActiveTab('drivers')} />
             </section>
+
+            {/* Top terlaris + Promo & Harga Spesial */}
+            {(!loadingBookings && !loadingVehicles) && (() => {
+              const countByName = {}
+              for (const b of bookings.filter((b) => b.status === 'completed')) {
+                for (const v of (b.vehicle_snapshot ?? [])) {
+                  if (!v.name) continue
+                  countByName[v.name] = (countByName[v.name] ?? 0) + (v.quantity ?? 1)
+                }
+              }
+              const topList = Object.entries(countByName).sort((a, b) => b[1] - a[1]).slice(0, 5)
+              const maxBookings = topList[0]?.[1] ?? 1
+              const promoVehicles = vehicles.filter((v) => getActivePromo(v))
+              const specialVehicles = vehicles.filter((v) => v.special_price && !v.promo_price)
+              return (
+                <div className="mb-6 grid grid-cols-2 gap-4 max-[800px]:grid-cols-1">
+                  {/* Top terlaris */}
+                  <section className="rounded-2xl border border-line bg-white p-5 shadow-sm" aria-label="Kendaraan terlaris">
+                    <h3 className="m-0 mb-4 font-display text-[.9rem] font-bold text-ink">🏆 Kendaraan terlaris</h3>
+                    {topList.length === 0 ? (
+                      <p className="text-[.76rem] text-muted">Belum ada data booking selesai.</p>
+                    ) : (
+                      <div className="grid gap-3">
+                        {topList.map(([name, count], i) => {
+                          const vehicle = vehicles.find((v) => v.name === name)
+                          const widthPct = Math.round((count / maxBookings) * 100)
+                          const medals = ['🥇', '🥈', '🥉']
+                          return (
+                            <div key={name} className="grid gap-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <span className="shrink-0 text-[.8rem]">{medals[i] ?? `${i + 1}.`}</span>
+                                  {vehicle?.image_url && <img className="size-7 shrink-0 rounded object-cover" src={vehicle.image_url} alt="" />}
+                                  <span className="truncate text-[.76rem] font-semibold text-ink">{name}</span>
+                                </div>
+                                <span className="shrink-0 text-[.72rem] font-bold text-cyan">{count}x</span>
+                              </div>
+                              <div className="h-1.5 w-full rounded-full bg-slate-100">
+                                <div className="h-1.5 rounded-full bg-cyan transition-all duration-500" style={{ width: `${widthPct}%` }} />
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Promo & Harga Spesial */}
+                  <div className="grid content-start gap-4">
+                    <section className="rounded-2xl border border-yellow-200 bg-yellow-50 p-5 shadow-sm" aria-label="Kendaraan promo aktif">
+                      <h3 className="m-0 mb-3 font-display text-[.9rem] font-bold text-yellow-800">🏷 Promo aktif</h3>
+                      {promoVehicles.length === 0 ? (
+                        <p className="text-[.76rem] text-yellow-700">Tidak ada promo aktif saat ini.</p>
+                      ) : (
+                        <div className="grid gap-2">
+                          {promoVehicles.map((v) => {
+                            const promo = getActivePromo(v)
+                            const endLabel = promo?.end ? new Date(promo.end).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : null
+                            return (
+                              <div key={v.id} className="flex items-center justify-between gap-3 rounded-lg border border-yellow-100 bg-white px-3 py-2.5">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  {v.image_url && <img className="size-7 shrink-0 rounded object-cover" src={v.image_url} alt="" />}
+                                  <div className="min-w-0">
+                                    <span className="block truncate text-[.75rem] font-semibold text-ink">{v.name}</span>
+                                    {endLabel && <span className="text-[.62rem] text-yellow-700">s/d {endLabel}</span>}
+                                  </div>
+                                </div>
+                                <div className="shrink-0 text-right">
+                                  <span className="block text-[.62rem] text-slate-400 line-through">Rp {formatPrice(parsePrice(v.price))}</span>
+                                  <span className="text-[.74rem] font-bold text-yellow-700">Rp {formatPrice(parsePrice(promo.price))}</span>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </section>
+
+                    <section className="rounded-2xl border border-blue-200 bg-blue-50 p-5 shadow-sm" aria-label="Kendaraan harga spesial">
+                      <h3 className="m-0 mb-3 font-display text-[.9rem] font-bold text-blue-800">⭐ Harga spesial</h3>
+                      {specialVehicles.length === 0 ? (
+                        <p className="text-[.76rem] text-blue-700">Tidak ada harga spesial aktif.</p>
+                      ) : (
+                        <div className="grid gap-2">
+                          {specialVehicles.map((v) => {
+                            const minDays = Number(v.special_min_days) || 3
+                            return (
+                              <div key={v.id} className="flex items-center justify-between gap-3 rounded-lg border border-blue-100 bg-white px-3 py-2.5">
+                                <div className="flex min-w-0 items-center gap-2">
+                                  {v.image_url && <img className="size-7 shrink-0 rounded object-cover" src={v.image_url} alt="" />}
+                                  <div className="min-w-0">
+                                    <span className="block truncate text-[.75rem] font-semibold text-ink">{v.name}</span>
+                                    <span className="text-[.62rem] text-blue-700">Min. {minDays} hari · {v.special_label || 'Harga Spesial'}</span>
+                                  </div>
+                                </div>
+                                <div className="shrink-0 text-right">
+                                  <span className="block text-[.62rem] text-slate-400 line-through">Rp {formatPrice(parsePrice(v.price))}</span>
+                                  <span className="text-[.74rem] font-bold text-blue-700">Rp {formatPrice(parsePrice(v.special_price))}</span>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </section>
+                  </div>
+                </div>
+              )
+            })()}
           </>
         )}
 
@@ -1495,7 +1738,15 @@ function AdminDashboard() {
                           <td className="px-5 py-3.5">
                             <div className="flex items-center gap-3">
                               {vehicle.image_url ? <img className="size-11 shrink-0 rounded-lg border border-line object-cover" src={vehicle.image_url} alt="" /> : <span className="grid size-11 shrink-0 place-items-center rounded-lg bg-slate-ice text-muted"><CarFront size={16} aria-hidden="true" /></span>}
-                              <span className="grid min-w-0"><strong className="font-semibold text-ink">{vehicle.name}</strong>{formatVehicleTransmissionStock(vehicle) && <small className="text-[.64rem] text-muted">{formatVehicleTransmissionStock(vehicle)}</small>}</span>
+                              <span className="grid min-w-0">
+                                <strong className="font-semibold text-ink">{vehicle.name}</strong>
+                                {formatVehicleTransmissionStock(vehicle) && <small className="text-[.64rem] text-muted">{formatVehicleTransmissionStock(vehicle)}</small>}
+                                <span className="mt-1 flex flex-wrap gap-1">
+                                  {fleetTop3Names.includes(vehicle.name) && <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[.58rem] font-bold text-amber-700">🏆 Terlaris</span>}
+                                  {getActivePromo(vehicle) && <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-[.58rem] font-bold text-yellow-700">🏷 Promo aktif</span>}
+                                  {vehicle.special_price && !vehicle.promo_price && <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[.58rem] font-bold text-blue-700">⭐ Harga spesial</span>}
+                                </span>
+                              </span>
                             </div>
                           </td>
                           <td className="px-5 py-3.5 text-muted">{vehicle.category}</td>
@@ -1520,6 +1771,9 @@ function AdminDashboard() {
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[.65rem] font-bold ${vehicle.status === 'maintenance' ? 'bg-slate-100 text-slate-600' : isVehicleReady(vehicle) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>{vehicle.status === 'maintenance' ? 'Perawatan' : isVehicleReady(vehicle) ? 'Ready' : 'Booking'}</span>
                             <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[.65rem] font-bold ${vehicle.is_active ? 'bg-cyan/10 text-[#0369a1]' : 'bg-slate-100 text-slate-500'}`}>{vehicle.is_active ? 'Aktif' : 'Nonaktif'}</span>
+                            {fleetTop3Names.includes(vehicle.name) && <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-[.65rem] font-bold text-amber-700">🏆 Terlaris</span>}
+                            {getActivePromo(vehicle) && <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2.5 py-0.5 text-[.65rem] font-bold text-yellow-700">🏷 Promo aktif</span>}
+                            {vehicle.special_price && !vehicle.promo_price && <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-[.65rem] font-bold text-blue-700">⭐ Harga spesial</span>}
                           </div>
                         </div>
                       </div>
@@ -1546,6 +1800,7 @@ function AdminDashboard() {
               <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5" role="tablist" aria-label="Filter status booking">
                 {[
                   ['all', 'Semua'],
+                  ['acara', '🎉 Acara'],
                   ['pending', 'Menunggu'],
                   ['confirmed', 'Dikonfirmasi'],
                   ['completed', 'Selesai'],
@@ -1590,7 +1845,7 @@ function AdminDashboard() {
                           <div className="mt-1"><CustomerContact booking={booking} /></div>
                         </td>
                         <td className="px-5 py-4 text-muted"><span className="flex items-center gap-1.5"><CalendarDays size={13} aria-hidden="true" />{formatJakartaDateTime(booking.start_at, { day: 'numeric', month: 'numeric', year: 'numeric' })}</span><span className="mt-1 flex items-center gap-1.5"><Clock3 size={13} aria-hidden="true" />{formatJakartaDateTime(booking.start_at, { hour: '2-digit', minute: '2-digit', hour12: false })}–{formatJakartaDateTime(booking.end_at, { day: 'numeric', month: 'numeric', year: 'numeric' })} {formatJakartaDateTime(booking.end_at, { hour: '2-digit', minute: '2-digit', hour12: false })}</span></td>
-                        <td className="max-w-[180px] px-5 py-4 text-muted">{(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ')}<span className="mt-1 block text-[.67rem]">{booking.booking_mode} · {booking.duration} {booking.duration_unit}</span></td>
+                        <td className="max-w-[180px] px-5 py-4 text-muted">{isEventBooking(booking) ? (() => { const { eventType, addons } = parseEventNotes(booking.notes); return <><span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[.65rem] font-bold text-purple-700">🎉 {booking.booking_mode}</span><span className="mt-1 block text-[.67rem]">{formatDuration(booking.duration, booking.duration_unit)}</span>{eventType && <span className="mt-1 block text-[.67rem] font-semibold text-purple-600">{eventType}</span>}{addons && <span className="mt-0.5 block text-[.65rem] text-purple-400 line-clamp-1" title={addons}>{addons}</span>}</> })() : <>{(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ')}<span className="mt-1 block text-[.67rem]">{booking.booking_mode} · {formatDuration(booking.duration, booking.duration_unit)}</span></>}</td>
                         <td className="max-w-[200px] px-5 py-4 text-muted">
                           <span className="flex items-start gap-1.5">
                             <MapPin className="mt-0.5 shrink-0" size={13} aria-hidden="true" />
@@ -1628,7 +1883,7 @@ function AdminDashboard() {
                       {' – '}
                       {formatJakartaDateTime(booking.end_at, { day: 'numeric', month: 'numeric', year: 'numeric' })} {formatJakartaDateTime(booking.end_at, { hour: '2-digit', minute: '2-digit', hour12: false })}
                     </p>
-                    <p className="mb-0 mt-1 text-[.73rem] text-muted">{(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ')} · {booking.booking_mode}</p>
+                    <p className="mb-0 mt-1 text-[.73rem] text-muted">{isEventBooking(booking) ? (() => { const { eventType, addons } = parseEventNotes(booking.notes); return <><span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[.65rem] font-bold text-purple-700">🎉 {booking.booking_mode}</span>{eventType && <span className="ml-1 text-[.7rem] font-semibold text-purple-600">{eventType}</span>}</> })() : `${(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ')} · ${booking.booking_mode}`}</p>
                     <p className="mb-0 mt-1 line-clamp-2 text-[.73rem] text-muted">{booking.pickup_address}</p>
                     <div className="mt-3 grid gap-3 border-t border-line pt-3">
                       <DriverAssignControls booking={booking} bookings={bookings} drivers={drivers} onAssign={handleAssignDriver} />
@@ -1771,6 +2026,7 @@ function AdminDashboard() {
           </section>
         ) : (
           <section className={panelClass} aria-label="Ringkasan keuangan">
+            {/* Header: judul + filter periode */}
             <div className="grid gap-3 border-b border-line px-5 py-4 max-[600px]:px-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -1799,49 +2055,156 @@ function AdminDashboard() {
               <PanelMessage tone="warn">Tanggal awal harus sama dengan atau sebelum tanggal akhir.</PanelMessage>
             ) : financeRangeIncomplete ? (
               <PanelMessage>Pilih tanggal awal dan tanggal akhir untuk melihat ringkasan.</PanelMessage>
-            ) : (
-              <>
-                <div className="border-b border-line px-5 py-4 max-[600px]:px-4">
-                  <p className="m-0 text-[.7rem] leading-5 text-muted">Angka merupakan estimasi, bukan catatan pembayaran aktual. Booking ditolak atau dibatalkan tidak masuk total estimasi aktif.</p>
-                </div>
+            ) : (() => {
+              /* Grafik booking — dihitung sekali, dipakai di samping tabel */
+              const range = financeDateRange
+              let days = []
+              if (!range) {
+                days = Array.from({ length: 30 }, (_, i) => shiftDateKey(financeTodayKey, i - 29))
+              } else {
+                const [startYear, startMonth, startDay] = range.start.split('-').map(Number)
+                const [endYear, endMonth, endDay] = range.end.split('-').map(Number)
+                const start = new Date(Date.UTC(startYear, startMonth - 1, startDay))
+                const end = new Date(Date.UTC(endYear, endMonth - 1, endDay))
+                const diffDays = Math.round((end - start) / 86400000) + 1
+                days = Array.from({ length: diffDays }, (_, i) => {
+                  return shiftDateKey(range.start, i)
+                })
+              }
+              const useWeekly = days.length > 30
+              let slots = []
+              if (useWeekly) {
+                const weekMap = {}
+                for (const day of days) {
+                  const d = new Date(day + 'T00:00:00')
+                  const key = shiftDateKey(day, -d.getDay())
+                  if (!weekMap[key]) weekMap[key] = { key, count: 0 }
+                }
+                slots = Object.values(weekMap)
+              } else {
+                slots = days.map((d) => ({ key: d, count: 0 }))
+              }
+              for (const b of financialBookings) {
+                const day = getJakartaDateKey(b.start_at)
+                if (!day) continue
+                if (useWeekly) {
+                  const d = new Date(day + 'T00:00:00')
+                  const key = shiftDateKey(day, -d.getDay())
+                  const slot = slots.find((s) => s.key === key)
+                  if (slot) slot.count++
+                } else {
+                  const slot = slots.find((s) => s.key === day)
+                  if (slot) slot.count++
+                }
+              }
+              const counts = slots.map((s) => s.count)
+              const maxCount = Math.max(...counts, 1)
+              const totalBookingsChart = counts.reduce((a, b) => a + b, 0)
+              const W = 600; const H = 140
+              const padX = 12; const padY = 18
+              const chartW = W - padX * 2; const chartH = H - padY * 2
+              const points = slots.map((s, i) => ({
+                x: slots.length === 1 ? padX + chartW / 2 : padX + (i / (slots.length - 1)) * chartW,
+                y: padY + (1 - s.count / maxCount) * chartH,
+                count: s.count,
+                label: useWeekly
+                  ? new Date(s.key + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
+                  : new Date(s.key + 'T00:00:00').toLocaleDateString('id-ID', { weekday: days.length <= 7 ? 'short' : undefined, day: 'numeric', month: days.length > 14 ? 'short' : undefined }),
+              }))
+              const polyline = points.map((p) => `${p.x},${p.y}`).join(' ')
+              const areaPath = [
+                `M ${points[0].x},${padY + chartH}`,
+                ...points.map((p) => `L ${p.x},${p.y}`),
+                `L ${points[points.length - 1].x},${padY + chartH}`,
+                'Z',
+              ].join(' ')
+              const showLabelEvery = slots.length <= 7 ? 1 : slots.length <= 14 ? 2 : slots.length <= 30 ? 3 : 1
+              const periodLabel = financePeriod === 'all' ? '30 hari terakhir' : financePeriodOptions.find((o) => o.id === financePeriod)?.label ?? ''
 
-                {financialBookings.length === 0 ? (
-                  <EmptyState icon={<Wallet size={20} aria-hidden="true" />} title="Belum ada booking pada periode ini" description="Ubah rentang tanggal untuk melihat estimasi dari periode lain." />
-                ) : (
-                  <>
-                  <div className="scrollbar-none hidden overflow-x-auto md:block">
-                    <table className="w-full min-w-[760px] border-collapse text-left">
-                      <thead><tr className="bg-slate-ice text-[.65rem] font-bold uppercase tracking-[.07em] text-muted"><th className="px-5 py-3">Mulai sewa</th><th className="px-5 py-3">Pemesan</th><th className="px-5 py-3">Kendaraan</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Estimasi</th></tr></thead>
-                      <tbody>
-                        {financialBookings.map((booking) => (
-                          <tr className="border-t border-line text-[.76rem] transition-colors hover:bg-slate-ice/80" key={booking.id}>
-                            <td className="whitespace-nowrap px-5 py-3.5 text-muted">{formatJakartaDateTime(booking.start_at, { day: 'numeric', month: 'short', year: 'numeric' })}</td>
-                            <td className="px-5 py-3.5 font-semibold text-ink">{booking.customer_name}</td>
-                            <td className="max-w-[220px] px-5 py-3.5 text-muted">{(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ')}</td>
-                            <td className="px-5 py-3.5"><span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[.65rem] font-bold ${bookingStatusTone(booking.status)}`}>{bookingStatusLabels[booking.status] ?? booking.status}</span></td>
-                            <td className="whitespace-nowrap px-5 py-3.5 text-right font-semibold text-ink">Rp {formatPrice(Number(booking.estimated_price) || 0)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="grid gap-3 border-t border-line p-4 md:hidden">
-                    {financialBookings.map((booking) => (
-                      <article className="rounded-xl border border-line p-4" key={booking.id}>
-                        <div className="flex items-start justify-between gap-3">
-                          <strong className="text-[.86rem] text-ink">{booking.customer_name}</strong>
-                          <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[.65rem] font-bold ${bookingStatusTone(booking.status)}`}>{bookingStatusLabels[booking.status] ?? booking.status}</span>
-                        </div>
-                        <p className="mb-0 mt-2 text-[.72rem] text-muted">{formatJakartaDateTime(booking.start_at, { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-                        <p className="mb-0 mt-1 text-[.72rem] text-muted">{(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ')}</p>
-                        <strong className="mt-3 block text-[.82rem]">Rp {formatPrice(Number(booking.estimated_price) || 0)}</strong>
-                      </article>
+              const chartNode = (
+                <div className="border-b border-line p-5 max-[900px]:border-b min-[900px]:border-b-0 min-[900px]:border-r" aria-label="Grafik booking">
+                  <p className="m-0 mb-3 font-display text-[.82rem] font-bold text-ink">
+                    Booking berdasarkan tanggal mulai sewa{useWeekly ? ' (per minggu)' : ''} — {periodLabel}
+                  </p>
+                  <p className="m-0 mb-3 text-[.7rem] text-muted">Total: <strong className="text-ink">{totalBookingsChart} booking</strong></p>
+                  <svg viewBox={`0 0 ${W} ${H + 30}`} className="w-full" aria-hidden="true">
+                    {[0, 0.25, 0.5, 0.75, 1].map((t) => {
+                      const y = padY + t * chartH
+                      return <line key={t} x1={padX} y1={y} x2={W - padX} y2={y} stroke="#e2e8f0" strokeWidth="1" />
+                    })}
+                    {[0, 0.5, 1].map((t) => {
+                      const y = padY + t * chartH
+                      const val = Math.round((1 - t) * maxCount)
+                      return <text key={t} x={padX} y={y - 3} fontSize="8" fill="#94a3b8">{val}</text>
+                    })}
+                    <path d={areaPath} fill="rgba(6,182,212,0.07)" />
+                    <polyline points={polyline} fill="none" stroke="#06b6d4" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+                    {points.map((p, i) => (
+                      <g key={i}>
+                        <circle cx={p.x} cy={p.y} r={slots.length <= 14 ? 4 : 3} fill="white" stroke="#06b6d4" strokeWidth="2" />
+                        {p.count > 0 && <text x={p.x} y={p.y - 9} textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#0e7490">{p.count}</text>}
+                        {i % showLabelEvery === 0 && (
+                          <text x={p.x} y={H + 24} textAnchor="middle" fontSize="8.5" fill="#94a3b8">{p.label}</text>
+                        )}
+                      </g>
                     ))}
+                  </svg>
+                </div>
+              )
+
+              return (
+                <>
+                  <div className="border-b border-line px-5 py-4 max-[600px]:px-4">
+                    <p className="m-0 text-[.7rem] leading-5 text-muted">Angka merupakan estimasi, bukan catatan pembayaran aktual. Booking ditolak atau dibatalkan tidak masuk total estimasi aktif.</p>
                   </div>
-                  </>
-                )}
-              </>
-            )}
+
+                  {/* Layout: grafik (kiri) + tabel (kanan) pada layar lebar */}
+                  <div className="grid min-[900px]:grid-cols-[2fr_3fr]">
+                    {/* Kolom kiri: grafik */}
+                    {chartNode}
+
+                    {/* Kolom kanan: tabel */}
+                    <div>
+                      {financialBookings.length === 0 ? (
+                        <EmptyState icon={<Wallet size={20} aria-hidden="true" />} title="Belum ada booking pada periode ini" description="Ubah rentang tanggal untuk melihat estimasi dari periode lain." />
+                      ) : (
+                        <>
+                        <div className="scrollbar-none hidden overflow-x-auto md:block">
+                          <table className="w-full min-w-[560px] border-collapse text-left">
+                            <thead><tr className="bg-slate-ice text-[.65rem] font-bold uppercase tracking-[.07em] text-muted"><th className="px-5 py-3">Mulai sewa</th><th className="px-5 py-3">Pemesan</th><th className="px-5 py-3">Kendaraan</th><th className="px-5 py-3">Status</th><th className="px-5 py-3 text-right">Estimasi</th></tr></thead>
+                            <tbody>
+                              {financialBookings.map((booking) => (
+                                <tr className="border-t border-line text-[.76rem] transition-colors hover:bg-slate-ice/80" key={booking.id}>
+                                  <td className="whitespace-nowrap px-5 py-3.5 text-muted">{formatJakartaDateTime(booking.start_at, { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                                  <td className="px-5 py-3.5 font-semibold text-ink">{booking.customer_name}</td>
+                                  <td className="max-w-[180px] px-5 py-3.5 text-muted">{(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ')}</td>
+                                  <td className="px-5 py-3.5"><span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[.65rem] font-bold ${bookingStatusTone(booking.status)}`}>{bookingStatusLabels[booking.status] ?? booking.status}</span></td>
+                                  <td className="whitespace-nowrap px-5 py-3.5 text-right font-semibold text-ink">Rp {formatPrice(Number(booking.estimated_price) || 0)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="grid gap-3 border-t border-line p-4 md:hidden">
+                          {financialBookings.map((booking) => (
+                            <article className="rounded-xl border border-line p-4" key={booking.id}>
+                              <div className="flex items-start justify-between gap-3">
+                                <strong className="text-[.86rem] text-ink">{booking.customer_name}</strong>
+                                <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[.65rem] font-bold ${bookingStatusTone(booking.status)}`}>{bookingStatusLabels[booking.status] ?? booking.status}</span>
+                              </div>
+                              <p className="mb-0 mt-2 text-[.72rem] text-muted">{formatJakartaDateTime(booking.start_at, { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                              <p className="mb-0 mt-1 text-[.72rem] text-muted">{(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ')}</p>
+                              <strong className="mt-3 block text-[.82rem]">Rp {formatPrice(Number(booking.estimated_price) || 0)}</strong>
+                            </article>
+                          ))}
+                        </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )
+            })()}
           </section>
         )}
           </div>
@@ -2051,7 +2414,7 @@ function AdminDashboard() {
                     </span>
                   </span>
                   <span className="mt-0.5 text-[.76rem] text-muted">
-                    {selectedBooking.duration} {selectedBooking.duration_unit} · {selectedBooking.booking_mode}
+                    {formatDuration(selectedBooking.duration, selectedBooking.duration_unit)} · {selectedBooking.booking_mode}
                   </span>
                 </div>
               </div>
@@ -2059,15 +2422,64 @@ function AdminDashboard() {
               {/* Kendaraan */}
               <div className="px-5 py-4 max-[520px]:px-4">
                 <p className="mb-2 text-[.7rem] font-bold uppercase tracking-wide text-muted">Kendaraan</p>
-                <div className="grid gap-1.5">
-                  {(selectedBooking.vehicle_snapshot ?? []).map((v, i) => (
-                    <span key={i} className="flex items-center gap-2 text-[.82rem] text-ink">
-                      <CarFront size={14} className="shrink-0 text-cyan" aria-hidden="true" />
-                      {formatBookedVehicle(v)}
-                    </span>
-                  ))}
-                </div>
+                {isEventBooking(selectedBooking) ? (
+                  <div className="grid gap-1.5">
+                    <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-purple-100 px-3 py-1 text-[.75rem] font-bold text-purple-700">🎉 {selectedBooking.booking_mode}</span>
+                    {(selectedBooking.vehicle_snapshot ?? []).length > 0 ? (
+                      (selectedBooking.vehicle_snapshot ?? []).map((v, i) => (
+                        <span key={i} className="flex items-center gap-2 text-[.82rem] text-ink">
+                          <CarFront size={14} className="shrink-0 text-cyan" aria-hidden="true" />
+                          {formatBookedVehicle(v)}
+                        </span>
+                      ))
+                    ) : (
+                      <p className="m-0 text-[.78rem] leading-5 text-muted">Armada belum ditentukan — dikonfirmasi admin setelah review request.</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid gap-1.5">
+                    {(selectedBooking.vehicle_snapshot ?? []).map((v, i) => (
+                      <span key={i} className="flex items-center gap-2 text-[.82rem] text-ink">
+                        <CarFront size={14} className="shrink-0 text-cyan" aria-hidden="true" />
+                        {formatBookedVehicle(v)}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
+
+              {/* Detail Acara — hanya tampil kalau booking acara */}
+              {isEventBooking(selectedBooking) && (() => {
+                const { eventType, addons, catatan } = parseEventNotes(selectedBooking.notes)
+                return (
+                  <div className="px-5 py-4 max-[520px]:px-4">
+                    <p className="mb-3 text-[.7rem] font-bold uppercase tracking-wide text-muted">Detail Acara</p>
+                    <div className="grid gap-2 rounded-xl border border-purple-100 bg-purple-50/60 p-3.5">
+                      {eventType && (
+                        <div className="flex items-start gap-2 text-[.78rem]">
+                          <span className="mt-0.5 shrink-0 text-[.72rem] font-bold text-purple-500">JENIS</span>
+                          <span className="font-semibold text-ink">{eventType}</span>
+                        </div>
+                      )}
+                      {addons && (
+                        <div className="flex items-start gap-2 text-[.78rem]">
+                          <span className="mt-0.5 shrink-0 text-[.72rem] font-bold text-purple-500">ADD-ON</span>
+                          <span className="text-ink">{addons}</span>
+                        </div>
+                      )}
+                      {catatan && (
+                        <div className="flex items-start gap-2 text-[.78rem]">
+                          <span className="mt-0.5 shrink-0 text-[.72rem] font-bold text-purple-500">CATATAN</span>
+                          <span className="text-ink">{catatan}</span>
+                        </div>
+                      )}
+                      {!eventType && !addons && !catatan && (
+                        <p className="m-0 text-[.76rem] text-muted">Detail acara belum diisi oleh pemesan.</p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* Penjemputan */}
               <div className="px-5 py-4 max-[520px]:px-4">
@@ -2085,7 +2497,7 @@ function AdminDashboard() {
               </div>
 
               {/* Catatan */}
-              {selectedBooking.notes && (
+              {selectedBooking.notes && !isEventBooking(selectedBooking) && (
                 <div className="px-5 py-4 max-[520px]:px-4">
                   <p className="mb-2 text-[.7rem] font-bold uppercase tracking-wide text-muted">Catatan Pemesan</p>
                   <p className="mb-0 text-[.82rem] leading-6 text-ink">{selectedBooking.notes}</p>
@@ -2097,6 +2509,16 @@ function AdminDashboard() {
                 <span className="text-[.82rem] font-semibold text-muted">Estimasi Total</span>
                 <strong className="text-[1rem] text-ink">Rp {formatPrice(Number(selectedBooking.estimated_price) || 0)}</strong>
               </div>
+
+              {/* Info Tol */}
+              {selectedBooking.toll_included && (
+                <div className="flex items-center justify-between gap-3 border-t border-line px-5 py-3 max-[520px]:px-4">
+                  <span className="text-[.72rem] text-muted">
+                    Biaya tol ({selectedBooking.toll_type === 'standard' ? 'Standar' : 'Custom'})
+                  </span>
+                  <strong className="text-[.82rem] text-amber-700">Rp {formatPrice(Number(selectedBooking.toll_amount) || 0)}</strong>
+                </div>
+              )}
 
               {/* Ubah status */}
               <div className="flex items-center justify-between gap-3 px-5 py-4 max-[520px]:px-4">
@@ -2143,23 +2565,124 @@ function AdminDashboard() {
             })} />{option.label}</label>)}</div></fieldset>
             <label className="grid gap-1.5"><span className="text-[.72rem] font-bold">Detail transmisi</span><input className={fieldClass} maxLength={120} value={vehicleDraft.transmission_details} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, transmission_details: event.target.value }))} placeholder="CVT / e-CVT Hybrid" /></label>
             <label className="grid gap-1.5"><span className="text-[.72rem] font-bold">Teknologi mesin</span><select className={fieldClass} value={vehicleDraft.powertrain_type} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, powertrain_type: event.target.value }))}><option value="">Belum ditentukan</option><option value="gasoline">Bensin</option><option value="hybrid">Hybrid</option><option value="ev_phev">EV / PHEV</option></select></label>
-            <label className="grid gap-1.5"><span className="text-[.72rem] font-bold">Harga / 12 jam</span><input className={fieldClass} required maxLength={24} value={vehicleDraft.price} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, price: event.target.value }))} placeholder="1.100.000" /></label>
+            <label className="grid gap-1.5"><span className="text-[.72rem] font-bold">Harga dengan tol / 12 jam</span><input className={fieldClass} required maxLength={24} value={vehicleDraft.price} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, price: event.target.value }))} placeholder="1.100.000" /></label>
+            <label className="grid gap-1.5"><span className="text-[.72rem] font-bold">Harga tanpa tol / 12 jam</span><input className={fieldClass} maxLength={24} value={vehicleDraft.price_without_toll} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, price_without_toll: event.target.value }))} placeholder="1.000.000" /><span className="text-[.68rem] text-muted">Kosongkan jika sama dengan harga dengan tol</span></label>
             <label className="grid gap-1.5"><span className="text-[.72rem] font-bold">Tempat duduk</span><input className={fieldClass} required maxLength={40} value={vehicleDraft.seats} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, seats: event.target.value }))} placeholder="6 kursi" /></label>
             <div className="grid gap-2 rounded-lg border border-line p-3"><span className="text-[.8rem] font-bold text-ink">Jumlah unit per transmisi</span>{vehicleDraft.transmission_options.map((type) => <label className="grid grid-cols-[1fr_100px] items-center gap-3 text-[.8rem] font-medium text-slate-900" key={type}><span>{type === 'automatic' ? 'Matic' : 'Manual'}</span><input className={fieldClass} type="number" min="0" step="1" value={vehicleDraft.transmission_stock[type] ?? 0} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, transmission_stock: { ...draft.transmission_stock, [type]: event.target.value } }))} /></label>)}<span className="text-[.78rem] font-semibold text-slate-800">Total baru: {vehicleDraft.transmission_options.reduce((total, type) => total + (Number(vehicleDraft.transmission_stock[type]) || 0), 0)} unit</span>{vehicleDraft.existing_stock > 0 && <span className="text-[.76rem] font-medium leading-5 text-slate-700">Stok lama {vehicleDraft.existing_stock} unit · belum dialokasikan {Math.max(0, vehicleDraft.existing_stock - vehicleDraft.transmission_options.reduce((total, type) => total + (Number(vehicleDraft.transmission_stock[type]) || 0), 0))} unit</span>}</div>
             <label className="grid gap-1.5"><span className="text-[.72rem] font-bold">Status unit</span><select className={fieldClass} value={vehicleDraft.status} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, status: event.target.value }))}><option value="ready">Ready</option><option value="booking">Booking</option><option value="maintenance">Perawatan</option></select></label>
-            <div className="grid gap-1.5">
-              <label className="grid gap-1.5"><span className="text-[.72rem] font-bold">Label promosi</span><select className={fieldClass} value={customBadge ? '__custom' : vehicleDraft.badge} onChange={(event) => {
-                if (event.target.value === '__custom') {
-                  setCustomBadge(true)
-                  setVehicleDraft((draft) => ({ ...draft, badge: promoBadgeOptions.includes(draft.badge) ? '' : draft.badge }))
-                } else {
-                  setCustomBadge(false)
-                  setVehicleDraft((draft) => ({ ...draft, badge: event.target.value }))
-                }
-              }}><option value="">Tanpa label</option><option value="Promo">Promo</option><option value="Favorit">Favorit</option><option value="Terlaris">Terlaris</option><option value="Unit baru">Unit baru</option><option value="Harga spesial">Harga spesial</option><option value="__custom">Tulis sendiri</option></select></label>
-              {customBadge && <input className={fieldClass} maxLength={40} value={vehicleDraft.badge} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, badge: event.target.value }))} placeholder="Contoh: Paket Lebaran" aria-label="Teks label promosi kustom" />}
-            </div>
+            {editingVehicleId ? (
+              <div className="grid gap-1.5">
+                <label className="grid gap-1.5">
+                  <span className="text-[.72rem] font-bold">Label promosi</span>
+                  <select className={fieldClass} value={customBadge ? '__custom' : vehicleDraft.badge} onChange={(event) => {
+                    if (event.target.value === '__custom') {
+                      setCustomBadge(true)
+                      setVehicleDraft((draft) => ({ ...draft, badge: promoBadgeOptions.includes(draft.badge) ? '' : draft.badge }))
+                    } else {
+                      setCustomBadge(false)
+                      // Kalau ganti dari Promo ke yang lain → clear data promo
+                      // Kalau ganti dari Harga spesial ke yang lain → clear data spesial
+                      setVehicleDraft((draft) => ({
+                        ...draft,
+                        badge: event.target.value,
+                        ...(event.target.value !== 'Promo' ? { promo_price: '', promo_start: '', promo_end: '' } : {}),
+                        ...(event.target.value !== 'Harga spesial' ? { special_price: '', special_start: '', special_end: '', special_label: '' } : {}),
+                      }))
+                    }
+                  }}>
+                    <option value="">Tanpa label</option>
+                    <option value="Promo">Promo</option>
+                    <option value="Favorit">Favorit</option>
+                    <option value="Harga spesial">Harga spesial</option>
+                    <option value="__custom">Tulis sendiri</option>
+                  </select>
+                </label>
+                {customBadge && <input className={fieldClass} maxLength={40} value={vehicleDraft.badge} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, badge: event.target.value }))} placeholder="Contoh: Paket Lebaran" aria-label="Teks label promosi kustom" />}
+                <span className="text-[.68rem] leading-4 text-muted">Label <strong>Promo</strong>, <strong>Terlaris</strong>, dan <strong>Unit Baru</strong> diatur otomatis oleh sistem.</span>
+              </div>
+            ) : (
+              <div className="grid gap-1.5 rounded-lg border border-line bg-slate-ice/60 p-3">
+                <span className="text-[.72rem] font-bold text-ink">Label promosi</span>
+                <span className="text-[.72rem] leading-5 text-muted">Label diatur otomatis — <strong className="text-amber-700">Promo</strong> saat harga promo aktif, <strong className="text-amber-700">Unit Baru</strong> selama 7 hari pertama, lalu <strong className="text-crimson">Terlaris</strong> jika masuk top 3 pesanan selesai.</span>
+              </div>
+            )}
             <label className="grid gap-1.5"><span className="text-[.72rem] font-bold">Urutan tampil</span><input className={fieldClass} type="number" min="0" step="1" value={vehicleDraft.sort_order} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, sort_order: event.target.value }))} /></label>
+
+            {/* Promo & Harga Spesial - hanya saat edit dan sesuai label yang dipilih */}
+            {editingVehicleId && (<>
+              {/* Promo - muncul kalau badge = Promo */}
+              {vehicleDraft.badge === 'Promo' && (
+              <div className="col-span-2 grid gap-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4 max-[520px]:col-span-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[.8rem] font-bold text-amber-900">🏷️ Harga Promo</span>
+                  {vehicleDraft.promo_price && vehicleDraft.promo_end && new Date(vehicleDraft.promo_end) >= new Date()
+                    ? <span className="rounded-full bg-amber-500 px-2.5 py-0.5 text-[.64rem] font-bold text-white">Aktif</span>
+                    : vehicleDraft.promo_price
+                      ? <span className="rounded-full bg-slate-200 px-2.5 py-0.5 text-[.64rem] font-bold text-slate-600">Tidak aktif</span>
+                      : null
+                  }
+                </div>
+                <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
+                  <label className="grid gap-1.5">
+                    <span className="text-[.72rem] font-bold text-amber-900">Harga promo <span className="font-normal">(dengan tol)</span></span>
+                    <input className={fieldClass} maxLength={24} placeholder="700.000" value={vehicleDraft.promo_price} onChange={(e) => setVehicleDraft((d) => ({ ...d, promo_price: e.target.value }))} />
+                    <span className="text-[.66rem] text-muted">Harga tanpa tol dihitung otomatis dari selisih diskon</span>
+                  </label>
+                  <div />
+                  <label className="grid gap-1.5">
+                    <span className="text-[.72rem] font-bold text-amber-900">Berlaku dari</span>
+                    <input className={fieldClass} type="date" value={vehicleDraft.promo_start} onChange={(e) => setVehicleDraft((d) => ({ ...d, promo_start: e.target.value }))} />
+                  </label>
+                  <label className="grid gap-1.5">
+                    <span className="text-[.72rem] font-bold text-amber-900">Berlaku s/d</span>
+                    <input className={fieldClass} type="date" value={vehicleDraft.promo_end} onChange={(e) => setVehicleDraft((d) => ({ ...d, promo_end: e.target.value }))} />
+                  </label>
+                </div>
+                {vehicleDraft.promo_price && (
+                  <button type="button" className="w-fit text-[.7rem] font-semibold text-red-500 hover:underline" onClick={() => setVehicleDraft((d) => ({ ...d, promo_price: '', promo_start: '', promo_end: '' }))}>Hapus promo</button>
+                )}
+              </div>
+              )}
+
+              {/* Harga Spesial - muncul kalau badge = Harga spesial */}
+              {vehicleDraft.badge === 'Harga spesial' && (
+              <div className="col-span-2 grid gap-3 rounded-xl border border-blue-200 bg-blue-50/60 p-4 max-[520px]:col-span-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[.8rem] font-bold text-blue-900">⭐ Harga Spesial</span>
+                  {vehicleDraft.special_price
+                    ? <span className="rounded-full bg-blue-500 px-2.5 py-0.5 text-[.64rem] font-bold text-white">Aktif</span>
+                    : null
+                  }
+                </div>
+                <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
+                  <label className="grid gap-1.5">
+                    <span className="text-[.72rem] font-bold text-blue-900">Harga spesial <span className="font-normal">(dengan tol)</span></span>
+                    <input className={fieldClass} maxLength={24} placeholder="950.000" value={vehicleDraft.special_price} onChange={(e) => setVehicleDraft((d) => ({ ...d, special_price: e.target.value }))} />
+                    <span className="text-[.66rem] text-muted">Harga tanpa tol dihitung otomatis dari selisih diskon</span>
+                  </label>
+                  <label className="grid gap-1.5">
+                    <span className="text-[.72rem] font-bold text-blue-900">Minimal hari booking</span>
+                    <input className={fieldClass} type="number" min="2" max="30" step="1" placeholder="3" value={vehicleDraft.special_min_days} onChange={(e) => setVehicleDraft((d) => ({ ...d, special_min_days: e.target.value }))} />
+                    <span className="text-[.66rem] text-muted">Harga berlaku jika booking ≥ X hari (mode Harian)</span>
+                  </label>
+                  <label className="col-span-2 grid gap-1.5 max-[520px]:col-span-1">
+                    <span className="text-[.72rem] font-bold text-blue-900">Label keterangan <span className="font-normal text-muted">(opsional)</span></span>
+                    <select className={fieldClass} value={vehicleDraft.special_label} onChange={(e) => setVehicleDraft((d) => ({ ...d, special_label: e.target.value }))}>
+                      <option value="">Min. {vehicleDraft.special_min_days || 3} hari (otomatis)</option>
+                      <option value="Paket hemat">Paket hemat</option>
+                      <option value="Harga long-term">Harga long-term</option>
+                      <option value="Diskon durasi">Diskon durasi</option>
+                      <option value="Harga spesial pelanggan">Harga spesial pelanggan</option>
+                    </select>
+                  </label>
+                </div>
+                {vehicleDraft.special_price && (
+                  <button type="button" className="w-fit text-[.7rem] font-semibold text-red-500 hover:underline" onClick={() => setVehicleDraft((d) => ({ ...d, special_price: '', special_min_days: 3, special_label: '' }))}>Hapus harga spesial</button>
+                )}
+              </div>
+              )}
+            </>)}
+
             <div className="col-span-2 grid gap-3 max-[520px]:col-span-1">
               <label className="grid gap-1.5"><span className="text-[.72rem] font-bold">Foto kendaraan</span><input className="block w-full rounded-xl border border-line px-3 py-2 text-[.76rem] file:mr-3 file:rounded-lg file:border-0 file:bg-slate-ice file:px-3 file:py-1.5 file:text-[.72rem] file:font-bold" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => {
                 const file = event.target.files?.[0]
