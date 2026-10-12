@@ -66,14 +66,14 @@ Rata-rata nilai jasa pada estimasi ini sekitar **Rp51.000 per jam**. Jam kerja m
 ### 5. Dashboard admin dan pengelolaan operasional — Rp500.000
 
 - **Aktivitas:** akses dashboard dan sesi admin (2 jam × Rp50.000 = Rp100.000); pemrosesan booking, penugasan supir, dan panel detail booking — klik baris untuk membuka modal berisi jadwal, kendaraan, penjemputan, supir, catatan, estimasi, dan ubah status (3 jam × Rp50.000 = Rp150.000); CRUD armada/foto dan profil supir (3 jam × Rp50.000 = Rp150.000); ringkasan keuangan, grafik berdasarkan tanggal mulai sewa, ekspor Excel dengan pilihan periode (per bulan atau rentang tanggal), dan pengelolaan admin (2 jam × Rp50.000 = Rp100.000).
-- **Hasil:** dashboard `/admin` untuk operasional, termasuk panel detail booking interaktif dan ekspor data booking ke file `.xlsx` berformat rapi dengan pilihan periode. Booking hanya dapat ditandai Selesai secara manual setelah waktu pengembalian lewat dan admin memastikan kendaraan telah diterima. Supir dengan booking Menunggu atau Dikonfirmasi tidak dapat ditandai Tersedia atau Libur.
+- **Hasil:** dashboard `/admin` untuk operasional, termasuk panel detail booking interaktif, ekspor data booking ke file `.xlsx` berformat rapi dengan pilihan periode, ringkasan per supir (jumlah pesanan selesai dan total jam terjadwal), serta statistik pemakaian tiap kendaraan (jumlah booking selesai dan jam-unit terjadwal). Jam-unit armada dihitung dari durasi booking selesai dikali jumlah unit pada snapshot kendaraan; keduanya memakai jadwal, bukan pencatatan jam mesin atau jam kerja aktual. Booking hanya dapat ditandai Selesai secara manual setelah waktu pengembalian lewat dan admin memastikan kendaraan telah diterima. Supir dengan booking Menunggu atau Dikonfirmasi tidak dapat ditandai Tersedia atau Libur.
 - **Periode keuangan:** ringkasan dan grafik menggunakan tanggal mulai sewa yang sama (tanggal kalender Jakarta). Saat memilih Semua, ringkasan mencakup semua booking yang memenuhi status perhitungan; grafik tetap merupakan tren 30 hari terakhir dan diberi label terpisah.
 
 ### 6. Integrasi Supabase dan kontrol akses — Rp300.000
 
 - **Aktivitas:** konfigurasi koneksi frontend dan environment (1 jam × Rp50.000 = Rp50.000); integrasi autentikasi/role admin (1 jam × Rp50.000 = Rp50.000); alur baca/tulis katalog, booking, supir, dan foto (2 jam × Rp50.000 = Rp100.000); integrasi RPC ketersediaan, konfirmasi, dan status booking (2 jam × Rp50.000 = Rp100.000).
 - **Rincian hasil:** frontend memakai Supabase URL dan anon key yang dikonfigurasi melalui environment; alur admin memakai autentikasi dan role tepercaya; katalog, booking, supir, dan foto dihubungkan ke backend; serta pemeriksaan ketersediaan kendaraan, kapasitas supir berdasarkan rentang sewa, konfirmasi, dan perubahan status menggunakan RPC. Permintaan aktif yang meminta supir tanpa penugasan ikut dihitung agar permintaan yang beririsan tidak mengklaim kapasitas supir yang sama.
-- **Batas:** project Supabase harus sudah memiliki schema, RLS, bucket Storage, dan RPC operasional yang lain. Migration `20261013000000_driver_availability_for_window.sql` menambahkan pemeriksaan ketersediaan supir untuk jadwal terpilih dan perlu diterapkan pada project Supabase. Membuat ulang database, memulihkan migration schema lama, memindahkan data, serta biaya Supabase/Geoapify tidak termasuk dalam nominal jasa.
+- **Batas:** project Supabase harus sudah memiliki schema, RLS, bucket Storage, dan RPC status/penugasan operasional yang lama. Dua migration tambahan, `20261013000000_driver_availability_for_window.sql` dan `20261013000100_confirm_booking_with_driver.sql`, menambahkan pemeriksaan kapasitas dan konfirmasi otomatis serta harus diterapkan pada project Supabase setelah kecocokan schema diverifikasi. Migration kedua juga menolak penugasan supir pada booking lepas kunci di database, bukan hanya menyembunyikan kontrol dashboard. Karena riwayat schema lama tidak tersedia pada checkout ini, migration baru tidak merekonstruksi database produksi. Memulihkan migration schema lama, memindahkan data, serta biaya Supabase/Geoapify tidak termasuk dalam nominal jasa.
 
 ### 7. Pengujian dan perbaikan — Rp200.000
 
@@ -94,8 +94,8 @@ Rata-rata nilai jasa pada estimasi ini sekitar **Rp51.000 per jam**. Jam kerja m
 2. **Pelanggan memilih kendaraan.** Katalog menampilkan kendaraan dan varian yang sesuai. Pelanggan memilih transmisi/jenis mesin serta jumlah unit; harga dan subtotal dihitung sebelum permintaan dikirim.
 3. **Pelanggan mengisi data dan mengirim permintaan.** Nama, nomor WhatsApp, dan lokasi penjemputan divalidasi. Lokasi dapat dipilih dari saran alamat, diambil dari posisi perangkat setelah izin browser diberikan, atau dimasukkan manual. Sistem menyimpan permintaan berstatus **Menunggu**, beserta jadwal, snapshot kendaraan/harga, dan kode booking. Tautan WhatsApp dan Google Maps disediakan untuk komunikasi lanjutan; Google Maps menggunakan koordinat jika tersedia.
 4. **Admin memeriksa permintaan.** Admin meninjau jadwal, armada, dan kebutuhan supir di dashboard. Booking Menunggu belum mengunci stok kendaraan. Jika layanan supir dipilih, permintaan Menunggu ikut dihitung sebagai kapasitas supir pada jadwal beririsan meskipun nama supir belum ditetapkan.
-5. **Admin mengonfirmasi atau menolak.** Saat dikonfirmasi, sistem memeriksa kapasitas sekali lagi. Jika jadwal atau stok bentrok, booking tetap Menunggu sampai admin menghubungi pelanggan. Jika lolos, status menjadi **Dikonfirmasi** dan unit dikunci untuk jadwal tersebut.
-6. **Admin menugaskan supir bila diperlukan.** Penugasan dilakukan terpisah dari konfirmasi booking. Sistem mencegah supir ditugaskan pada jadwal yang bertabrakan; admin dapat mengirim detail tugas melalui WhatsApp.
+5. **Admin mengonfirmasi atau menolak.** Saat booking dikonfirmasi, sistem memeriksa kapasitas sekali lagi. Untuk booking yang meminta supir, Supabase secara atomik memilih dan menugaskan supir yang tersedia lalu mengonfirmasi booking. Jika jadwal, stok, atau kapasitas supir bentrok, perubahan dibatalkan dan booking tetap Menunggu. Booking lepas kunci tetap tanpa supir dan tidak dapat diubah menjadi booking dengan supir.
+6. **Admin mengelola penugasan bila diperlukan.** Admin tetap dapat mengganti atau melepas supir pada booking yang memang meminta supir. Sistem mencegah supir ditugaskan pada jadwal yang bertabrakan; admin dapat mengirim detail tugas melalui WhatsApp.
 7. **Admin menyelesaikan booking setelah kendaraan kembali.** Setelah `end_at` lewat, admin memeriksa bahwa kendaraan telah diterima lalu mengubah status booking Dikonfirmasi menjadi **Selesai**. Melewati waktu pengembalian saja tidak mengubah status booking secara otomatis.
 8. **Ketersediaan diperbarui.** Setelah booking ditandai selesai, supir yang tidak memiliki booking Menunggu atau Dikonfirmasi lain dapat kembali **Tersedia**. Kendaraan memiliki jeda persiapan **5 jam** setelah jadwal pengembalian sebelum dapat disewa lagi.
 9. **Pelanggan mengecek status.** Pelanggan membuka halaman cek booking dan memasukkan nomor WhatsApp serta kode booking untuk melihat status, jadwal, kendaraan, dan estimasi biaya.
@@ -112,16 +112,18 @@ flowchart TD
 	G -- Ditolak / dibatalkan --> H[Booking ditolak atau dibatalkan]
 	G -- Konfirmasi --> I{Stok dan jadwal valid?}
 	I -- Tidak --> F
-	I -- Ya --> J[Booking Dikonfirmasi dan stok dikunci]
-	J --> K[Admin menugaskan supir jika diperlukan]
-	K --> L[Waktu pengembalian lewat]
-	L --> M{Admin menerima kendaraan?}
-	M -- Belum --> L
-	M -- Ya --> N[Admin mengubah status: Selesai]
-	N --> O[Supir tersedia jika tidak ada booking aktif lain]
-	N --> Q[Kendaraan tersedia setelah jeda persiapan 5 jam]
-	E -. Cek status dengan nomor WhatsApp + kode .-> P[Halaman cek booking]
-	N -. Status terbaru .-> P
+	I -- Ya --> J{Membutuhkan supir?}
+	J -- Ya --> K[Supabase menugaskan supir tersedia lalu mengonfirmasi]
+	J -- Tidak, lepas kunci --> L[Booking Dikonfirmasi dan stok dikunci]
+	K --> L
+	L --> M[Waktu pengembalian lewat]
+	M --> N{Admin menerima kendaraan?}
+	N -- Belum --> M
+	N -- Ya --> O[Admin mengubah status: Selesai]
+	O --> P[Supir tersedia jika tidak ada booking aktif lain]
+	O --> Q[Kendaraan tersedia setelah jeda persiapan 5 jam]
+	E -. Cek status dengan nomor WhatsApp + kode .-> R[Halaman cek booking]
+	O -. Status terbaru .-> R
 ```
 
 **Catatan otomatisasi:** status booking tidak otomatis berubah menjadi Selesai karena waktu berlalu; admin harus memastikan kendaraan kembali terlebih dahulu. Setelah admin menyelesaikan booking, dashboard dapat memperbarui status supir jika tidak ada booking aktif lain. Sinkronisasi supir berjalan saat dashboard dimuat/refresh atau setelah perubahan status booking, bukan melalui scheduler/server saat dashboard tertutup.
@@ -156,12 +158,12 @@ Biaya berikut **tidak termasuk** dalam total jasa Rp2.500.000. Nilai aktual meng
 - Pembayaran online, refund otomatis, invoice akuntansi, dan rekonsiliasi pembayaran.
 - Aplikasi native Android/iOS, aplikasi untuk supir, GPS tracking, atau integrasi peta berbayar.
 - Pembuatan konten, copywriting profesional, foto/video kendaraan, dan desain logo baru.
-- Pemulihan atau pembuatan ulang migration database Supabase yang tidak tersedia pada checkout ini.
+- Pemulihan atau pembuatan ulang migration schema lama Supabase yang tidak tersedia pada checkout ini. Checkout mencakup dua migration tambahan untuk kapasitas dan konfirmasi supir; penerapan ke project aktif tetap memerlukan verifikasi kecocokan schema dan RPC lama.
 - Fitur baru, perubahan besar setelah serah terima, dan dukungan rutin setelah masa garansi.
 
 ## Asumsi dan Ketentuan
 
 - Pemilik menyediakan akses yang diperlukan ke project Vercel, Supabase, domain, dan Geoapify. Kredensial rahasia tidak disimpan di source code publik.
-- Project Supabase sudah memiliki schema, kebijakan RLS, Storage, dan fungsi database yang sesuai. Checkout source saat ini tidak menyertakan file migration; konfigurasi database produksi perlu diverifikasi sebelum deployment.
+- Project Supabase sudah memiliki schema, kebijakan RLS, Storage, dan RPC operasional lama yang sesuai. Konfigurasi database produksi perlu diverifikasi sebelum menerapkan dua migration tambahan yang disertakan pada checkout ini.
 - Perubahan dalam masa garansi terbatas pada perbaikan bug yang dapat direproduksi pada fitur yang tercantum. Penambahan atau perubahan kebutuhan diperkirakan terpisah.
 - Nilai jasa dapat berubah jika ruang lingkup, jumlah integrasi, kebutuhan keamanan, atau kebutuhan migrasi data berubah.

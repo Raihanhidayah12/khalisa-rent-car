@@ -93,6 +93,54 @@ function isDriverBookedForWindow(driverId, booking, bookings) {
   })
 }
 
+function getDriverCompletedWork(driverId, bookings) {
+  const completedBookings = bookings.filter((booking) => booking.driver_id === driverId && booking.status === 'completed')
+  const totalHours = completedBookings.reduce((sum, booking) => {
+    const startAt = Date.parse(booking.start_at)
+    const endAt = Date.parse(booking.end_at)
+    return Number.isFinite(startAt) && Number.isFinite(endAt) && endAt > startAt
+      ? sum + (endAt - startAt) / (60 * 60 * 1000)
+      : sum
+  }, 0)
+
+  return { completedCount: completedBookings.length, totalHours }
+}
+
+function formatDriverHours(hours) {
+  return new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(hours)
+}
+
+function getVehicleCompletedUsage(vehicle, bookings) {
+  let completedCount = 0
+  let totalHours = 0
+
+  for (const booking of bookings) {
+    if (booking.status !== 'completed') continue
+
+    const snapshot = Array.isArray(booking.vehicle_snapshot) ? booking.vehicle_snapshot : []
+    const bookingVehicleIds = Array.isArray(booking.vehicle_ids) ? booking.vehicle_ids : []
+    const matchingSnapshots = snapshot.filter((item) =>
+      item.id != null
+        ? String(item.id) === String(vehicle.id)
+        : bookingVehicleIds.length === 0 && item.name === vehicle.name
+    )
+    const hasVehicleId = bookingVehicleIds.some((id) => String(id) === String(vehicle.id))
+    if (matchingSnapshots.length === 0 && !hasVehicleId) continue
+
+    completedCount += 1
+    const startAt = Date.parse(booking.start_at)
+    const endAt = Date.parse(booking.end_at)
+    if (!Number.isFinite(startAt) || !Number.isFinite(endAt) || endAt <= startAt) continue
+
+    const unitCount = matchingSnapshots.length > 0
+      ? matchingSnapshots.reduce((sum, item) => sum + Math.max(1, Number(item.quantity) || 1), 0)
+      : 1
+    totalHours += ((endAt - startAt) / (60 * 60 * 1000)) * unitCount
+  }
+
+  return { completedCount, totalHours }
+}
+
 async function releaseExpiredDrivers(drivers, bookings) {
   const now = Date.now()
   const driverIds = drivers
@@ -393,7 +441,7 @@ function CustomerContact({ booking }) {
 
 function DriverAssignControls({ booking, bookings, drivers, onAssign }) {
   const assignedDriver = drivers.find((driver) => driver.id === booking.driver_id)
-  const isWithDriver = booking.booking_mode?.toLowerCase().includes('supir')
+  const isWithDriver = String(booking.booking_mode ?? '').toLowerCase().includes('supir')
   const isClosed = ['cancelled', 'rejected', 'completed'].includes(booking.status)
 
   let badgeTone = 'border-slate-200 bg-slate-100 text-slate-600'
@@ -420,26 +468,30 @@ function DriverAssignControls({ booking, bookings, drivers, onAssign }) {
         <span className={`size-1.5 rounded-full ${dotTone}`} />
         {badgeLabel}
       </span>
-      <select
-        className={`h-8 w-full rounded-lg border border-line px-2 text-[.72rem] outline-none focus:border-cyan ${
-          isClosed ? 'cursor-not-allowed bg-slate-ice text-muted opacity-60' : 'bg-white text-ink'
-        }`}
-        value={booking.driver_id ?? ''}
-        disabled={isClosed}
-        aria-label={`Penugasan supir untuk ${booking.customer_name}`}
-        onChange={(event) => onAssign(booking.id, event.target.value)}
-      >
-        <option value="">{assignedDriver ? '-- Lepas supir --' : isClosed ? '-- Tidak ditugaskan --' : '-- Pilih supir --'}</option>
-        {drivers.map((driver) => (
-          <option
-            key={driver.id}
-            value={driver.id}
-            disabled={driver.id !== booking.driver_id && (!['available', 'on_duty'].includes(driver.status) || isDriverBookedForWindow(driver.id, booking, bookings))}
-          >
-            {driver.name} ({driverStatusLabels[driver.status] ?? driver.status})
-          </option>
-        ))}
-      </select>
+      {isWithDriver ? (
+        <select
+          className={`h-8 w-full rounded-lg border border-line px-2 text-[.72rem] outline-none focus:border-cyan ${
+            isClosed ? 'cursor-not-allowed bg-slate-ice text-muted opacity-60' : 'bg-white text-ink'
+          }`}
+          value={booking.driver_id ?? ''}
+          disabled={isClosed}
+          aria-label={`Penugasan supir untuk ${booking.customer_name}`}
+          onChange={(event) => onAssign(booking.id, event.target.value)}
+        >
+          <option value="">{assignedDriver ? '-- Lepas supir --' : isClosed ? '-- Tidak ditugaskan --' : '-- Pilih supir --'}</option>
+          {drivers.map((driver) => (
+            <option
+              key={driver.id}
+              value={driver.id}
+              disabled={driver.id !== booking.driver_id && (!['available', 'on_duty'].includes(driver.status) || isDriverBookedForWindow(driver.id, booking, bookings))}
+            >
+              {driver.name} ({driverStatusLabels[driver.status] ?? driver.status})
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span className="text-[.68rem] text-muted">Lepas kunci — tidak memerlukan supir</span>
+      )}
       {assignedDriver && !['cancelled', 'rejected'].includes(booking.status) && (
         <a
           className="inline-flex items-center gap-1 text-[.67rem] font-semibold text-emerald-700 hover:underline"
@@ -1108,10 +1160,13 @@ function AdminDashboard() {
       return
     }
 
-    const { data, error } = await supabase.rpc('update_booking_status', {
-      p_booking_id: String(bookingId),
-      p_status: status,
-    })
+    const requiresDriver = String(currentBooking.booking_mode ?? '').toLowerCase().includes('supir')
+    const { data, error } = status === 'confirmed' && requiresDriver
+      ? await supabase.rpc('confirm_booking_with_driver', { p_booking_id: String(bookingId) })
+      : await supabase.rpc('update_booking_status', {
+        p_booking_id: String(bookingId),
+        p_status: status,
+      })
 
     if (error) {
       if (error.message?.includes('TERMINAL_BOOKING')) {
@@ -1120,8 +1175,14 @@ function AdminDashboard() {
         setBookingActionError('Booking hanya bisa diselesaikan setelah jadwal pengembalian lewat dan kendaraan diterima.')
       } else if (error.message?.includes('BOOKING_MUST_BE_CONFIRMED')) {
         setBookingActionError('Booking harus dikonfirmasi sebelum dapat diselesaikan.')
+      } else if (status === 'confirmed' && error.message?.includes('ADMIN_REQUIRED')) {
+        setBookingActionError('Akun ini tidak memiliki izin admin untuk mengonfirmasi booking dengan supir.')
       } else if (status === 'confirmed' && error.code === 'P0001' && error.message?.includes('VEHICLE_UNAVAILABLE')) {
         setBookingActionError('Unit pada booking ini sudah dipakai booking confirmed lain di jadwal yang sama. Booking tetap menunggu; hubungi pemesan untuk memilih varian atau jadwal lain.')
+      } else if (status === 'confirmed' && error.message?.includes('DRIVER_NOT_AVAILABLE')) {
+        setBookingActionError('Supir yang cocok tidak tersedia pada jadwal ini. Booking tetap menunggu; ubah jadwal atau cek penugasan supir.')
+      } else if (status === 'confirmed' && error.message?.includes('confirm_booking_with_driver')) {
+        setBookingActionError('RPC konfirmasi otomatis dengan supir belum tersedia. Terapkan migration Supabase terbaru sebelum mengonfirmasi booking yang membutuhkan supir.')
       } else if (error.code === '42501' || error.message?.includes('permission denied')) {
         setBookingActionError('Izin update status belum aktif. Jalankan migration workflow booking di Supabase.')
       } else {
@@ -1245,6 +1306,10 @@ function AdminDashboard() {
     const currentBooking = bookings.find((booking) => booking.id === bookingId)
     if (!currentBooking || !['pending', 'confirmed'].includes(currentBooking.status)) {
       setBookingActionError('Supir hanya dapat ditugaskan pada booking yang menunggu atau dikonfirmasi.')
+      return
+    }
+    if (!String(currentBooking.booking_mode ?? '').toLowerCase().includes('supir')) {
+      setBookingActionError('Booking lepas kunci tidak dapat diubah menjadi booking dengan supir.')
       return
     }
 
@@ -1730,8 +1795,8 @@ function AdminDashboard() {
             ) : (
               <>
                 <div className="scrollbar-none hidden overflow-x-auto md:block">
-                  <table className="w-full min-w-[850px] border-collapse text-left">
-                    <thead><tr className="bg-slate-ice text-[.65rem] font-bold uppercase tracking-[.07em] text-muted"><th className="px-5 py-3">Kendaraan</th><th className="px-5 py-3">Kategori</th><th className="px-5 py-3">Ready / total</th><th className="px-5 py-3">Ketersediaan</th><th className="px-5 py-3">Publikasi</th><th className="px-5 py-3 text-right">Harga / 12 jam</th><th className="px-5 py-3 text-right">Aksi</th></tr></thead>
+                  <table className="w-full min-w-[1020px] border-collapse text-left">
+                    <thead><tr className="bg-slate-ice text-[.65rem] font-bold uppercase tracking-[.07em] text-muted"><th className="px-5 py-3">Kendaraan</th><th className="px-5 py-3">Kategori</th><th className="px-5 py-3">Ready / total</th><th className="px-5 py-3">Pesanan selesai</th><th className="px-5 py-3">Ketersediaan</th><th className="px-5 py-3">Publikasi</th><th className="px-5 py-3 text-right">Harga / 12 jam</th><th className="px-5 py-3 text-right">Aksi</th></tr></thead>
                     <tbody>
                       {filteredVehicles.map((vehicle) => (
                         <tr className="border-t border-line text-[.78rem] transition-colors hover:bg-slate-ice/80" key={vehicle.id}>
@@ -1751,6 +1816,20 @@ function AdminDashboard() {
                           </td>
                           <td className="px-5 py-3.5 text-muted">{vehicle.category}</td>
                           <td className="px-5 py-3.5 text-muted">{getAvailableVehicleStock(vehicle)} / {getVehicleStock(vehicle)} unit</td>
+                          <td className="px-5 py-3.5 text-muted">
+                            {(() => {
+                              const { completedCount, totalHours } = getVehicleCompletedUsage(vehicle, bookings)
+                              return (
+                                <span className="inline-flex items-center gap-1.5 whitespace-nowrap" title="Jam unit dijumlahkan dari durasi jadwal dikali jumlah unit">
+                                  <CalendarDays size={13} aria-hidden="true" />
+                                  <strong className="text-ink">{completedCount}</strong>
+                                  <span>·</span>
+                                  <Clock3 size={13} aria-hidden="true" />
+                                  <strong className="text-ink">{formatDriverHours(totalHours)} jam-unit</strong>
+                                </span>
+                              )
+                            })()}
+                          </td>
                           <td className="px-5 py-3.5"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[.65rem] font-bold ${vehicle.status === 'maintenance' ? 'bg-slate-100 text-slate-600' : isVehicleReady(vehicle) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}><span className={`size-1.5 rounded-full ${vehicle.status === 'maintenance' ? 'bg-slate-400' : isVehicleReady(vehicle) ? 'bg-emerald-500' : 'bg-amber-500'}`} />{vehicle.status === 'maintenance' ? 'Perawatan' : isVehicleReady(vehicle) ? 'Ready' : 'Booking'}</span></td>
                           <td className="px-5 py-3.5"><span className={`inline-flex rounded-full px-2.5 py-0.5 text-[.65rem] font-bold ${vehicle.is_active ? 'bg-cyan/10 text-[#0369a1]' : 'bg-slate-100 text-slate-500'}`}>{vehicle.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
                           <td className="px-5 py-3.5 text-right font-semibold text-ink">Rp {formatPrice(parsePrice(vehicle.price))}</td>
@@ -1777,6 +1856,15 @@ function AdminDashboard() {
                           </div>
                         </div>
                       </div>
+                      {(() => {
+                        const { completedCount, totalHours } = getVehicleCompletedUsage(vehicle, bookings)
+                        return (
+                          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-3 text-[.72rem] text-muted">
+                            <span className="inline-flex items-center gap-1.5"><CalendarDays size={13} aria-hidden="true" />{completedCount} pesanan selesai</span>
+                            <span className="inline-flex items-center gap-1.5" title="Durasi jadwal dikali jumlah unit; bukan jam mesin aktual"><Clock3 size={13} aria-hidden="true" />{formatDriverHours(totalHours)} jam-unit terjadwal</span>
+                          </div>
+                        )
+                      })()}
                       <div className="mt-3 flex items-center justify-between gap-3 border-t border-line pt-3">
                         <strong className="text-[.82rem]">Rp {formatPrice(parsePrice(vehicle.price))}</strong>
                         <button className="rounded-lg border border-line px-3 py-1.5 text-[.72rem] font-bold text-muted" type="button" onClick={() => openVehicleForm(vehicle)}>Ubah</button>
@@ -1934,13 +2022,14 @@ function AdminDashboard() {
             ) : (
               <>
               <div className="scrollbar-none hidden overflow-x-auto md:block">
-                <table className="w-full min-w-[780px] border-collapse text-left">
+                <table className="w-full min-w-[930px] border-collapse text-left">
                   <thead>
                     <tr className="bg-slate-ice text-[.65rem] font-bold uppercase tracking-[.07em] text-muted">
                       <th className="px-5 py-3">Nama supir</th>
                       <th className="px-5 py-3">WhatsApp / Telepon</th>
                       <th className="px-5 py-3">SIM</th>
                       <th className="px-5 py-3">Catatan / Rute</th>
+                      <th className="px-5 py-3">Pesanan selesai</th>
                       <th className="px-5 py-3">Status ketersediaan</th>
                       <th className="px-5 py-3 text-right">Aksi</th>
                     </tr>
@@ -1967,6 +2056,20 @@ function AdminDashboard() {
                         </td>
                         <td className="max-w-[200px] truncate px-5 py-3.5 text-[.73rem] text-muted">
                           {driver.notes || '—'}
+                        </td>
+                        <td className="px-5 py-3.5 text-muted">
+                          {(() => {
+                            const { completedCount, totalHours } = getDriverCompletedWork(driver.id, bookings)
+                            return (
+                              <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                                <CalendarDays size={13} aria-hidden="true" />
+                                <strong className="text-ink">{completedCount}</strong>
+                                <span>·</span>
+                                <Clock3 size={13} aria-hidden="true" />
+                                <strong className="text-ink">{formatDriverHours(totalHours)} jam</strong>
+                              </span>
+                            )
+                          })()}
                         </td>
                         <td className="px-5 py-3.5">
                           <select
@@ -2002,6 +2105,15 @@ function AdminDashboard() {
                       <span className="rounded-full bg-slate-ice px-2.5 py-0.5 text-[.65rem] font-bold text-slate-700">{driver.sim_type || 'SIM A'}</span>
                     </div>
                     {driver.notes && <p className="mb-0 mt-2 text-[.72rem] text-muted">{driver.notes}</p>}
+                    {(() => {
+                      const { completedCount, totalHours } = getDriverCompletedWork(driver.id, bookings)
+                      return (
+                        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-3 text-[.72rem] text-muted">
+                          <span className="inline-flex items-center gap-1.5"><CalendarDays size={13} aria-hidden="true" />{completedCount} pesanan selesai</span>
+                          <span className="inline-flex items-center gap-1.5"><Clock3 size={13} aria-hidden="true" />{formatDriverHours(totalHours)} jam terjadwal</span>
+                        </div>
+                      )
+                    })()}
                     <div className="mt-3 grid gap-2 border-t border-line pt-3">
                       <select
                         className={`h-9 rounded-lg border px-2 text-[.72rem] font-semibold outline-none ${driverStatusTone(driver.status)}`}
