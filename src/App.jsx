@@ -703,6 +703,16 @@ function AdminLogin() {
   const [loading, setLoading] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
+  const [failedAttempts, setFailedAttempts] = useState(0)
+  const [lockoutSeconds, setLockoutSeconds] = useState(0)
+
+  useEffect(() => {
+    if (lockoutSeconds <= 0) return
+    const timer = setInterval(() => {
+      setLockoutSeconds((prev) => Math.max(0, prev - 1))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [lockoutSeconds])
 
   useEffect(() => {
     let active = true
@@ -745,13 +755,25 @@ function AdminLogin() {
 
   async function handleLogin(event) {
     event.preventDefault()
+    if (lockoutSeconds > 0) {
+      setErrorMessage(`Terlalu banyak percobaan gagal. Silakan tunggu ${lockoutSeconds} detik.`)
+      return
+    }
     setErrorMessage('')
     setLoading(true)
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
       if (error) {
-        setErrorMessage('Email atau kata sandi tidak valid.')
+        const nextAttempts = failedAttempts + 1
+        setFailedAttempts(nextAttempts)
+        if (nextAttempts >= 5) {
+          setLockoutSeconds(60)
+          setFailedAttempts(0)
+          setErrorMessage('Terlalu banyak percobaan gagal. Halaman login dikunci sementara selama 60 detik.')
+        } else {
+          setErrorMessage(`Email atau kata sandi tidak valid. Sisa percobaan: ${5 - nextAttempts}`)
+        }
         return
       }
 
@@ -1262,7 +1284,7 @@ function RentalHome() {
       pickup_lon: Number(selectedPickup.lon),
       start_at: toJakartaISOString(date, time),
       end_at: selesai.timestamp,
-      booking_mode: isEventBooking ? 'Rental Acara' : withDriver ? 'Sewa mobil + Supir' : bookingMode.label,
+      booking_mode: isEventBooking ? 'Rental Acara' : withDriver ? 'Sewa mobil + Supir' : (durasi >= 720 ? 'Sewa mobil bulanan' : durasi >= 168 ? 'Sewa mobil mingguan' : 'Sewa mobil harian'),
       duration: durasi,
       duration_unit: bookingMode.unit,
       vehicle_ids: [...new Set(selectedVehicles.map((vehicle) => vehicle.id))],

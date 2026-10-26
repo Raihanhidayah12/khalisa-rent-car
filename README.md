@@ -5,7 +5,7 @@
 <h1 align="center">PT Khalisa Sumber Rezeki</h1>
 
 <p align="center">
-  Website rental mobil untuk menjelajahi armada, mengajukan booking, dan mengelola operasional penyewaan.
+  Website rental mobil untuk menjelajahi armada, mengajukan booking, dan mengelola operasional penyewaan secara aman dan terintegrasi.
 </p>
 
 <p align="center">
@@ -13,172 +13,173 @@
   <img src="https://img.shields.io/badge/Vite-8-646cff?logo=vite&logoColor=white" alt="Vite 8" />
   <img src="https://img.shields.io/badge/Supabase-Backend-3ecf8e?logo=supabase&logoColor=white" alt="Supabase" />
   <img src="https://img.shields.io/badge/Tailwind%20CSS-4-06b6d4?logo=tailwindcss&logoColor=white" alt="Tailwind CSS 4" />
+  <img src="https://img.shields.io/badge/Security-Hardened-22c55e?logo=shield&logoColor=white" alt="Security Hardened" />
 </p>
 
 ## Daftar Isi
 
 - [Tentang Proyek](#tentang-proyek)
-- [Fitur](#fitur)
+- [Fitur Utama](#fitur-utama)
 - [Detail Durasi Sewa](#detail-durasi-sewa)
 - [Detail Lokasi Penjemputan](#detail-lokasi-penjemputan)
+- [Optimasi SEO & Google Search](#optimasi-seo--google-search)
 - [Teknologi](#teknologi)
 - [Menjalankan Secara Lokal](#menjalankan-secara-lokal)
 - [Deploy ke Vercel](#deploy-ke-vercel)
 - [Konfigurasi Supabase](#konfigurasi-supabase)
 - [Perintah](#perintah)
-- [Catatan Keamanan](#catatan-keamanan)
+- [Arsitektur Keamanan](#arsitektur-keamanan)
 
 ## Tentang Proyek
 
-Website ini dibuat untuk PT Khalisa Sumber Rezeki. Pengunjung dapat melihat kendaraan yang tersedia dan mengirim permintaan booking. Admin dapat mengelola armada dan memproses booking melalui dashboard.
+Website ini dibangun untuk **PT Khalisa Sumber Rezeki**, penyedia jasa rental mobil profesional di wilayah Jakarta dan sekitarnya. Pengunjung dapat melihat katalog armada yang siap disewa, menghitung tarif sewa secara transparan (harian, mingguan, bulanan), memilih opsi lepas kunci atau dengan supir, dan mengirim pesanan langsung terhubung ke WhatsApp. Administrator dapat mengelola armada, menetapkan penugasan supir, memantau keuangan, dan mengekspor laporan pemesanan ke Excel melalui dashboard operasional.
 
-## Fitur
+## Fitur Utama
 
-| Area | Kemampuan |
+| Area | Kemampuan & Fungsi |
 | --- | --- |
-| Katalog | Menggabungkan baris varian dengan nama model yang sama menjadi satu kartu. Detail mobil menampilkan foto, kategori, spesifikasi, varian yang stoknya dialokasikan, serta harga mulai. |
-| Booking | Wajib memilih tanggal dan jam sebelum memilih mobil. Durasi dapat diisi dalam kombinasi bulan (30 hari), hari, dan jam; minimum 12 jam berlaku untuk isian jam saja dan tarif dihitung proporsional dari harga per 12 jam. Kartu pesanan menampilkan tipe transmisi/mesin yang ready, jumlah unit, harga per unit, dan subtotal. |
-| Lokasi penjemputan | Autocomplete alamat Jakarta dan sekitarnya menampilkan alamat ringkas tanpa nama provinsi yang membingungkan. Pelanggan dapat mengisi alamat manual atau memakai tombol lokasi terkini; setelah izin browser diberikan, alamat diidentifikasi dan tautan Google Maps pada pesan booking diarahkan memakai koordinat lokasi. |
-| Konfirmasi | Menyimpan permintaan booking ke Supabase dan menyediakan langkah lanjutan melalui WhatsApp. Jika pelanggan memilih supir, opsi hanya aktif setelah tanggal dan waktu dipilih serta kapasitas supir untuk seluruh rentang sewa lolos pemeriksaan. Ketersediaan dicek ulang tepat sebelum permintaan dikirim. |
-| Reservasi unit | Booking berstatus confirmed mengurangi stok. Booking pending belum mengunci unit; stok dicek kembali saat admin mengonfirmasi. Unit memerlukan jeda persiapan 5 jam setelah waktu selesai sebelum bisa disewa lagi. |
-| Dashboard admin | Mengelola armada, foto kendaraan, keuangan, tim supir, dan status booking melalui `/admin`. Booking hanya ditandai selesai secara manual setelah waktu pengembalian lewat dan kendaraan diterima. Grafik keuangan memfilter booking berdasarkan tanggal mulai sewa di zona waktu Jakarta; pilihan Semua menampilkan tren 30 hari terakhir. |
-| Detail booking | Klik baris tabel atau kartu booking untuk membuka panel detail lengkap: jadwal, kendaraan, lokasi penjemputan, penugasan supir, catatan pemesan, estimasi harga, dan perubahan status — tanpa meninggalkan halaman. |
-| Export Excel | Tombol di daftar booking membuka panel pilih periode (per bulan atau rentang tanggal bebas) sebelum mengunduh. File `.xlsx` berformat rapi: header berwarna, zebra stripe, badge status berwarna, format angka, dan baris total estimasi. Nama file menyertakan periode yang dipilih. |
-| Paket Acara | Seksi khusus di beranda untuk rental mobil acara (Pernikahan, Wisuda, Korporat, Ulang Tahun). Pelanggan pilih tipe acara, centang add-on dekorasi (bunga, pita, papan nama, balon, dll), isi detail, lalu kirim request langsung ke WhatsApp admin sebagai pesan terformat. |
-| Kelola Supir | Memantau supir standby/kosong, bertugas, dan libur, serta melihat jumlah pesanan selesai dan total jam terjadwal per supir dari seluruh riwayat booking yang tersedia. Saat booking yang meminta supir dikonfirmasi, sistem otomatis menugaskan supir yang cocok; admin tetap dapat mengubah penugasan booking dengan supir. Booking lepas kunci tidak memiliki kontrol penugasan dan tidak dapat diubah menjadi layanan dengan supir dari dashboard. Supir dengan booking aktif tidak dapat ditandai tersedia atau libur. |
-| Statistik pemakaian armada | Di Kelola Armada, melihat booking selesai per model dan total jam-unit terjadwal dari seluruh riwayat yang tersedia. Jam-unit dihitung dari durasi jadwal dikali jumlah unit, bukan jam mesin aktual. |
-| Akses admin | Login melalui `/adminlogin`; hak admin menggunakan klaim tepercaya `app_metadata.role = "admin"`. |
-| Akun admin | Hanya akun admin utama yang dapat melihat tab, menambah akun, atau menghapus admin tambahan melalui Edge Function Supabase. |
+| **Katalog Armada** | Pengelompokan varian kendaraan otomatis menjadi satu model kartu. Menampilkan foto armada, kapasitas penumpang, transmisi (Matic/Manual), powertrain (Bensin/Hybrid/EV), ketersediaan unit, harga sewa, serta badge dinamis (Promo, Terlaris, Unit Baru). |
+| **Formulir Booking** | Memvalidasi jadwal sewa sebelum memilih unit. Durasi sewa fleksibel (kombinasi bulan, hari, dan jam) dengan batas minimal 12 jam. Perhitungan tarif proporsional transparan dengan opsi include biaya tol standar. |
+| **Pilihan Layanan** | Mendukung layanan **Sewa dengan Supir**, **Lepas Kunci** (harian/mingguan/bulanan), dan **Paket Acara** (Pernikahan, Wisuda, Korporat, Ulang Tahun) lengkap dengan opsi add-on dekorasi (bunga segar, pita, papan nama). |
+| **Lokasi Penjemputan** | Autocomplete alamat Jakarta & sekitarnya via Geoapify API, dukungan Geolocation browser untuk deteksi lokasi perangkat otomatis, dan input manual cadangan. Tautan Google Maps otomatis disertakan pada ringkasan pesanan. |
+| **Reservasi & Stok** | Booking berstatus **Dikonfirmasi** otomatis mengunci stok unit dan menugaskan supir yang tersedia. Memiliki jeda pembersihan/persiapan 5 jam setelah waktu sewa berakhir sebelum unit dapat dipesan kembali. |
+| **Dashboard Operasional** | Akses manajemen terproteksi `/admin`: kelola armada & tarif, upload foto ke storage cloud, pantau supir (standby, on duty, libur), ubah status pesanan, dan rekap keuangan berdasarkan zona waktu Jakarta. |
+| **Detail Booking Interaktif** | Panel modal interaktif untuk melihat rincian pemesan, kontak WhatsApp, jadwal sewa, koordinat jemput, supir yang bertugas, catatan pemesan, dan ubah status tanpa reload halaman. |
+| **Export Excel (.xlsx)** | Download rekap booking ke format Excel rapi dengan opsi filter periode (per bulan atau rentang tanggal bebas). Menyertakan nomor urut, kode booking, badge status, format mata uang, dan baris total estimasi. |
+| **Cek Status Booking** | Halaman publik `/cek-booking` bagi pelanggan untuk mengecek status pesanan menggunakan kombinasi nomor telepon WhatsApp dan kode booking unik (`KHS-XXXXXX`). |
 
-### Alur ketersediaan supir
-
-1. Pelanggan memilih tanggal, jam mulai, dan durasi sewa. Website memeriksa kapasitas supir untuk seluruh rentang tersebut melalui RPC Supabase.
-2. Opsi **Butuh supir** aktif hanya jika ada kapasitas yang cocok. Supir berstatus **Libur** tidak dihitung. Supir **Tersedia** atau **Sedang Bertugas** dapat dipertimbangkan jika tidak bentrok dengan penugasan aktif.
-3. Permintaan lain yang masih **Menunggu** atau **Dikonfirmasi** dan membutuhkan supir ikut mengurangi kapasitas jadwal meskipun admin belum memilih nama supirnya. Ini mencegah website menawarkan kapasitas yang sama kepada beberapa pelanggan untuk waktu beririsan.
-4. Ketersediaan diperiksa lagi tepat sebelum pengiriman. Jika pemeriksaan gagal atau kapasitas berubah, permintaan dengan supir tidak dikirim; pelanggan diminta memilih waktu lain atau melanjutkan tanpa supir.
-5. Setelah permintaan masuk, admin memeriksa booking dan menekan **Dikonfirmasi**. Dalam transaksi yang sama, Supabase mengunci proses penugasan, memilih supir yang cocok, menugaskannya, lalu mengonfirmasi booking. Jika tidak ada supir yang bisa ditugaskan, perubahan dibatalkan dan booking tetap Menunggu. Admin tetap dapat mengganti penugasan pada booking yang meminta supir. Booking lepas kunci selalu tanpa supir dan tidak dapat diubah menjadi layanan dengan supir dari dashboard.
+---
 
 ## Detail Durasi Sewa
 
-Pelanggan mengisi durasi dengan tiga kotak terpisah, dan boleh memakai satu kotak saja atau menggabungkan beberapa kotak:
+Pelanggan dapat mengisi durasi sewa melalui kombinasi fleksibel:
+- **Bulan:** Dihitung tetap 30 hari (720 jam).
+- **Hari:** Dihitung 24 jam per hari.
+- **Jam:** Ditambahkan langsung ke durasi total.
 
-- **Bulan:** setiap bulan dihitung sebagai 30 hari (720 jam).
-- **Hari:** ditambahkan sebagai 24 jam untuk setiap hari.
-- **Jam:** ditambahkan langsung ke jumlah jam sewa.
+Rumus durasi total: `(bulan × 720) + (hari × 24) + jam`.  
+Tarif dasar dihitung proporsional dari harga per 12 jam: `Tarif Dasar × (Total Jam ÷ 12)`. Nilai sewa tidak dibulatkan ke kelipatan hari sehingga pelanggan hanya membayar durasi yang dipesan.
 
-Rumus durasi total adalah `bulan × 720 + hari × 24 + jam`. Contohnya, `1 bulan + 2 hari + 5 jam` menjadi 773 jam, sedangkan `1 hari + 2 jam` menjadi 26 jam. Pilihan cepat yang tersedia adalah **12 jam**, **1 hari**, **1 minggu**, dan **1 bulan**; memilih pilihan cepat akan mengisi ulang ketiga kotak mengikuti durasi tersebut.
-
-Tarif dasar yang tersimpan tetap tarif per 12 jam. Harga sewa dihitung secara proporsional, bukan dibulatkan ke kelipatan 12 jam: `tarif dasar × (durasi total dalam jam ÷ 12)`. Sebagai contoh, sewa 14 jam dihitung sebagai `14 ÷ 12` kali tarif dasar; sewa 1 hari 2 jam dihitung sebagai `26 ÷ 12` kali tarif dasar. Durasi minimum 12 jam tetap berlaku. Jika pelanggan hanya mengisi kotak jam, input jam tidak menerima nilai di bawah 12 dan akan kembali ke 12; bila bulan atau hari turut diisi, minimum diterapkan ke total durasinya.
-
-Durasi terpilih dan harga mengikuti pelanggan di kartu kendaraan, detail kendaraan, ringkasan booking, pesan WhatsApp, dashboard admin, export Excel, dan halaman cek booking.
+---
 
 ## Detail Lokasi Penjemputan
 
-- **Cari alamat:** ketik sedikitnya tiga karakter untuk melihat saran Geoapify yang dibatasi ke Jakarta dan sekitarnya (radius pencarian sekitar 50 km dari pusat Jakarta). Pilih saran untuk mengisi alamat dan menyimpan koordinatnya.
-- **Alamat yang ditampilkan:** disusun dari nama tempat, jalan/nomor, kelurahan atau area, kabupaten/kota, dan kode pos bila tersedia. Untuk alamat di Indonesia, provinsi dan nama negara tidak ditambahkan agar hasil lebih ringkas (misalnya `Bundaran Taman Gondangdia 1, Jalan Teuku Umar, Menteng, Jakarta Pusat, 10350`).
-- **Lokasi terkini:** tekan ikon target di sisi kolom alamat, lalu izinkan akses lokasi pada prompt browser. Browser mengambil koordinat perangkat dan Geoapify reverse geocoding mengubahnya menjadi alamat. Koordinat tetap disimpan untuk tautan Google Maps agar pin menunjuk lokasi yang dipilih.
-- **Isi manual:** alamat tetap dapat diketik sendiri jika pencarian atau lokasi perangkat tidak tersedia. Jika alamat manual tidak dipilih dari saran, tautan Google Maps mencari teks alamat tersebut.
-- **Izin dan koneksi:** lokasi perangkat hanya tersedia jika browser mendukung Geolocation API, pengguna memberi izin, dan halaman dibuka melalui HTTPS atau `localhost`. Jika izin ditolak, permintaan gagal, atau waktu habis, masukkan alamat secara manual atau coba lagi.
-- **Konfigurasi:** pencarian saran dan reverse geocoding membutuhkan `VITE_GEOAPIFY_API_KEY`. Tanpa variabel tersebut, pelanggan masih dapat menulis alamat manual, tetapi pencarian dan pengubahan koordinat ke alamat tidak tersedia.
+- **Pencarian Cerdas:** Mengetik minimal 3 karakter memunculkan rekomendasi alamat Geoapify yang difilter khusus area Jabodetabek (radius 50 km dari pusat Jakarta).
+- **Format Bersih:** Menyaring nama wilayah agar ringkas (nama jalan, kelurahan, kecamatan, kota, kode pos) tanpa imbuhan redundan.
+- **Deteksi GPS Perangkat:** Tombol target lokasi mengambil koordinat GPS perangkat melalui browser dan menerjemahkannya ke alamat nyata via reverse geocoding.
+- **Koneksi Aman:** Deteksi lokasi perangkat diwajibkan berjalan di atas protokol HTTPS atau `localhost`.
+
+---
+
+## Optimasi SEO & Google Search
+
+Aplikasi telah dilengkapi optimasi teknis untuk visibilitas mesin pencari Google:
+1. **Peta Situs (`sitemap.xml`)**: Terdaftar di [public/sitemap.xml](public/sitemap.xml) mencakup halaman publik utama, cek booking, dan syarat ketentuan.
+2. **Kontrol Perayap (`robots.txt`)**: Terdaftar di [public/robots.txt](public/robots.txt) untuk mempercepat perayapan halaman publik sekaligus memblokir indeks halaman sensitif (`/admin` dan `/adminlogin`).
+3. **Structured Data JSON-LD (`AutoRental`)**: Schema resmi Schema.org tertanam di `index.html` dengan koordinat lokal Jakarta Barat, rentang harga sewa, nomor telepon, dan jam buka operasional 24 jam untuk mendukung rich snippet Google.
+4. **Geo Meta Tags**: Tag geografis Jakarta Barat (`ID-JK`, koordinat `-6.1944, 106.7778`) untuk mengoptimalkan peringkat di Google Search Lokal & Google Maps.
+
+---
 
 ## Teknologi
 
-| Teknologi | Penggunaan |
+| Lapisan | Komponen & Pustaka |
 | --- | --- |
-| React 19 + Vite 8 | Antarmuka dan development server |
-| Tailwind CSS 4 | Styling |
-| Supabase | Auth, PostgreSQL, dan Storage |
-| Geoapify | Autocomplete dan reverse geocoding alamat penjemputan |
-| `libphonenumber-js` | Validasi nomor telepon internasional |
-| ExcelJS | Generate file `.xlsx` untuk export data booking |
+| **Frontend** | React 19, Vite 8, Tailwind CSS 4, Lucide React |
+| **Backend & Database** | Supabase (PostgreSQL 15, Row Level Security, RPC Functions, Cloud Storage) |
+| **Peta & Geocoding** | Geoapify Geocoding & Reverse Geocoding API |
+| **Validasi & Utilitas** | `libphonenumber-js` (validasi telepon E.164), `ExcelJS` (ekspor spreadsheet) |
+| **Hosting & CI/CD** | Vercel (Production Branch `main`) |
+
+---
 
 ## Menjalankan Secara Lokal
 
 ### Persiapan
+- Node.js versi 18 ke atas.
+- Akun dan project Supabase aktif.
+- API Key Geoapify.
 
-- Node.js yang kompatibel dengan versi Vite di proyek.
-- Project Supabase dengan URL dan anon key.
-- API key Geoapify untuk pencarian lokasi.
-- Akses lokasi perangkat bersifat opsional dan memerlukan izin browser. Geolocation browser umumnya hanya tersedia pada HTTPS atau `localhost`.
+### Langkah Instalasi
 
-### Instalasi
-
-1. Install dependency:
-
+1. Clone repositori dan install dependencies:
    ```sh
+   git clone https://github.com/Raihanhidayah12/Website-Rental-Mobil.git
+   cd Website-Rental-Mobil
    npm install
    ```
 
-2. Salin `.env.example` menjadi `.env.local`, lalu isi nilainya:
-
+2. Buat file konfigurasi `.env.local`:
    ```env
    VITE_SUPABASE_URL=https://your-project-id.supabase.co
    VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
    VITE_GEOAPIFY_API_KEY=your_geoapify_api_key
    ```
 
-3. Jalankan aplikasi:
-
+3. Jalankan development server:
    ```sh
    npm run dev
    ```
+   Buka `http://localhost:5173` di browser Anda.
 
-   Buka URL lokal yang ditampilkan Vite, biasanya `http://localhost:5173`.
+---
 
 ## Deploy ke Vercel
 
-1. Import repository GitHub `Raihanhidayah12/Website-Rental-Mobil` ke Vercel.
-2. Pilih preset **Vite** dan root directory `./`. Pengaturan build proyek:
+1. Hubungkan repository GitHub ke dashboard Vercel.
+2. Pengaturan build Vite:
+   - **Framework Preset:** Vite
+   - **Build Command:** `npm run build`
+   - **Output Directory:** `dist`
+   - **Install Command:** `npm install`
+3. Masukkan Environment Variables di **Project Settings → Environment Variables**:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_GEOAPIFY_API_KEY`
+4. Domain deployment produksi: [ptkhalisasumberrezeki.vercel.app](https://ptkhalisasumberrezeki.vercel.app).
 
-    | Pengaturan | Nilai |
-    | --- | --- |
-    | Build Command | `npm run build` |
-    | Output Directory | `dist` |
-    | Install Command | `npm install` |
-
-    Vercel biasanya mendeteksi nilai-nilai ini secara otomatis.
-
-3. Di **Project Settings → Environment Variables**, tambahkan variabel berikut untuk environment **Production** dan **Preview**:
-
-    ```text
-    VITE_SUPABASE_URL
-    VITE_SUPABASE_ANON_KEY
-    VITE_GEOAPIFY_API_KEY
-    ```
-
-    Isi nilainya dari konfigurasi Supabase dan Geoapify. Jangan menaruh secret di repository.
-
-4. Deploy project. Pastikan **Production Branch** disetel ke `main`. Commit baru yang di-push ke `main` akan memicu production deployment; pantau status dan **Build Logs** dari menu **Deployments**.
-
-Domain Vercel yang dikonfigurasi untuk project ini: [ptkhalisasumberrezeki.vercel.app](https://ptkhalisasumberrezeki.vercel.app). Domain dapat digunakan setelah deployment berhasil.
+---
 
 ## Konfigurasi Supabase
 
-Sebelum menggunakan aplikasi, siapkan database dan akses Supabase berikut:
+Sebelum menggunakan aplikasi di lingkungan produksi, pastikan konfigurasi berikut telah diterapkan di Supabase:
 
-1. Tabel `public.vehicles` harus memiliki kolom dasar `id`, `name`, `price`, `category`, `seats`, `badge`, `is_active`, `sort_order`, `image_url`, dan `stock`, serta kolom varian `transmission_options` (text array), `transmission_stock` (JSON object), `transmission_details`, dan `powertrain_type`.
-2. Tabel `public.booking_requests` harus menyimpan `vehicle_ids`, `vehicle_snapshot`, jadwal, status, dan hold kedaluwarsa. Snapshot tiap varian menyimpan `transmission_type`, `powertrain_type`, harga, dan kuantitas.
-3. RPC `vehicle_availability` harus menghitung booking confirmed yang rentangnya beririsan dengan jadwal ditambah buffer 5 jam. Trigger `guard_booking_vehicle_capacity` harus mengunci stok saat booking dikonfirmasi dan mencegah oversell, termasuk beberapa tipe dalam satu model.
-4. Booking pending tidak mengurangi stok; konfirmasi tetap harus lolos pengecekan kapasitas. Booking rejected/cancelled tidak dihitung. Setelah pengembalian, unit baru bisa disewa kembali setelah jeda 5 jam.
-5. Riwayat migrasi database lama belum tersedia di checkout ini; jangan gunakan `supabase db push` untuk membuat ulang schema project produksi. Dua migration baru (`20261013000000_driver_availability_for_window.sql` dan `20261013000100_confirm_booking_with_driver.sql`) memerlukan tabel/kolom booking dan supir serta RPC status/penugasan lama yang sudah ada. Terapkan SQL keduanya melalui SQL Editor pada project Supabase yang dipakai. Jika pemeriksaan ketersediaan belum diterapkan/gagal, opsi supir dinonaktifkan. Jika RPC konfirmasi otomatis belum diterapkan, konfirmasi booking dengan supir akan gagal secara eksplisit dan booking tetap Menunggu.
-6. Row Level Security (RLS): katalog publik hanya dapat membaca kendaraan aktif; pengunjung dapat mengirim booking, sedangkan membaca inbox dan mengubah status booking dibatasi untuk admin.
-7. Bucket Storage `vehicle-images` dengan akses baca publik; upload, update, dan delete hanya untuk admin.
-8. Akun admin Supabase Auth dengan klaim tepercaya `app_metadata.role = "admin"`. Jangan menetapkan role admin melalui `user_metadata`.
-9. Site URL dan Redirect URLs di Supabase Auth untuk origin lokal, misalnya `http://localhost:5173/adminlogin`.
-10. Hubungkan Supabase CLI ke project yang benar dengan `supabase link --project-ref <project-ref>`, lalu deploy Edge Function dengan `supabase functions deploy create-admin` dan `supabase functions deploy manage-admins`. Function memakai `SUPABASE_SERVICE_ROLE_KEY` di lingkungan server Supabase; jangan pernah memasukkannya ke frontend atau variabel `VITE_*`. Admin tertua dilindungi sebagai akun utama secara default. Untuk mengunci akun tertentu, atur secret Edge Function `PRIMARY_ADMIN_EMAIL` atau `PRIMARY_ADMIN_USER_ID`. Hanya akun utama yang dapat melihat dan memakai tab pengelolaan admin.
+1. **Struktur Tabel:**
+   - `public.vehicles`: Menyimpan armada, harga, status, kategori, varian transmisi, powertrain, dan stok.
+   - `public.booking_requests`: Menyimpan riwayat pesanan, koordinat jemput, snapshot harga/unit, mode booking, dan penugasan supir.
+   - `public.drivers`: Menyimpan nama supir, nomor kontak, SIM, dan status ketersediaan.
+2. **Fungsi RPC & Migrasi:**
+   - `confirm_booking_with_driver`: Konfirmasi otomatis pesanan dengan penugasan supir secara atomik.
+   - `assign_booking_driver(uuid, uuid)`: Overload fungsi penugasan supir terproteksi (tersedia di `supabase/migrations/20261027000000_fix_assign_booking_driver_uuid_overload.sql`).
+   - `lookup_bookings_by_phone`: Pencarian status booking aman oleh pelanggan tanpa membuka akses tabel langsung.
+   - `expire_pending_booking_holds`: Pembersihan otomatis booking hold yang kedaluwarsa.
+3. **Row Level Security (RLS):**
+   - Publik (`anon`) dilarang membaca data sensitif pelanggan di tabel `booking_requests` dan `drivers`.
+   - Publik hanya dapat membaca kendaraan berstatus aktif (`is_active = true`).
+   - Modifikasi katalog, status booking, dan data supir dibatasi hanya untuk pengguna dengan role `admin`.
+4. **Cloud Storage `vehicle-images`:**
+   - Hak akses baca bersifat publik.
+   - Hak upload, update, dan delete foto hanya diberikan kepada admin terautentikasi.
+
+---
 
 ## Perintah
 
-| Perintah | Fungsi |
+| Perintah | Deskripsi |
 | --- | --- |
-| `npm run dev` | Menjalankan development server |
-| `npm run build` | Membuat build production di `dist/` |
-| `npm run preview` | Menjalankan preview build production |
-| `npm run lint` | Menjalankan Oxlint |
+| `npm run dev` | Menjalankan local development server Vite |
+| `npm run build` | Melakukan build aset produksi ke direktori `dist/` |
+| `npm run preview` | Menjalankan preview lokal dari hasil build `dist/` |
+| `npm run lint` | Menjalankan pemeriksaan kode cepat menggunakan Oxlint |
 
-## Catatan Keamanan
+---
 
-- `VITE_SUPABASE_ANON_KEY` digunakan di browser. Lindungi data dengan RLS dan jangan pernah menaruh Supabase `service_role` key pada variabel berawalan `VITE_`.
-- Batasi API key Geoapify berdasarkan origin/referrer dan kuota.
-- Security headers di `vite.config.js` berlaku untuk Vite dev/preview. Konfigurasikan headers setara di hosting production.
-- Jangan commit `.env` atau `.env.local`; gunakan `.env.example` sebagai template tanpa secret.
+## Arsitektur Keamanan
+
+Aplikasi dirancang dengan standar keamanan web modern:
+
+- **HTTP Security Headers (Vercel Production):** Mengaktifkan `Content-Security-Policy` (CSP), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security` (HSTS), dan `Permissions-Policy` melalui [vercel.json](vercel.json).
+- **Anti Brute-Force Form Login:** Halaman `/adminlogin` memiliki sistem pelindung otomatis. Percobaan salah password 5 kali berturut-turut akan mengunci form login selama 60 detik.
+- **Server-Side Role Validation:** Verifikasi hak akses admin menggunakan klaim server `app_metadata.role = "admin"` yang divalidasi langsung via `supabase.auth.getUser()`, bukan sekadar membaca token lokal.
+- **Perlindungan Kredensial:** Kunci rahasia master (`SUPABASE_SERVICE_ROLE_KEY`) tidak pernah dimasukkan ke dalam kode frontend klien.
+- **Sanitasi Data:** Nomor telepon dinormalisasi ke format internasional E.164, koordinat divalidasi bertipe numerik, dan upload foto dibatasi maksimal 5 MB dengan tipe file JPG, PNG, atau WebP.

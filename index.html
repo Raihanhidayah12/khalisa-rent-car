@@ -5,9 +5,21 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <link rel="canonical" href="https://ptkhalisasumberrezeki.vercel.app/" />
     <meta name="description" content="Rental mobil Jakarta & sekitarnya oleh PT Khalisa Sumber Rezeki. Sewa harian, mingguan, hingga bulanan — dengan supir atau lepas kunci. Harga transparan, armada terawat, siap 24 jam." />
+    <meta name="keywords" content="rental mobil jakarta, sewa mobil jakarta barat, sewa innova zenix jakarta, sewa alphard jakarta, rental mobil pengantin jakarta, rental mobil lepas kunci jakarta, sewa mobil dengan supir jakarta" />
+    <meta name="author" content="PT Khalisa Sumber Rezeki" />
     <meta name="theme-color" content="#0f172a" />
+
+    <!-- Geo Local SEO (Jakarta Barat) -->
+    <meta name="geo.region" content="ID-JK" />
+    <meta name="geo.placename" content="Jakarta Barat" />
+    <meta name="geo.position" content="-6.1944;106.7778" />
+    <meta name="ICBM" content="-6.1944, 106.7778" />
+
+    <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://ptkhalisasumberrezeki.vercel.app/" />
     <meta property="og:site_name" content="PT Khalisa Sumber Rezeki" />
     <meta property="og:title" content="PT Khalisa Sumber Rezeki | Rental Mobil Jakarta" />
     <meta property="og:description" content="Sewa mobil harian, mingguan, hingga bulanan di Jakarta & sekitarnya — dengan supir atau lepas kunci. Harga transparan, armada terawat, siap 24 jam." />
@@ -15,12 +27,47 @@
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:locale" content="id_ID" />
+
+    <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="PT Khalisa Sumber Rezeki | Rental Mobil Jakarta" />
     <meta name="twitter:description" content="Sewa mobil harian, mingguan, hingga bulanan di Jakarta & sekitarnya — dengan supir atau lepas kunci." />
     <meta name="twitter:image" content="/og-cover.jpg" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co https://api.geoapify.com ws://localhost:* ws://127.0.0.1:*; form-action 'self'" />
-    <title>PT Khalisa Sumber Rezeki | Rental Mobil</title>
+
+    <!-- Schema.org Structured Data (AutoRental / LocalBusiness) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "AutoRental",
+      "name": "PT Khalisa Sumber Rezeki",
+      "image": "https://ptkhalisasumberrezeki.vercel.app/og-cover.jpg",
+      "url": "https://ptkhalisasumberrezeki.vercel.app/",
+      "telephone": ["+6281380835156", "+6281277772320"],
+      "priceRange": "Rp 850.000 - Rp 3.000.000",
+      "address": {
+        "@type": "PostalAddress",
+        "streetAddress": "Jl. Gili Sampeng No.26, RT.9/RW.3, Kb. Jeruk",
+        "addressLocality": "Jakarta Barat",
+        "addressRegion": "DKI Jakarta",
+        "postalCode": "11530",
+        "addressCountry": "ID"
+      },
+      "geo": {
+        "@type": "GeoCoordinates",
+        "latitude": -6.1944,
+        "longitude": 106.7778
+      },
+      "openingHoursSpecification": {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+        "opens": "00:00",
+        "closes": "23:59"
+      }
+    }
+    </script>
+
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co https://api.geoapify.com ws://localhost:* ws://127.0.0.1:*; form-action 'self'" />
+    <title>PT Khalisa Sumber Rezeki | Rental Mobil Jakarta</title>
   </head>
   <body>
     <div id="root"></div>
