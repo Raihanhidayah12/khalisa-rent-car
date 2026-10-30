@@ -787,7 +787,15 @@ function AdminDashboard() {
   const [loadingDrivers, setLoadingDrivers] = useState(true)
   const [driversError, setDriversError] = useState('')
   const [canManageAdmins, setCanManageAdmins] = useState(false)
-  const [activeTab, setActiveTab] = useState('finance')
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = window.sessionStorage.getItem('khalisa_admin_active_tab')
+      if (['finance', 'bookings', 'vehicles', 'drivers', 'admin'].includes(saved)) {
+        return saved
+      }
+    }
+    return 'finance'
+  })
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches)
   const sidebarRef = useRef(null)
@@ -950,23 +958,19 @@ function AdminDashboard() {
   }, [])
 
   useEffect(() => {
-    const clearAdminSessionOnExit = () => {
-      const session = window.localStorage.getItem(supabaseAuthStorageKey)
-      if (session) window.sessionStorage.setItem(adminReloadSessionStorageKey, session)
-      window.localStorage.removeItem(supabaseAuthStorageKey)
-      window.localStorage.removeItem(`${supabaseAuthStorageKey}-code-verifier`)
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem('khalisa_admin_active_tab', activeTab)
     }
-    const redirectIfRestoredAfterExit = (event) => {
-      if (event.persisted && !window.localStorage.getItem(supabaseAuthStorageKey)) {
-        window.location.replace('/adminlogin')
-      }
-    }
+  }, [activeTab])
 
-    window.addEventListener('pagehide', clearAdminSessionOnExit)
-    window.addEventListener('pageshow', redirectIfRestoredAfterExit)
-    return () => {
-      window.removeEventListener('pagehide', clearAdminSessionOnExit)
-      window.removeEventListener('pageshow', redirectIfRestoredAfterExit)
+  // Pastikan sesi admin tetap aman dan tidak terhapus saat refresh halaman
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const pendingSession = window.sessionStorage.getItem(adminReloadSessionStorageKey)
+      if (pendingSession && !window.localStorage.getItem(supabaseAuthStorageKey)) {
+        window.localStorage.setItem(supabaseAuthStorageKey, pendingSession)
+      }
+      window.sessionStorage.removeItem(adminReloadSessionStorageKey)
     }
   }, [])
 
@@ -990,17 +994,38 @@ function AdminDashboard() {
           return
         }
 
-        const { error: refreshError } = await supabase.auth.refreshSession()
-        if (refreshError) throw refreshError
+        // Pulihkan session dari sessionStorage jika ada
+        if (typeof window !== 'undefined') {
+          const pending = window.sessionStorage.getItem(adminReloadSessionStorageKey)
+          if (pending && !window.localStorage.getItem(supabaseAuthStorageKey)) {
+            window.localStorage.setItem(supabaseAuthStorageKey, pending)
+          }
+          window.sessionStorage.removeItem(adminReloadSessionStorageKey)
+        }
 
-        const { data, error } = await supabase.auth.getUser()
-        if (error || data.user?.app_metadata?.role !== 'admin') {
+        // Cek sesi autentikasi yang tersimpan tanpa langsung memaksa error refresh
+        const { data: sessionData } = await supabase.auth.getSession()
+        let currentUser = sessionData?.session?.user
+
+        if (!currentUser) {
+          const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
+          if (refreshError || !refreshData?.session?.user) {
+            await supabase.auth.signOut()
+            window.location.replace('/adminlogin')
+            return
+          }
+          currentUser = refreshData.session.user
+        }
+
+        const { data: userData, error: userError } = await supabase.auth.getUser()
+        const verifiedUser = userData?.user ?? currentUser
+        if (userError || verifiedUser?.app_metadata?.role !== 'admin') {
           await supabase.auth.signOut()
           window.location.replace('/adminlogin')
           return
         }
 
-        if (active) setCanManageAdmins(data.user.email?.trim().toLowerCase() === primaryAdminEmail)
+        if (active) setCanManageAdmins(verifiedUser.email?.trim().toLowerCase() === primaryAdminEmail)
 
         await supabase.rpc('expire_pending_booking_holds')
 
