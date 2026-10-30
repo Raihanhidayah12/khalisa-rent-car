@@ -5,7 +5,7 @@
 **Tanggal pembaruan & finalisasi:** 30 Oktober 2026  
 **Jenis anggaran:** Estimasi jasa pembuatan, implementasi, dan penguatan website, satu kali (one-time)  
 **Nilai jasa:** **Rp2.500.000**  
-**Status domain khusus:** Domain kustom `khalisarental.id` aktif terhubung (biaya registrar dibayar terpisah oleh pemilik)
+**Status domain khusus:** Domain kustom `khalisarental.id` aktif terhubung untuk periode 5 tahun (Rp1.100.000 / 5 tahun, dibayar langsung oleh pemilik ke registrar)
 
 > Dokumen ini adalah rincian penawaran dan serah terima jasa berdasarkan ruang lingkup fitur website yang tercantum, bukan bukti biaya historis atau invoice pembayaran. Total Rp2.500.000 dialokasikan penuh untuk pekerjaan jasa teknis; biaya pembelian domain dan tagihan provider dibayar terpisah.
 
@@ -32,10 +32,10 @@ Rata-rata nilai jasa pada estimasi ini sekitar **Rp51.000 per jam**. Jam kerja m
 | Komponen | Biaya dalam RAB | Keterangan |
 |---|---:|---|
 | Jasa analisis, desain, pembuatan, integrasi, pengujian, keamanan, dan serah terima | Rp2.500.000 | Biaya satu kali sesuai rincian di atas. |
-| Domain khusus, misalnya `khalisarentcar.com` atau `khalisarentcar.co.id` | Tidak termasuk | Pemilik membeli langsung melalui registrar (Niagahoster, Domainesia, dsb). |
-| Vercel, Supabase, dan Geoapify | Tidak ditagihkan dalam RAB ini | Menggunakan paket gratis/kuota standar yang mencukupi untuk operasional. Biaya peningkatan kuota, jika ada, dibayar langsung ke provider. |
+| Domain `khalisarental.id` (Masa Aktif 5 Tahun) | Rp1.100.000 | Telah dibeli langsung oleh pemilik untuk durasi 5 tahun penuh (bebas tagihan tahunan hingga 2031). |
+| Hosting Vercel, Database Supabase, dan Geoapify | Tidak ditagihkan (Rp0) | Menggunakan paket gratis/kuota standar yang mencukupi untuk operasional. Biaya peningkatan kuota, jika ada, dibayar langsung ke provider. |
 | Pajak | Belum dihitung | Ditambahkan bila berlaku sesuai status penyedia jasa dan ketentuan perpajakan. |
-| **Jumlah jasa yang ditawarkan** | **Rp2.500.000** | **Belum termasuk domain, tagihan provider, dan pajak yang mungkin berlaku.** |
+| **Total Investasi Lengkap (Website + Domain 5 Tahun)** | **Rp3.600.000** | **Website siap pakai aktif operasional 5 tahun tanpa biaya sewa bulanan.** |
 
 ---
 
