@@ -13,6 +13,11 @@ import { supabase } from './supabaseClient'
 import { formatDuration, formatPrice, isVehicleReady, parsePrice, getActivePriceInfo } from './vehicleUtils'
 import { formatJakartaDateTime, generateBookingCode, toJakartaISOString } from './bookingUtils'
 
+const logoSrc = logo?.src || logo
+const waLogoSrc = waLogo?.src || waLogo
+const heroBackgroundSrc = heroBackground?.src || heroBackground
+const landingBackgroundSrc = landingBackground?.src || landingBackground
+
 function getVehiclesByCategory(vehicles, category) {
   return category === 'Semua armada'
     ? vehicles
@@ -811,11 +816,11 @@ function AdminLogin() {
   return (
     <main className="grid min-h-screen bg-slate-ice text-ink lg:grid-cols-[1.05fr_.95fr]">
       <section className="relative hidden min-h-screen overflow-hidden bg-ink lg:flex">
-        <img className="absolute inset-0 size-full object-cover opacity-70" src={heroBackground} alt="" />
+        <img className="absolute inset-0 size-full object-cover opacity-70" src={heroBackgroundSrc} alt="" />
         <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(15,23,42,.9),rgba(15,23,42,.42)_58%,rgba(15,23,42,.82))]" />
         <div className="relative flex w-full flex-col justify-between px-[clamp(36px,7vw,108px)] py-12 text-white">
           <a className="inline-flex w-fit items-center gap-3" href="/" aria-label="Kembali ke halaman utama">
-            <span className="grid h-11 w-[58px] place-items-center overflow-hidden rounded-md bg-white p-1"><img className="size-full object-contain" src={logo} alt="" /></span>
+            <span className="grid h-11 w-[58px] place-items-center overflow-hidden rounded-md bg-white p-1"><img className="size-full object-contain" src={logoSrc} alt="" /></span>
             <span className="grid gap-1"><strong className="font-display text-[.88rem] font-extrabold tracking-[.08em]">PT KHALISA</strong><small className="text-[.58rem] font-semibold tracking-[.14em] text-cyan">SUMBER REZEKI</small></span>
           </a>
           <div className="max-w-[540px] pb-8">
@@ -830,7 +835,7 @@ function AdminLogin() {
       <section className="flex min-h-screen items-center justify-center bg-slate-ice px-8 py-12 max-[600px]:px-5 max-[600px]:py-8">
         <div className="w-full max-w-[460px]">
           <a className="mb-10 inline-flex items-center gap-3 lg:hidden" href="/" aria-label="Kembali ke halaman utama">
-            <span className="grid h-10 w-[54px] place-items-center rounded-md bg-white p-1 shadow-sm"><img className="size-full object-contain" src={logo} alt="" /></span>
+            <span className="grid h-10 w-[54px] place-items-center rounded-md bg-white p-1 shadow-sm"><img className="size-full object-contain" src={logoSrc} alt="" /></span>
             <span className="grid gap-1"><strong className="font-display text-[.8rem] font-extrabold tracking-[.08em]">PT KHALISA</strong><small className="text-[.55rem] font-semibold tracking-[.14em] text-cyan">SUMBER REZEKI</small></span>
           </a>
 
@@ -1509,7 +1514,7 @@ function RentalHome() {
 
       <header className="public-site-header sticky top-[14px] z-30 mx-auto -mb-[100px] mt-[14px] flex min-h-[76px] w-[min(1320px,calc(100%-48px))] items-center justify-between gap-7 rounded-[12px] border border-white/15 bg-ink/90 px-7 shadow-[0_14px_40px_rgba(15,23,42,.28)] backdrop-blur-xl max-[900px]:px-[4%] max-[760px]:w-[calc(100%-32px)] max-[760px]:flex-nowrap max-[760px]:gap-x-4 max-[760px]:px-4 max-[760px]:py-3 max-[600px]:mt-3 max-[600px]:w-[calc(100%-24px)] max-[600px]:gap-2 max-[600px]:rounded-[10px] max-[600px]:py-[10px] max-[360px]:w-[calc(100%-16px)] max-[360px]:gap-x-2 max-[360px]:px-3">
         <a className="inline-flex shrink-0 items-center gap-3 max-[760px]:gap-2" href="#beranda" aria-label="PT Khalisa Sumber Rezeki, beranda" aria-expanded={mobileMenuOpen} aria-controls="mobile-nav-panel" onClick={handleBrandClick}>
-          <span className="grid h-11 w-[58px] shrink-0 place-items-center overflow-hidden rounded-md bg-white p-0.5"><img className="h-full w-full object-contain" src={logo} alt="" /></span>
+          <span className="grid h-11 w-[58px] shrink-0 place-items-center overflow-hidden rounded-md bg-white p-0.5"><img className="h-full w-full object-contain" src={logoSrc} alt="" /></span>
           <span className="grid gap-1 max-[600px]:gap-0.5"><strong className="font-display text-[.91rem] font-extrabold tracking-[.08em] text-white max-[760px]:text-[.82rem] max-[600px]:text-[.74rem] max-[360px]:text-[.68rem]">PT KHALISA</strong><small className="text-[.6rem] font-semibold tracking-[.14em] text-cyan max-[760px]:text-[.55rem] max-[600px]:text-[.5rem] max-[360px]:text-[.46rem]">SUMBER REZEKI</small></span>
         </a>
         <nav className="flex items-center gap-[clamp(18px,3.1vw,46px)] max-[980px]:hidden" aria-label="Navigasi utama">
@@ -1524,7 +1529,7 @@ function RentalHome() {
           <aside className="mobile-sidebar absolute bottom-0 left-0 top-0 flex h-dvh w-[min(390px,88vw)] flex-col overflow-y-auto border-r border-white/10 bg-ink p-6 text-white shadow-[20px_0_60px_rgba(15,23,42,.35)]" data-open={mobileMenuOpen} id="mobile-nav-panel" role="dialog" aria-modal="true" aria-label="Menu navigasi" aria-hidden={!mobileMenuOpen}>
             <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-5">
               <a className="inline-flex shrink-0 items-center gap-3 rounded-lg bg-white p-2" href="#beranda" aria-label="PT Khalisa Sumber Rezeki, beranda" onClick={() => setMobileMenuOpen(false)}>
-                <span className="grid h-11 w-[58px] shrink-0 place-items-center overflow-hidden rounded-md bg-white p-0.5"><img className="h-full w-full object-contain" src={logo} alt="" /></span>
+                <span className="grid h-11 w-[58px] shrink-0 place-items-center overflow-hidden rounded-md bg-white p-0.5"><img className="h-full w-full object-contain" src={logoSrc} alt="" /></span>
                 <span className="grid gap-1"><strong className="font-display text-[.91rem] font-extrabold tracking-[.08em] text-ink">PT KHALISA</strong><small className="text-[.6rem] font-semibold tracking-[.14em] text-cyan">SUMBER REZEKI</small></span>
               </a>
               <button className="grid size-10 shrink-0 place-items-center rounded-xl border border-white/15 bg-white/5 text-white transition-colors hover:bg-white/10" type="button" aria-label="Tutup menu" onClick={() => setMobileMenuOpen(false)}><X aria-hidden="true" size={19} /></button>
@@ -1541,7 +1546,7 @@ function RentalHome() {
 
       <main>
         <section className="relative h-[min(680px,66vw)] min-h-[540px] overflow-hidden bg-ink text-white max-[900px]:min-h-[560px] max-[760px]:h-[620px] max-[760px]:min-h-[620px] max-[600px]:h-[640px] max-[600px]:min-h-[640px]" id="beranda">
-          <img className="absolute inset-0 size-full object-cover object-[center_57%] max-[760px]:object-[center_57%] max-[600px]:object-[0%_center]" src={landingBackground} alt="Latar mobil untuk perjalanan" />
+          <img className="absolute inset-0 size-full object-cover object-[center_57%] max-[760px]:object-[center_57%] max-[600px]:object-[0%_center]" src={landingBackgroundSrc} alt="Latar mobil untuk perjalanan" />
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,23,42,.88)_0%,rgba(15,23,42,.60)_39%,rgba(15,23,42,.06)_76%),linear-gradient(0deg,rgba(15,23,42,.4),transparent_32%)] max-[760px]:bg-[linear-gradient(90deg,rgba(15,23,42,.84),rgba(15,23,42,.32)),linear-gradient(0deg,rgba(15,23,42,.38),transparent_55%)]" />
           <div className="absolute left-[9%] top-1/2 w-[min(760px,60%)] -translate-y-1/2 max-[900px]:left-[6%] max-[900px]:w-[min(680px,68%)] max-[760px]:left-[7%] max-[760px]:top-[53%] max-[760px]:w-[86%] max-[760px]:max-w-none max-[600px]:top-[53%]">
             <span className="mb-1 inline-flex items-center gap-[9px] rounded-full border border-white/20 bg-white/10 px-3 py-2 text-[.72rem] font-semibold text-white/90 shadow-sm backdrop-blur-md max-[760px]:border-white/20 max-[760px]:bg-white/10 max-[760px]:text-white/90"><i className="size-2 rounded-full bg-cyan shadow-[0_0_0_5px_rgba(14,165,233,.2)]" /> Rental mobil pilihan di Jakarta & sekitarnya</span>
@@ -2051,7 +2056,7 @@ function RentalHome() {
             <div className="mt-7 grid max-w-[540px] grid-cols-2 gap-3 max-[400px]:grid-cols-1"><div className="rounded-lg border border-line px-4 py-3.5"><span className="text-[.61rem] font-extrabold tracking-[.12em] text-cyan">01 / FLEKSIBEL</span><p className="mb-0 mt-1.5 text-[.75rem] leading-5 text-muted">Harian, antar jemput, hingga perjalanan panjang.</p></div><div className="rounded-lg border border-line px-4 py-3.5"><span className="text-[.61rem] font-extrabold tracking-[.12em] text-cyan">02 / PILIHAN LAYANAN</span><p className="mb-0 mt-1.5 text-[.75rem] leading-5 text-muted">Dengan pengemudi atau lepas kunci.</p></div></div>
           </div>
           <figure className="group relative m-0 min-h-[470px] overflow-hidden rounded-2xl bg-ink max-[700px]:order-1 max-[700px]:min-h-[360px] max-[600px]:min-h-[290px]">
-            <img className="absolute inset-0 size-full object-cover object-[62%_center] transition-transform duration-700 group-hover:scale-[1.03]" src={heroBackground} alt="Armada PT Khalisa Sumber Rezeki di kawasan perkotaan" loading="lazy" />
+            <img className="absolute inset-0 size-full object-cover object-[62%_center] transition-transform duration-700 group-hover:scale-[1.03]" src={heroBackgroundSrc} alt="Armada PT Khalisa Sumber Rezeki di kawasan perkotaan" loading="lazy" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#0b1220]/85 via-[#0b1220]/10 to-[#0b1220]/5" />
             <span className="absolute right-5 top-5 rounded-full border border-white/20 bg-[#0b1220]/55 px-3.5 py-2 text-[.65rem] font-semibold text-white backdrop-blur-sm">Jakarta Barat & sekitarnya</span>
             <figcaption className="absolute bottom-6 left-6 right-6 text-white max-[600px]:bottom-5 max-[600px]:left-5"><span className="text-[.62rem] font-extrabold tracking-[.15em] text-cyan">PT KHALISA SUMBER REZEKI</span><p className="mb-0 mt-2 font-display text-[1.35rem] font-bold">Siap menemani perjalananmu.</p></figcaption>
@@ -2277,7 +2282,7 @@ function RentalHome() {
         <div className="grid grid-cols-[1.35fr_1fr_1fr_1.1fr] gap-10 border-b border-white/10 py-14 max-[900px]:grid-cols-2 max-[600px]:gap-8 max-[600px]:py-10">
           <div>
             <a className="inline-flex items-center gap-3" href="#beranda" aria-label="PT Khalisa Sumber Rezeki, kembali ke beranda">
-              <span className="grid h-11 w-[58px] shrink-0 place-items-center overflow-hidden rounded-md bg-white p-0.5"><img className="h-full w-full object-contain" src={logo} alt="" /></span>
+              <span className="grid h-11 w-[58px] shrink-0 place-items-center overflow-hidden rounded-md bg-white p-0.5"><img className="h-full w-full object-contain" src={logoSrc} alt="" /></span>
               <span className="grid gap-1"><strong className="font-display text-[.91rem] font-extrabold tracking-[.08em] text-white">PT KHALISA</strong><small className="text-[.6rem] font-semibold tracking-[.14em] text-cyan">SUMBER REZEKI</small></span>
             </a>
             <p className="mb-0 mt-4 max-w-[260px] text-[.76rem] leading-[1.8] text-[#aeb9c8]">Rental mobil terpercaya untuk perjalanan nyaman di Jakarta dan sekitarnya.</p>
@@ -2317,7 +2322,7 @@ function RentalHome() {
           <a className="transition-colors hover:text-white" href="#beranda">Kembali ke atas ↑</a>
         </div>
       </footer>
-      <a className="fixed bottom-[22px] right-[22px] z-20 grid size-16 place-items-center rounded-full transition-transform duration-200 hover:scale-110 focus-visible:outline focus-visible:outline-4 focus-visible:outline-cyan/50 max-[600px]:bottom-[14px] max-[600px]:right-[14px] max-[600px]:size-14" href="https://wa.me/6281380835156" target="_blank" rel="noreferrer" aria-label="Chat PT Khalisa Sumber Rezeki melalui WhatsApp"><img className="size-full object-contain drop-shadow-[0_5px_14px_rgba(34,197,94,.48)]" src={waLogo} alt="" /></a>
+      <a className="fixed bottom-[22px] right-[22px] z-20 grid size-16 place-items-center rounded-full transition-transform duration-200 hover:scale-110 focus-visible:outline focus-visible:outline-4 focus-visible:outline-cyan/50 max-[600px]:bottom-[14px] max-[600px]:right-[14px] max-[600px]:size-14" href="https://wa.me/6281380835156" target="_blank" rel="noreferrer" aria-label="Chat PT Khalisa Sumber Rezeki melalui WhatsApp"><img className="size-full object-contain drop-shadow-[0_5px_14px_rgba(34,197,94,.48)]" src={waLogoSrc} alt="" /></a>
     </div>
   )
 }

@@ -1,6 +1,8 @@
 import { ArrowLeft, ArrowUpRight, ShieldCheck } from 'lucide-react'
 import logo from './assets/Logo-cropped.png'
 
+const logoSrc = logo?.src || logo
+
 const sections = [
   {
     title: '1. Pemesanan & konfirmasi',
@@ -59,7 +61,7 @@ function LegalPage() {
     <div className="min-h-screen bg-white text-ink">
       <header className="public-site-header sticky top-[14px] z-30 mx-auto mt-[14px] flex min-h-[76px] w-[min(1320px,calc(100%-48px))] items-center justify-between gap-7 rounded-[12px] border border-white/15 bg-ink/90 px-7 shadow-[0_14px_40px_rgba(15,23,42,.28)] backdrop-blur-xl max-[900px]:px-[4%] max-[760px]:w-[calc(100%-32px)] max-[760px]:gap-x-4 max-[760px]:px-4 max-[600px]:mt-3 max-[600px]:w-[calc(100%-24px)] max-[600px]:gap-2 max-[600px]:rounded-[10px] max-[600px]:py-[10px] max-[360px]:w-[calc(100%-16px)] max-[360px]:gap-x-2 max-[360px]:px-3">
         <a className="inline-flex shrink-0 items-center gap-3 max-[760px]:gap-2" href="/" aria-label="PT Khalisa Sumber Rezeki, beranda">
-          <span className="grid h-11 w-[58px] shrink-0 place-items-center overflow-hidden rounded-md bg-white p-0.5"><img className="h-full w-full object-contain" src={logo} alt="" /></span>
+          <span className="grid h-11 w-[58px] shrink-0 place-items-center overflow-hidden rounded-md bg-white p-0.5"><img className="h-full w-full object-contain" src={logoSrc} alt="" /></span>
           <span className="grid gap-1 max-[600px]:gap-0.5"><strong className="font-display text-[.91rem] font-extrabold tracking-[.08em] text-white max-[760px]:text-[.82rem] max-[600px]:text-[.74rem] max-[360px]:text-[.68rem]">PT KHALISA</strong><small className="text-[.6rem] font-semibold tracking-[.14em] text-cyan max-[760px]:text-[.55rem] max-[600px]:text-[.5rem] max-[360px]:text-[.46rem]">SUMBER REZEKI</small></span>
         </a>
         <nav className="flex shrink-0 items-center gap-5 text-[.74rem] font-semibold text-white/80 max-[600px]:gap-3" aria-label="Navigasi halaman">

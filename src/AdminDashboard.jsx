@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowUpRight, CalendarDays, CarFront, Check, Clock3, Download, LayoutDashboard, LogOut, MapPin, MessageSquare, Phone, Plus, RefreshCw, Search, ShieldCheck, Trash2, UserCheck, UserRound, Wallet, X } from 'lucide-react'
 import ExcelJS from 'exceljs'
 import logo from './assets/Logo-cropped.png'
+
+const logoSrc = logo?.src || logo
 import { adminReloadSessionStorageKey, supabase, supabaseAuthStorageKey } from './supabaseClient'
 import { formatJakartaDateTime } from './bookingUtils'
 import { formatDuration, formatPrice, getAvailableVehicleStock, getVehicleStock, isVehicleReady, parsePrice, getActivePromo } from './vehicleUtils'
@@ -1573,7 +1575,7 @@ function AdminDashboard() {
         >
           <div className="flex items-center justify-between gap-2 border-b border-white/8 px-4 py-4 md:border-0 md:px-5 md:py-5">
             <a className="inline-flex min-w-0 items-center gap-3" href="/" aria-label="Kembali ke situs utama">
-              <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-white p-1"><img className="size-full object-contain" src={logo} alt="" /></span>
+              <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg bg-white p-1"><img className="size-full object-contain" src={logoSrc} alt="" /></span>
               <span className="grid gap-1"><strong className="font-display text-[.8rem] font-extrabold tracking-[.08em]">PT KHALISA</strong><small className="text-[.55rem] font-semibold tracking-[.14em] text-cyan">ADMIN DASHBOARD</small></span>
             </a>
             <button className="grid size-9 shrink-0 place-items-center rounded-lg border border-white/15 text-white/70 transition-colors hover:bg-white/10 hover:text-white md:hidden" type="button" onClick={() => setMobileNavOpen(false)} aria-label="Tutup sidebar"><X size={17} aria-hidden="true" /></button>
@@ -1602,7 +1604,7 @@ function AdminDashboard() {
           <div className="mx-auto w-full max-w-[1320px] px-4 pb-8 pt-4 sm:px-7 sm:py-8">
         <div className="sticky top-0 z-30 -mx-4 mb-5 flex items-center justify-between gap-3 border-b border-line bg-white/95 px-4 py-3 shadow-[0_6px_18px_rgba(15,23,42,.06)] backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:mx-0 sm:rounded-2xl sm:border sm:px-4 sm:py-3 sm:shadow-[0_8px_24px_rgba(15,23,42,.04)] sm:backdrop-blur-none md:hidden">
           <button ref={mobileLogoButtonRef} className="inline-flex min-w-0 items-center gap-2.5 text-left" type="button" aria-label="Buka menu admin" aria-expanded={mobileNavOpen} aria-controls="admin-sidebar" onClick={() => setMobileNavOpen(true)}>
-            <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-white p-1"><img className="size-full object-contain" src={logo} alt="" /></span>
+            <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-white p-1"><img className="size-full object-contain" src={logoSrc} alt="" /></span>
             <span className="grid min-w-0 gap-1"><strong className="truncate font-display text-[.72rem] font-extrabold tracking-[.06em]">PT KHALISA</strong><small className="truncate text-[.56rem] font-semibold tracking-[.12em] text-cyan">ADMIN</small></span>
           </button>
         </div>
