@@ -1364,6 +1364,11 @@ function AdminDashboard() {
     }
 
     const requiresDriver = String(currentBooking.booking_mode ?? '').toLowerCase().includes('supir')
+    if (status === 'confirmed' && requiresDriver && !currentBooking.driver_id) {
+      setBookingActionError('Tentukan supir terlebih dahulu pada kolom supir sebelum mengonfirmasi booking.')
+      return
+    }
+
     let { data, error } = status === 'confirmed' && requiresDriver
       ? await supabase.rpc('confirm_booking_with_driver', { p_booking_id: bookingId })
       : await supabase.rpc('update_booking_status', {
@@ -1377,12 +1382,14 @@ function AdminDashboard() {
         .from('booking_requests')
         .update({ status })
         .eq('id', bookingId)
-        .select('*')
-        .single()
+        .select()
 
       if (!res.error) {
-        data = res.data
+        data = res.data?.[0] || { ...currentBooking, status }
         error = null
+        if (status === 'confirmed' && currentBooking.driver_id) {
+          await supabase.from('drivers').update({ status: 'on_duty' }).eq('id', currentBooking.driver_id)
+        }
       }
     }
 
@@ -1556,11 +1563,10 @@ function AdminDashboard() {
         .from('booking_requests')
         .update({ driver_id: targetDriverId })
         .eq('id', bookingId)
-        .select('*')
-        .single()
+        .select()
 
       if (!res.error) {
-        data = res.data
+        data = res.data?.[0] || { ...currentBooking, driver_id: targetDriverId }
         error = null
         if (targetDriverId) {
           await supabase.from('drivers').update({ status: 'on_duty' }).eq('id', targetDriverId)

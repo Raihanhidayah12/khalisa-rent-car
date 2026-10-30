@@ -15,9 +15,10 @@ export function parsePrice(priceStr) {
 }
 
 export function formatPrice(number) {
-  if (number === null || number === undefined || number === '-' || String(number).toLowerCase() === 'nego') return 'Nego'
+  if (number === '-' || (typeof number === 'string' && number.trim().toLowerCase() === 'nego')) return 'Nego'
+  if (number === null || number === undefined || number === '') return '0'
   const num = typeof number === 'string' ? parsePrice(number) : Number(number)
-  if (!Number.isFinite(num) || num <= 0) return 'Nego'
+  if (!Number.isFinite(num)) return '0'
   return num.toLocaleString('id-ID')
 }
 
