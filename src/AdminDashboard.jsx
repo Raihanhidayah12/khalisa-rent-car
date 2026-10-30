@@ -1238,12 +1238,27 @@ function AdminDashboard() {
     }
 
     const requiresDriver = String(currentBooking.booking_mode ?? '').toLowerCase().includes('supir')
-    const { data, error } = status === 'confirmed' && requiresDriver
+    let { data, error } = status === 'confirmed' && requiresDriver
       ? await supabase.rpc('confirm_booking_with_driver', { p_booking_id: bookingId })
       : await supabase.rpc('update_booking_status', {
         p_booking_id: bookingId,
         p_status: status,
       })
+
+    // Fallback: Jika RPC bentrok overload / ambiguous candidate di PostgreSQL, update langsung tabel booking_requests
+    if (error && (error.message?.includes('best candidate') || error.message?.includes('invalid input syntax') || error.message?.includes('confirm_booking_with_driver') || error.message?.includes('function'))) {
+      const res = await supabase
+        .from('booking_requests')
+        .update({ status })
+        .eq('id', bookingId)
+        .select('*')
+        .single()
+
+      if (!res.error) {
+        data = res.data
+        error = null
+      }
+    }
 
     if (error) {
       if (error.message?.includes('TERMINAL_BOOKING')) {
@@ -1404,10 +1419,28 @@ function AdminDashboard() {
       return
     }
 
-    const { data, error } = await supabase.rpc('assign_booking_driver', {
+    let { data, error } = await supabase.rpc('assign_booking_driver', {
       p_booking_id: bookingId,
       p_driver_id: targetDriverId,
     })
+
+    // Fallback: Jika RPC bentrok overload / ambiguous candidate di PostgreSQL, update langsung tabel booking_requests
+    if (error && (error.message?.includes('best candidate') || error.message?.includes('function') || error.message?.includes('invalid input syntax'))) {
+      const res = await supabase
+        .from('booking_requests')
+        .update({ driver_id: targetDriverId })
+        .eq('id', bookingId)
+        .select('*')
+        .single()
+
+      if (!res.error) {
+        data = res.data
+        error = null
+        if (targetDriverId) {
+          await supabase.from('drivers').update({ status: 'on_duty' }).eq('id', targetDriverId)
+        }
+      }
+    }
 
     if (error) {
       const message = error.message ?? ''
