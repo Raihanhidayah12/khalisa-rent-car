@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUpRight, CalendarDays, CarFront, Check, Clock3, Download, LayoutDashboard, LogOut, MapPin, MessageSquare, Phone, Plus, RefreshCw, Search, ShieldCheck, Trash2, UserCheck, UserRound, Wallet, X } from 'lucide-react'
+import { ArrowUpRight, Bell, CalendarDays, CarFront, Check, Clock3, Download, LayoutDashboard, LogOut, MapPin, MessageSquare, Phone, Plus, RefreshCw, Search, ShieldCheck, Trash2, UserCheck, UserRound, Wallet, X } from 'lucide-react'
 import ExcelJS from 'exceljs'
 import logo from './assets/Logo-cropped.png'
 
@@ -259,6 +259,61 @@ function driverStatusTone(status) {
   if (status === 'available') return 'border-emerald-300 bg-emerald-50 text-emerald-800'
   if (status === 'on_duty') return 'border-blue-300 bg-blue-50 text-blue-800'
   return 'border-slate-300 bg-slate-100 text-slate-700'
+}
+
+function playNotificationSound() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext
+    if (!AudioCtx) return
+    const ctx = new AudioCtx()
+
+    // Tone 1: D5 (587.33 Hz)
+    const osc1 = ctx.createOscillator()
+    const gain1 = ctx.createGain()
+    osc1.type = 'sine'
+    osc1.frequency.setValueAtTime(587.33, ctx.currentTime)
+    gain1.gain.setValueAtTime(0, ctx.currentTime)
+    gain1.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.04)
+    gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35)
+    osc1.connect(gain1)
+    gain1.connect(ctx.destination)
+    osc1.start(ctx.currentTime)
+    osc1.stop(ctx.currentTime + 0.35)
+
+    // Tone 2: A5 (880 Hz) with short delay
+    const osc2 = ctx.createOscillator()
+    const gain2 = ctx.createGain()
+    osc2.type = 'sine'
+    osc2.frequency.setValueAtTime(880, ctx.currentTime + 0.12)
+    gain2.gain.setValueAtTime(0, ctx.currentTime + 0.12)
+    gain2.gain.linearRampToValueAtTime(0.28, ctx.currentTime + 0.16)
+    gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55)
+    osc2.connect(gain2)
+    gain2.connect(ctx.destination)
+    osc2.start(ctx.currentTime + 0.12)
+    osc2.stop(ctx.currentTime + 0.55)
+  } catch (err) {
+    console.warn('[notification sound error]', err)
+  }
+}
+
+function sendDesktopNotification(title, body) {
+  playNotificationSound()
+  if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+    try {
+      const notif = new Notification(title, {
+        body,
+        icon: '/favicon.png',
+        badge: '/favicon.png',
+      })
+      notif.onclick = () => {
+        window.focus()
+        notif.close()
+      }
+    } catch (e) {
+      console.warn('[Notification error]', e)
+    }
+  }
 }
 
 function StatCard({ label, value, tone = 'neutral', onClick, active = false }) {
@@ -779,6 +834,77 @@ function AdminDashboard() {
   })
   const [exportRangeStart, setExportRangeStart] = useState(() => toDateKey(new Date()))
   const [exportRangeEnd, setExportRangeEnd] = useState(() => toDateKey(new Date()))
+  const [notificationStatus, setNotificationStatus] = useState(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      return Notification.permission
+    }
+    return 'default'
+  })
+  const alertedFinishedIds = useRef(new Set())
+
+  async function toggleNotificationPermission() {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      alert('Browser Anda tidak mendukung notifikasi push.')
+      return
+    }
+    if (Notification.permission === 'granted') {
+      sendDesktopNotification('🔔 Notifikasi Aktif', 'Notifikasi pemesanan & jadwal selesai aktif! (Tes bunyi bel berhasil)')
+      return
+    }
+    try {
+      const perm = await Notification.requestPermission()
+      setNotificationStatus(perm)
+      if (perm === 'granted') {
+        sendDesktopNotification('🔔 Notifikasi Diizinkan', 'Anda akan menerima notifikasi saat ada booking baru atau jadwal sewa selesai!')
+      }
+    } catch (err) {
+      console.warn('[Notification permission error]', err)
+    }
+  }
+
+  // Realtime listener untuk booking baru masuk
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-realtime-notifications')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'booking_requests' }, (payload) => {
+        const newB = payload.new
+        if (newB) {
+          sendDesktopNotification(
+            '🚗 Booking Baru Masuk!',
+            `${newB.customer_name || 'Pelanggan'} - ${newB.booking_mode || 'Pemesanan baru'}`
+          )
+          setBookings((prev) => [newB, ...prev.filter((b) => b.id !== newB.id)])
+        }
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
+
+  // Pemeriksaan berkala jadwal sewa selesai (setiap 30 detik)
+  useEffect(() => {
+    function checkFinishedBookings() {
+      const now = Date.now()
+      bookings.forEach((b) => {
+        if (b.status === 'confirmed' && b.end_at) {
+          const endTs = Date.parse(b.end_at)
+          if (Number.isFinite(endTs) && endTs <= now && !alertedFinishedIds.current.has(b.id)) {
+            alertedFinishedIds.current.add(b.id)
+            sendDesktopNotification(
+              '⏰ Jadwal Sewa Selesai!',
+              `Sewa unit untuk ${b.customer_name} telah berakhir. Mobil siap diterima kembali.`
+            )
+          }
+        }
+      })
+    }
+
+    const timer = setInterval(checkFinishedBookings, 30_000)
+    checkFinishedBookings()
+    return () => clearInterval(timer)
+  }, [bookings])
 
   // Sync selectedBooking dengan data terbaru dari bookings state
   useEffect(() => {
@@ -1790,16 +1916,32 @@ function AdminDashboard() {
             <h1 className="mb-0 mt-2 font-display text-[1.7rem] font-extrabold tracking-tight max-[600px]:text-[1.4rem]">{page.title}</h1>
             <p className="mb-0 mt-1.5 max-w-[640px] text-[.84rem] leading-6 text-muted max-[600px]:text-[.78rem] max-[600px]:leading-[1.55]">{activeTab === 'finance' ? `${page.description} ${financeRangeLabel}.` : page.description}</p>
           </div>
-          {pendingBookings > 0 && activeTab !== 'bookings' && (
+          <div className="flex flex-wrap items-center gap-2 max-[600px]:w-full">
             <button
-              className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 text-[.74rem] font-bold text-amber-800 shadow-sm transition-all hover:-translate-y-0.5 hover:border-amber-300 hover:shadow-md active:translate-y-0 max-[600px]:w-full max-[600px]:justify-center"
+              className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border px-3 text-[.74rem] font-bold shadow-sm transition-all hover:-translate-y-0.5 active:translate-y-0 max-[600px]:w-full max-[600px]:justify-center ${
+                notificationStatus === 'granted'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                  : 'border-slate-200 bg-white text-muted hover:border-cyan hover:text-cyan'
+              }`}
               type="button"
-              onClick={() => setActiveTab('bookings')}
+              onClick={toggleNotificationPermission}
+              title={notificationStatus === 'granted' ? 'Notifikasi browser dan nada bel aktif (klik untuk tes bunyi bel)' : 'Klik untuk mengaktifkan notifikasi browser & nada bel'}
             >
-              <span className="grid size-5 place-items-center rounded-full bg-amber-500 text-[.62rem] font-extrabold text-white">{pendingBookings}</span>
-              Menunggu konfirmasi
+              <Bell size={15} className={notificationStatus === 'granted' ? 'text-emerald-600' : 'text-slate-400'} aria-hidden="true" />
+              <span>{notificationStatus === 'granted' ? 'Notifikasi Aktif' : 'Aktifkan Notifikasi'}</span>
             </button>
-          )}
+
+            {pendingBookings > 0 && activeTab !== 'bookings' && (
+              <button
+                className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 text-[.74rem] font-bold text-amber-800 shadow-sm transition-all hover:-translate-y-0.5 hover:border-amber-300 hover:shadow-md active:translate-y-0 max-[600px]:w-full max-[600px]:justify-center"
+                type="button"
+                onClick={() => setActiveTab('bookings')}
+              >
+                <span className="grid size-5 place-items-center rounded-full bg-amber-500 text-[.62rem] font-extrabold text-white">{pendingBookings}</span>
+                Menunggu konfirmasi
+              </button>
+            )}
+          </div>
         </div>
 
         {activeTab === 'finance' && (
