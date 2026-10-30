@@ -933,6 +933,7 @@ function RentalHome() {
   const [includeToll, setIncludeToll] = useState(true)  // Default: dengan tol
   const [useCustomToll, setUseCustomToll] = useState(false)
   const [customTollAmount, setCustomTollAmount] = useState('')
+  const [isNegotiationRequested, setIsNegotiationRequested] = useState(false)
   const categoryInitialized = useRef(false)
 
   function updateDurationParts(months, days, hours) {
@@ -1309,15 +1310,14 @@ function RentalHome() {
       toll_type: includeToll ? 'standard' : null,
       privacy_consent: true,
       booking_code: bookingCode,
-      ...(isEventBooking ? {
-        notes: [
-          `[PAKET ACARA – ${(bookingEventType === 'Lainnya' ? (bookingEventTypeOther.trim() || 'Lainnya') : bookingEventType).toUpperCase()}]`,
-          bookingEventAddons.length > 0 ? `Add-on: ${bookingEventAddons.map((id) => {
-            if (id === 'kustom') return bookingEventAddonCustom.trim() || 'Kustom / lainnya'
-            return addonOptions.find((opt) => opt.id === id)?.label
-          }).filter(Boolean).join(', ')}` : null,
-        ].filter(Boolean).join('\n'),
-      } : {}),
+      notes: [
+        isNegotiationRequested ? '[PENGAJUAN NEGO HARGA VIA WA]' : null,
+        isEventBooking ? `[PAKET ACARA – ${(bookingEventType === 'Lainnya' ? (bookingEventTypeOther.trim() || 'Lainnya') : bookingEventType).toUpperCase()}]` : null,
+        isEventBooking && bookingEventAddons.length > 0 ? `Add-on: ${bookingEventAddons.map((id) => {
+          if (id === 'kustom') return bookingEventAddonCustom.trim() || 'Kustom / lainnya'
+          return addonOptions.find((opt) => opt.id === id)?.label
+        }).filter(Boolean).join(', ')}` : null,
+      ].filter(Boolean).join('\n') || null,
     }
 
     const whatsappWindow = window.open('about:blank', '_blank')
@@ -1426,7 +1426,14 @@ function RentalHome() {
       `Kendaraan (${totalSelectedUnits} unit):`,
       kendaraanLines,
       '',
-      'Mohon konfirmasi ketersediaan kendaraan dan total biaya. Terima kasih.',
+      ...(isNegotiationRequested ? [
+        '📌 Catatan Pemesan:',
+        '*Saya ingin mengajukan negosiasi harga untuk jadwal ini via WhatsApp.*',
+        '',
+        'Mohon info penawaran harga terbaik dan ketersediaan kendaraan. Terima kasih.',
+      ] : [
+        'Mohon konfirmasi ketersediaan kendaraan dan total biaya. Terima kasih.',
+      ]),
     ].join('\n')
 
     const waUrl = `https://wa.me/6281380835156?text=${encodeURIComponent(lines)}`
@@ -1833,6 +1840,23 @@ function RentalHome() {
               </div>
             )}
 
+            <div className="col-span-6 grid gap-1.5 rounded-xl border border-emerald-300/70 bg-emerald-50/50 p-3.5 max-[900px]:col-span-3 max-[600px]:col-span-1">
+              <label className="flex items-start gap-2.5 text-[.72rem] font-medium leading-5 text-emerald-950 cursor-pointer">
+                <input
+                  className="mt-0.5 size-4 shrink-0 accent-emerald-600"
+                  type="checkbox"
+                  checked={isNegotiationRequested}
+                  onChange={(event) => setIsNegotiationRequested(event.target.checked)}
+                />
+                <span>
+                  <strong className="text-emerald-900">Saya ingin ajukan nego harga via WhatsApp</strong>
+                  <span className="block text-[.66rem] font-normal text-emerald-700">
+                    Harga di atas adalah estimasi acuan. Centang ini untuk mendiskusikan penawaran harga terbaik langsung dengan admin kami di WhatsApp.
+                  </span>
+                </span>
+              </label>
+            </div>
+
             <label className="col-span-6 flex items-start gap-2.5 text-[.7rem] leading-5 text-muted max-[900px]:col-span-3 max-[600px]:col-span-1">
               <input className="mt-1 size-4 shrink-0 accent-crimson" type="checkbox" name="privacy_consent" required />
               <span>Saya setuju data kontak dan perjalanan digunakan untuk memproses permintaan sewa ini sesuai <a className="font-semibold text-crimson underline" href="/syarat-ketentuan">syarat & kebijakan privasi</a>.</span>
@@ -1990,7 +2014,10 @@ function RentalHome() {
                   </div>
                   <div className="mt-[17px] flex items-end justify-between gap-2 border-t border-line pt-[11px]">
                     <div>
-                      <span className="text-[.68rem] text-[#64748b]">{variants.length > 1 ? 'Harga mulai' : 'Harga per unit'}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[.68rem] text-[#64748b]">{variants.length > 1 ? 'Harga mulai' : 'Harga per unit'}</span>
+                        <span className="inline-flex rounded-full bg-emerald-50 px-1.5 py-0.5 text-[.58rem] font-bold text-emerald-700">Bisa Nego</span>
+                      </div>
                       {isNego ? (
                         <strong className="block font-display text-[1rem] font-bold text-cyan">Nego <small className="text-[.68rem] font-medium text-slate-500">/ Hubungi Kami</small></strong>
                       ) : (
@@ -2002,6 +2029,7 @@ function RentalHome() {
                           {modelOriginalPrice && promoVariant && (
                             <span className="text-[.65rem] font-semibold text-yellow-600">Hemat Rp {formatPrice(modelOriginalPrice - modelPrice)}</span>
                           )}
+                          <span className="mt-0.5 block text-[.6rem] font-medium text-emerald-600">✓ Bisa nego harga via WA</span>
                         </>
                       )}
                       {!isNego && !promoVariant && variants.some((v) => v.promo_price) && (() => {
@@ -2230,7 +2258,7 @@ function RentalHome() {
               </div>
             </div>
             <div className="grid content-start gap-4">
-              <div className="flex items-start justify-between gap-3 border-b border-line pb-3"><div><span className="text-[.68rem] text-muted">Harga mulai</span>{(() => {
+              <div className="flex items-start justify-between gap-3 border-b border-line pb-3"><div><div className="flex items-center gap-1.5"><span className="text-[.68rem] text-muted">Harga mulai</span><span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[.6rem] font-bold text-emerald-700">Bisa Nego via WA</span></div>{(() => {
                 const isGroupNego = vehicleDetailGroup.variants.every((v) => isNegoPrice(getVehiclePrice(v)))
                 const detailActiveVariant = !isGroupNego && vehicleDetailGroup.variants.find((v) => {
                   const info = getActivePriceInfo(v, includeToll, selectedDate || null, bookingMode.unit, durasi)
@@ -2291,9 +2319,19 @@ function RentalHome() {
               </div>
             </div>
           </div>
-          <footer className="sticky bottom-0 flex justify-end gap-2 border-t border-line bg-white px-5 py-4 max-[600px]:px-4 max-[600px]:py-3">
-            <button className="h-10 rounded-lg border border-line px-4 text-[.76rem] font-bold text-muted hover:bg-slate-ice" type="button" onClick={() => setVehicleDetailGroup(null)}>Kembali</button>
-            <button className="h-10 rounded-lg bg-crimson px-4 text-[.76rem] font-bold text-white hover:bg-crimson-deep disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-700" type="button" disabled={!canChooseVehicleDetail} onClick={() => { handleSelectVehicle(vehicleDetailGroup); setVehicleDetailGroup(null) }}>{vehicleDetailIsSelected ? 'Sudah dipilih' : hasSelectedSchedule && availabilityStatus === 'ready' ? 'Pilih mobil' : 'Pilih jadwal dulu'}</button>
+          <footer className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t border-line bg-white px-5 py-4 max-[600px]:px-4 max-[600px]:py-3">
+            <a
+              href={`https://wa.me/6281380835156?text=${encodeURIComponent(`Halo Khalisa Rent Car, saya tertarik dengan unit *${vehicleDetailGroup.name}* (estimasi harga acuan Rp ${formatPrice(Math.min(...vehicleDetailGroup.variants.map((v) => parsePrice(getVehiclePrice(v)))))}). Boleh info penawaran harga terbaiknya untuk negosiasi? Terima kasih.`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-50 px-3.5 text-[.74rem] font-bold text-emerald-700 transition-colors hover:bg-emerald-100"
+            >
+              💬 Nego via WA
+            </a>
+            <div className="flex items-center gap-2">
+              <button className="h-10 rounded-lg border border-line px-4 text-[.76rem] font-bold text-muted hover:bg-slate-ice" type="button" onClick={() => setVehicleDetailGroup(null)}>Kembali</button>
+              <button className="h-10 rounded-lg bg-crimson px-4 text-[.76rem] font-bold text-white hover:bg-crimson-deep disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-700" type="button" disabled={!canChooseVehicleDetail} onClick={() => { handleSelectVehicle(vehicleDetailGroup); setVehicleDetailGroup(null) }}>{vehicleDetailIsSelected ? 'Sudah dipilih' : hasSelectedSchedule && availabilityStatus === 'ready' ? 'Pilih mobil' : 'Pilih jadwal dulu'}</button>
+            </div>
           </footer>
         </section>
       </div>}
