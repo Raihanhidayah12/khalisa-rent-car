@@ -395,7 +395,26 @@ function QuickJump({ icon, label, value, tone = 'neutral', onClick }) {
   )
 }
 
+function extractBookingId(val) {
+  if (!val) return ''
+  if (typeof val === 'object' && val !== null) {
+    if (val.id) return extractBookingId(val.id)
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim()
+    if (trimmed.startsWith('{') && trimmed.includes('"id"')) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        if (parsed && parsed.id) return extractBookingId(parsed.id)
+      } catch {}
+    }
+    return trimmed
+  }
+  return String(val)
+}
+
 function BookingStatusSelect({ booking, onChange }) {
+  const bookingId = extractBookingId(booking?.id || booking)
   const isActive = ['pending', 'confirmed'].includes(booking.status)
   const endPassed = booking.end_at ? new Date() >= new Date(booking.end_at) : true
   const canComplete = booking.status === 'confirmed' && endPassed
@@ -408,7 +427,7 @@ function BookingStatusSelect({ booking, onChange }) {
       title={booking.status === 'confirmed' && !endPassed ? `Bisa diselesaikan setelah ${new Date(booking.end_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}` : undefined}
       disabled={!isActive}
       aria-label={`Status booking ${booking.customer_name}`}
-      onChange={(event) => onChange(booking.id, event.target.value)}
+      onChange={(event) => onChange(bookingId, event.target.value)}
     >
       <option value="pending" disabled={booking.status !== 'pending'}>Menunggu</option>
       <option value="confirmed" disabled={booking.status !== 'pending'}>Dikonfirmasi</option>
@@ -480,7 +499,7 @@ function DriverAssignControls({ booking, bookings, drivers, onAssign }) {
           value={booking.driver_id ?? ''}
           disabled={isClosed}
           aria-label={`Penugasan supir untuk ${booking.customer_name}`}
-          onChange={(event) => onAssign(booking.id, event.target.value)}
+          onChange={(event) => onAssign(extractBookingId(booking?.id || booking), event.target.value)}
         >
           <option value="">{assignedDriver ? '-- Lepas supir --' : isClosed ? '-- Tidak ditugaskan --' : '-- Pilih supir --'}</option>
           {drivers.map((driver) => (
@@ -1195,10 +1214,15 @@ function AdminDashboard() {
     setEditingPriceBookingId(null)
   }
 
-  async function handleBookingStatusChange(bookingId, status) {
+  async function handleBookingStatusChange(rawBookingId, status) {
     setBookingActionError('')
     setEditingPriceBookingId(null)
-    const currentBooking = bookings.find((booking) => booking.id === bookingId)
+    const bookingId = extractBookingId(rawBookingId)
+    const currentBooking = bookings.find((booking) => extractBookingId(booking?.id || booking) === bookingId)
+    if (!currentBooking) {
+      setBookingActionError('Data booking tidak ditemukan.')
+      return
+    }
     const allowedTransitions = {
       pending: ['confirmed', 'rejected', 'cancelled'],
       confirmed: ['completed', 'rejected', 'cancelled'],
@@ -1215,9 +1239,9 @@ function AdminDashboard() {
 
     const requiresDriver = String(currentBooking.booking_mode ?? '').toLowerCase().includes('supir')
     const { data, error } = status === 'confirmed' && requiresDriver
-      ? await supabase.rpc('confirm_booking_with_driver', { p_booking_id: String(bookingId) })
+      ? await supabase.rpc('confirm_booking_with_driver', { p_booking_id: bookingId })
       : await supabase.rpc('update_booking_status', {
-        p_booking_id: String(bookingId),
+        p_booking_id: bookingId,
         p_status: status,
       })
 
@@ -1244,8 +1268,21 @@ function AdminDashboard() {
       return
     }
 
-    const updatedBookings = bookings.map((booking) => booking.id === bookingId ? data : booking)
+    const resolvedData = Array.isArray(data) ? data[0] : (typeof data === 'string' && data.startsWith('{') ? JSON.parse(data) : data)
+    const updatedBookings = bookings.map((booking) => {
+      const bId = extractBookingId(booking?.id || booking)
+      if (bId === bookingId) {
+        return resolvedData && typeof resolvedData === 'object' && resolvedData.id
+          ? resolvedData
+          : { ...booking, status }
+      }
+      return booking
+    })
     setBookings(updatedBookings)
+    setSelectedBooking((prev) => {
+      if (!prev) return prev
+      return extractBookingId(prev?.id || prev) === bookingId ? { ...prev, status } : prev
+    })
     const { data: driverList, error: driversError } = await supabase.from('drivers').select('*').order('name', { ascending: true })
     if (driversError) setBookingActionError('Status booking tersimpan, tetapi daftar supir gagal diperbarui. Muat ulang dashboard.')
     else setDrivers(await releaseExpiredDrivers(driverList ?? [], updatedBookings))
@@ -1353,10 +1390,11 @@ function AdminDashboard() {
     setDrivers((current) => current.map((d) => (d.id === driverId ? data : d)))
   }
 
-  async function handleAssignDriver(bookingId, driverId) {
+  async function handleAssignDriver(rawBookingId, driverId) {
     setBookingActionError('')
+    const bookingId = extractBookingId(rawBookingId)
     const targetDriverId = driverId || null
-    const currentBooking = bookings.find((booking) => booking.id === bookingId)
+    const currentBooking = bookings.find((booking) => extractBookingId(booking?.id || booking) === bookingId)
     if (!currentBooking || !['pending', 'confirmed'].includes(currentBooking.status)) {
       setBookingActionError('Supir hanya dapat ditugaskan pada booking yang menunggu atau dikonfirmasi.')
       return
@@ -1367,7 +1405,7 @@ function AdminDashboard() {
     }
 
     const { data, error } = await supabase.rpc('assign_booking_driver', {
-      p_booking_id: String(bookingId),
+      p_booking_id: bookingId,
       p_driver_id: targetDriverId,
     })
 
@@ -1385,7 +1423,21 @@ function AdminDashboard() {
       return
     }
 
-    setBookings((current) => current.map((booking) => (booking.id === bookingId ? data : booking)))
+    const resolvedData = Array.isArray(data) ? data[0] : (typeof data === 'string' && data.startsWith('{') ? JSON.parse(data) : data)
+    const updatedBookings = bookings.map((booking) => {
+      const bId = extractBookingId(booking?.id || booking)
+      if (bId === bookingId) {
+        return resolvedData && typeof resolvedData === 'object' && resolvedData.id
+          ? resolvedData
+          : { ...booking, driver_id: targetDriverId }
+      }
+      return booking
+    })
+    setBookings(updatedBookings)
+    setSelectedBooking((prev) => {
+      if (!prev) return prev
+      return extractBookingId(prev?.id || prev) === bookingId ? { ...prev, driver_id: targetDriverId } : prev
+    })
     const { data: driverList, error: driversError } = await supabase.from('drivers').select('*').order('name', { ascending: true })
     if (driversError) setBookingActionError('Supir berhasil ditugaskan, tetapi daftar supir gagal diperbarui. Muat ulang dashboard.')
     else setDrivers(driverList ?? [])
