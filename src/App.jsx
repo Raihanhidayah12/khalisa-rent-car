@@ -1,4 +1,6 @@
-﻿import { useEffect, useRef, useState } from 'react'
+'use client'
+
+import { useEffect, useRef, useState } from 'react'
 import { ArrowDown, ArrowRight, ArrowUpRight, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Eye, EyeOff, Fuel, LocateFixed, LockKeyhole, Mail, Minus, Plus, Search, Settings2, UserRoundCheck, UsersRound, X } from 'lucide-react'
 import logo from './assets/Logo-cropped.png'
 import waLogo from './assets/Wa.png'
@@ -185,7 +187,7 @@ const benefits = [
 ]
 
 const scrollRevealClasses = 'translate-y-10 opacity-0 scale-[0.98] transition-[opacity,transform] duration-[900ms] [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] data-[reveal=visible]:translate-y-0 data-[reveal=visible]:opacity-100 data-[reveal=visible]:scale-100 motion-reduce:translate-y-0 motion-reduce:opacity-100 motion-reduce:scale-100 motion-reduce:transition-none'
-const geoapifyApiKey = import.meta.env.VITE_GEOAPIFY_API_KEY
+const geoapifyApiKey = process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY || process.env.VITE_GEOAPIFY_API_KEY
 
 function formatPickupAddress(location) {
   const street = [location.housenumber, location.street].filter(Boolean).join(' ')
@@ -2342,4 +2344,5 @@ function App() {
   return <RentalHome />
 }
 
+export { RentalHome, AdminLogin }
 export default App

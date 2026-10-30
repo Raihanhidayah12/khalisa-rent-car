@@ -1,3 +1,5 @@
+'use client'
+
 import { useEffect, useRef, useState } from 'react'
 import { ArrowUpRight, CalendarDays, CarFront, Check, Clock3, Download, LayoutDashboard, LogOut, MapPin, MessageSquare, Phone, Plus, RefreshCw, Search, ShieldCheck, Trash2, UserCheck, UserRound, Wallet, X } from 'lucide-react'
 import ExcelJS from 'exceljs'
@@ -815,7 +817,7 @@ function AdminDashboard() {
 
     async function loadDashboard() {
       try {
-        if (import.meta.env.DEV && window.location.hash === '#ui-preview') {
+        if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined' && window.location.hash === '#ui-preview') {
           if (active) {
             const currentDate = new Date()
             const currentDateKey = getJakartaDateKey(currentDate)
@@ -1064,7 +1066,8 @@ function AdminDashboard() {
     if (imageUrl && !vehicleImage) {
       try {
         const imageHost = new URL(imageUrl).hostname
-        const supabaseHost = new URL(import.meta.env.VITE_SUPABASE_URL).hostname
+        const supabaseConfigUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL || ''
+        const supabaseHost = supabaseConfigUrl ? new URL(supabaseConfigUrl).hostname : ''
         if (imageHost !== supabaseHost) throw new Error('Foto kendaraan harus menggunakan URL Storage Supabase.')
       } catch (error) {
         setVehicleFormError(error.message || 'URL foto tidak valid.')

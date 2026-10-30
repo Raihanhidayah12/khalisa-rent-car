@@ -1,3 +1,5 @@
+'use client'
+
 import { useState } from 'react'
 import { ArrowLeft, CalendarDays, CarFront, Hash, MapPin, MessageSquare, Search, Wallet } from 'lucide-react'
 import logo from './assets/Logo-cropped.png'
