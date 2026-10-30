@@ -726,6 +726,13 @@ function AdminDashboard() {
   const [vehicleSearch, setVehicleSearch] = useState('')
   const [bookingSearch, setBookingSearch] = useState('')
   const [bookingStatusFilter, setBookingStatusFilter] = useState('all')
+  const [bookingPeriod, setBookingPeriod] = useState('all') // 'all' | 'today' | 'tomorrow' | 'next7' | 'month' | 'range'
+  const [bookingMonth, setBookingMonth] = useState(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  })
+  const [bookingRangeStart, setBookingRangeStart] = useState(() => toDateKey(new Date()))
+  const [bookingRangeEnd, setBookingRangeEnd] = useState(() => toDateKey(new Date()))
   const [driverSearch, setDriverSearch] = useState('')
   const [driverStatusFilter, setDriverStatusFilter] = useState('all')
   const [vehicleFormOpen, setVehicleFormOpen] = useState(false)
@@ -1502,7 +1509,50 @@ function AdminDashboard() {
       .slice(0, 3)
       .map(([name]) => name)
   })()
-  const filteredBookings = bookings.filter((booking) => {
+  const bookingDateRange = (() => {
+    if (bookingPeriod === 'all') return null
+    const today = financeTodayKey || getJakartaDateKey(new Date()) || toDateKey(new Date())
+    if (bookingPeriod === 'today') {
+      return { start: today, end: today, label: 'Hari ini' }
+    }
+    if (bookingPeriod === 'tomorrow') {
+      const tomorrow = shiftDateKey(today, 1)
+      return { start: tomorrow, end: tomorrow, label: 'Besok' }
+    }
+    if (bookingPeriod === 'next7') {
+      const next7 = shiftDateKey(today, 6)
+      return { start: today, end: next7, label: '7 hari ke depan' }
+    }
+    if (bookingPeriod === 'month') {
+      const targetMonth = bookingMonth || today.slice(0, 7)
+      const [year, month] = targetMonth.split('-').map(Number)
+      const endDay = toDateKey(new Date(year, month, 0))
+      const monthNames = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+      return {
+        start: `${targetMonth}-01`,
+        end: endDay,
+        label: `${monthNames[month] ?? ''} ${year}`,
+      }
+    }
+    if (bookingPeriod === 'range') {
+      if (!bookingRangeStart || !bookingRangeEnd) return null
+      return {
+        start: bookingRangeStart,
+        end: bookingRangeEnd,
+        label: `${formatDateLabel(bookingRangeStart)} – ${formatDateLabel(bookingRangeEnd)}`,
+      }
+    }
+    return null
+  })()
+
+  const dateFilteredBookings = bookings.filter((booking) => {
+    if (!bookingDateRange) return true
+    const bookingStart = getJakartaDateKey(booking.start_at)
+    if (!bookingStart) return false
+    return bookingStart >= bookingDateRange.start && bookingStart <= bookingDateRange.end
+  })
+
+  const filteredBookings = dateFilteredBookings.filter((booking) => {
     const matchesStatus = bookingStatusFilter === 'all'
       ? true
       : bookingStatusFilter === 'acara'
@@ -1541,13 +1591,13 @@ function AdminDashboard() {
   const completedBookings = bookings.filter((booking) => booking.status === 'completed').length
   const availableDrivers = drivers.filter((driver) => driver.status === 'available').length
   const bookingFilterCounts = {
-    all: bookings.length,
-    acara: bookings.filter((booking) => isEventBooking(booking)).length,
-    pending: pendingBookings,
-    confirmed: confirmedBookings,
-    completed: completedBookings,
-    rejected: bookings.filter((booking) => booking.status === 'rejected').length,
-    cancelled: bookings.filter((booking) => booking.status === 'cancelled').length,
+    all: dateFilteredBookings.length,
+    acara: dateFilteredBookings.filter((booking) => isEventBooking(booking)).length,
+    pending: dateFilteredBookings.filter((booking) => booking.status === 'pending').length,
+    confirmed: dateFilteredBookings.filter((booking) => booking.status === 'confirmed').length,
+    completed: dateFilteredBookings.filter((booking) => booking.status === 'completed').length,
+    rejected: dateFilteredBookings.filter((booking) => booking.status === 'rejected').length,
+    cancelled: dateFilteredBookings.filter((booking) => booking.status === 'cancelled').length,
   }
   const page = tabMeta[activeTab] ?? tabMeta.finance
   const financeRangeLabel = financePeriod === 'all'
@@ -1763,10 +1813,10 @@ function AdminDashboard() {
 
         {activeTab === 'bookings' && (
           <section className="mb-6 grid grid-cols-4 gap-3 max-[900px]:grid-cols-2 max-[500px]:grid-cols-1" aria-label="Ringkasan booking">
-            <StatCard label="Total permintaan" value={loadingBookings ? '—' : bookings.length} active={bookingStatusFilter === 'all'} onClick={() => showBookingDetails('all')} />
-            <StatCard label="Menunggu" value={loadingBookings ? '—' : pendingBookings} tone="warn" active={bookingStatusFilter === 'pending'} onClick={() => showBookingDetails('pending')} />
-            <StatCard label="Dikonfirmasi" value={loadingBookings ? '—' : confirmedBookings} tone="info" active={bookingStatusFilter === 'confirmed'} onClick={() => showBookingDetails('confirmed')} />
-            <StatCard label="Selesai" value={loadingBookings ? '—' : completedBookings} tone="success" active={bookingStatusFilter === 'completed'} onClick={() => showBookingDetails('completed')} />
+            <StatCard label="Total permintaan" value={loadingBookings ? '—' : dateFilteredBookings.length} active={bookingStatusFilter === 'all'} onClick={() => showBookingDetails('all')} />
+            <StatCard label="Menunggu" value={loadingBookings ? '—' : bookingFilterCounts.pending} tone="warn" active={bookingStatusFilter === 'pending'} onClick={() => showBookingDetails('pending')} />
+            <StatCard label="Dikonfirmasi" value={loadingBookings ? '—' : bookingFilterCounts.confirmed} tone="info" active={bookingStatusFilter === 'confirmed'} onClick={() => showBookingDetails('confirmed')} />
+            <StatCard label="Selesai" value={loadingBookings ? '—' : bookingFilterCounts.completed} tone="success" active={bookingStatusFilter === 'completed'} onClick={() => showBookingDetails('completed')} />
           </section>
         )}
 
@@ -1884,12 +1934,123 @@ function AdminDashboard() {
           <section className={panelClass} aria-label="Inbox booking">
             <div className="grid gap-3 border-b border-line px-5 py-4 max-[600px]:px-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div><h2 className="m-0 font-display text-[.98rem] font-bold">Inbox booking</h2><p className="mb-0 mt-1 text-[.7rem] text-muted">Permintaan dari formulir website.</p></div>
+                <div>
+                  <h2 className="m-0 font-display text-[.98rem] font-bold">Inbox booking</h2>
+                  <p className="mb-0 mt-1 text-[.7rem] text-muted">
+                    {bookingDateRange ? (
+                      <span className="inline-flex items-center gap-1.5 font-semibold text-cyan">
+                        <CalendarDays size={12} aria-hidden="true" />
+                        Jadwal: {bookingDateRange.label} ({dateFilteredBookings.length} booking)
+                      </span>
+                    ) : (
+                      'Permintaan dari formulir website.'
+                    )}
+                  </p>
+                </div>
                 <div className={toolbarClass}>
                   <SearchField value={bookingSearch} onChange={(event) => setBookingSearch(event.target.value)} placeholder="Cari pemesan/lokasi" label="Cari booking" />
-                  <button className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-line bg-white px-3.5 text-[.76rem] font-bold text-muted transition-colors hover:border-cyan/40 hover:text-cyan disabled:cursor-not-allowed disabled:opacity-50" type="button" onClick={() => setExportModalOpen(true)} disabled={bookings.length === 0}><Download size={16} aria-hidden="true" />Export Excel</button>
+                  <button
+                    className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-line bg-white px-3.5 text-[.76rem] font-bold text-muted transition-colors hover:border-cyan/40 hover:text-cyan disabled:cursor-not-allowed disabled:opacity-50"
+                    type="button"
+                    onClick={() => {
+                      if (bookingPeriod === 'all') {
+                        setExportMode('current')
+                      } else if (bookingPeriod === 'month') {
+                        setExportMode('month')
+                        setExportMonth(bookingMonth)
+                      } else if (bookingPeriod === 'range') {
+                        setExportMode('range')
+                        setExportRangeStart(bookingRangeStart)
+                        setExportRangeEnd(bookingRangeEnd)
+                      } else {
+                        setExportMode('current')
+                      }
+                      setExportModalOpen(true)
+                    }}
+                    disabled={bookings.length === 0}
+                  >
+                    <Download size={16} aria-hidden="true" />
+                    Export Excel
+                  </button>
                 </div>
               </div>
+              {/* Filter Rentang Jadwal */}
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-slate-ice/70 p-2 max-[600px]:p-2.5">
+                <span className="flex shrink-0 items-center gap-1.5 pl-1 text-[.7rem] font-bold text-ink">
+                  <CalendarDays size={14} className="text-cyan" aria-hidden="true" />
+                  <span>Jadwal:</span>
+                </span>
+                
+                <div className="scrollbar-none flex flex-wrap items-center gap-1.5">
+                  {[
+                    ['all', 'Semua waktu'],
+                    ['today', 'Hari ini'],
+                    ['tomorrow', 'Besok'],
+                    ['next7', '7 hari'],
+                    ['month', 'Per Bulan'],
+                    ['range', 'Rentang Tanggal'],
+                  ].map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={`inline-flex h-7 items-center rounded-lg px-2.5 text-[.68rem] font-bold transition-colors ${
+                        bookingPeriod === mode
+                          ? 'bg-ink text-white shadow-sm'
+                          : 'border border-line bg-white text-muted hover:border-cyan/40 hover:text-ink'
+                      }`}
+                      onClick={() => setBookingPeriod(mode)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {bookingPeriod === 'month' && (
+                  <div className="flex items-center gap-1.5 pl-1">
+                    <input
+                      type="month"
+                      className="h-7 rounded-lg border border-line bg-white px-2 text-[.7rem] font-medium text-ink outline-none focus:border-cyan"
+                      value={bookingMonth}
+                      onChange={(e) => setBookingMonth(e.target.value)}
+                      aria-label="Pilih bulan booking"
+                    />
+                  </div>
+                )}
+
+                {bookingPeriod === 'range' && (
+                  <div className="flex flex-wrap items-center gap-1.5 pl-1">
+                    <input
+                      type="date"
+                      className="h-7 rounded-lg border border-line bg-white px-2 text-[.7rem] font-medium text-ink outline-none focus:border-cyan"
+                      value={bookingRangeStart}
+                      max={bookingRangeEnd || undefined}
+                      onChange={(e) => setBookingRangeStart(e.target.value)}
+                      aria-label="Tanggal awal booking"
+                    />
+                    <span className="text-[.68rem] text-muted">s/d</span>
+                    <input
+                      type="date"
+                      className="h-7 rounded-lg border border-line bg-white px-2 text-[.7rem] font-medium text-ink outline-none focus:border-cyan"
+                      value={bookingRangeEnd}
+                      min={bookingRangeStart || undefined}
+                      onChange={(e) => setBookingRangeEnd(e.target.value)}
+                      aria-label="Tanggal akhir booking"
+                    />
+                  </div>
+                )}
+
+                {bookingPeriod !== 'all' && (
+                  <button
+                    type="button"
+                    className="ml-auto inline-flex h-7 items-center gap-1 rounded-lg border border-line bg-white px-2 text-[.66rem] font-semibold text-rose-600 transition-colors hover:bg-rose-50"
+                    onClick={() => setBookingPeriod('all')}
+                  >
+                    <X size={12} aria-hidden="true" />
+                    Reset
+                  </button>
+                )}
+              </div>
+
               <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5" role="tablist" aria-label="Filter status booking">
                 {[
                   ['all', 'Semua'],
@@ -2335,7 +2496,12 @@ function AdminDashboard() {
         }
         let exportBookings = []
         let rangeLabel = ''
-        if (exportMode === 'month') {
+        if (exportMode === 'current') {
+          exportBookings = filteredBookings
+          rangeLabel = bookingDateRange
+            ? `Tampilan_${bookingDateRange.label.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+            : 'Tampilan_Web'
+        } else if (exportMode === 'month') {
           const [y, m] = exportMonth.split('-').map(Number)
           const start = new Date(y, m - 1, 1)
           const end   = new Date(y, m, 0, 23, 59, 59, 999) // akhir bulan
@@ -2382,8 +2548,12 @@ function AdminDashboard() {
 
               <div className="grid gap-5 p-5">
                 {/* Pilih mode */}
-                <div className="grid grid-cols-2 gap-2">
-                  {[['month', 'Per Bulan'], ['range', 'Rentang Tanggal']].map(([mode, label]) => (
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    ['current', 'Tampilan Web'],
+                    ['month', 'Per Bulan'],
+                    ['range', 'Rentang Tanggal'],
+                  ].map(([mode, label]) => (
                     <button
                       key={mode}
                       type="button"
@@ -2394,6 +2564,19 @@ function AdminDashboard() {
                     </button>
                   ))}
                 </div>
+
+                {/* Tampilan web aktif */}
+                {exportMode === 'current' && (
+                  <div className="rounded-xl border border-line bg-slate-ice p-3.5 text-[.74rem] text-muted">
+                    <div className="flex items-center justify-between font-semibold text-ink">
+                      <span>Data yang akan diunduh:</span>
+                      <span className="font-bold text-cyan">{exportBookings.length} booking</span>
+                    </div>
+                    <p className="mb-0 mt-1.5 text-[.68rem] leading-relaxed text-muted">
+                      Mengikuti filter rentang waktu ({bookingDateRange ? bookingDateRange.label : 'Semua waktu'}), status ({bookingStatusFilter === 'all' ? 'Semua status' : bookingStatusFilter}), dan pencarian yang aktif di dashboard.
+                    </p>
+                  </div>
+                )}
 
                 {/* Input per bulan */}
                 {exportMode === 'month' && (
