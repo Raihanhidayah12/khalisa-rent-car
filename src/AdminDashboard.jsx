@@ -721,8 +721,8 @@ function AdminDashboard() {
   const [financePeriod, setFinancePeriod] = useState('month')
   const [financeStartDate, setFinanceStartDate] = useState('')
   const [financeEndDate, setFinanceEndDate] = useState('')
-  const [financeTodayKey, setFinanceTodayKey] = useState('')
-  const [financeMonthKey, setFinanceMonthKey] = useState('')
+  const [financeTodayKey, setFinanceTodayKey] = useState(() => getJakartaDateKey(new Date()) || toDateKey(new Date()))
+  const [financeMonthKey, setFinanceMonthKey] = useState(() => (getJakartaDateKey(new Date()) || toDateKey(new Date())).slice(0, 7))
   const [vehicleSearch, setVehicleSearch] = useState('')
   const [bookingSearch, setBookingSearch] = useState('')
   const [bookingStatusFilter, setBookingStatusFilter] = useState('all')
@@ -2338,7 +2338,8 @@ function AdminDashboard() {
               const range = financeDateRange
               let days = []
               if (!range) {
-                days = Array.from({ length: 30 }, (_, i) => shiftDateKey(financeTodayKey, i - 29))
+                const todayKey = financeTodayKey || getJakartaDateKey(new Date()) || toDateKey(new Date())
+                days = Array.from({ length: 30 }, (_, i) => shiftDateKey(todayKey, i - 29))
               } else {
                 const [startYear, startMonth, startDay] = range.start.split('-').map(Number)
                 const [endYear, endMonth, endDay] = range.end.split('-').map(Number)
@@ -2390,12 +2391,12 @@ function AdminDashboard() {
                   : new Date(s.key + 'T00:00:00').toLocaleDateString('id-ID', { weekday: days.length <= 7 ? 'short' : undefined, day: 'numeric', month: days.length > 14 ? 'short' : undefined }),
               }))
               const polyline = points.map((p) => `${p.x},${p.y}`).join(' ')
-              const areaPath = [
+              const areaPath = points.length > 0 ? [
                 `M ${points[0].x},${padY + chartH}`,
                 ...points.map((p) => `L ${p.x},${p.y}`),
                 `L ${points[points.length - 1].x},${padY + chartH}`,
                 'Z',
-              ].join(' ')
+              ].join(' ') : ''
               const showLabelEvery = slots.length <= 7 ? 1 : slots.length <= 14 ? 2 : slots.length <= 30 ? 3 : 1
               const periodLabel = financePeriod === 'all' ? '30 hari terakhir' : financePeriodOptions.find((o) => o.id === financePeriod)?.label ?? ''
 
@@ -2415,8 +2416,8 @@ function AdminDashboard() {
                       const val = Math.round((1 - t) * maxCount)
                       return <text key={t} x={padX} y={y - 3} fontSize="8" fill="#94a3b8">{val}</text>
                     })}
-                    <path d={areaPath} fill="rgba(6,182,212,0.07)" />
-                    <polyline points={polyline} fill="none" stroke="#06b6d4" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+                    {areaPath ? <path d={areaPath} fill="rgba(6,182,212,0.07)" /> : null}
+                    {polyline ? <polyline points={polyline} fill="none" stroke="#06b6d4" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" /> : null}
                     {points.map((p, i) => (
                       <g key={i}>
                         <circle cx={p.x} cy={p.y} r={slots.length <= 14 ? 4 : 3} fill="white" stroke="#06b6d4" strokeWidth="2" />
