@@ -8,7 +8,7 @@ import logo from './assets/Logo-cropped.png'
 const logoSrc = logo?.src || logo
 import { adminReloadSessionStorageKey, supabase, supabaseAuthStorageKey } from './supabaseClient'
 import { formatJakartaDateTime } from './bookingUtils'
-import { formatDuration, formatPrice, getAvailableVehicleStock, getVehicleStock, isVehicleReady, parsePrice, getActivePromo } from './vehicleUtils'
+import { formatDuration, formatPrice, getAvailableVehicleStock, getVehicleStock, isVehicleReady, parsePrice, getActivePromo, isNegoPrice } from './vehicleUtils'
 
 const emptyVehicleDraft = {
   name: '',
@@ -1095,7 +1095,7 @@ function AdminDashboard() {
     
     const payload = {
       name: vehicleDraft.name.trim(),
-      price: vehicleDraft.price.trim(),
+      price: vehicleDraft.price.trim() || '-',
       price_without_toll: vehicleDraft.price_without_toll.trim() || null,
       promo_price: vehicleDraft.promo_price.trim() || null,
       promo_start: vehicleDraft.promo_start || null,
@@ -1887,7 +1887,13 @@ function AdminDashboard() {
                           </td>
                           <td className="px-5 py-3.5"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[.65rem] font-bold ${vehicle.status === 'maintenance' ? 'bg-slate-100 text-slate-600' : isVehicleReady(vehicle) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}><span className={`size-1.5 rounded-full ${vehicle.status === 'maintenance' ? 'bg-slate-400' : isVehicleReady(vehicle) ? 'bg-emerald-500' : 'bg-amber-500'}`} />{vehicle.status === 'maintenance' ? 'Perawatan' : isVehicleReady(vehicle) ? 'Ready' : 'Booking'}</span></td>
                           <td className="px-5 py-3.5"><span className={`inline-flex rounded-full px-2.5 py-0.5 text-[.65rem] font-bold ${vehicle.is_active ? 'bg-cyan/10 text-[#0369a1]' : 'bg-slate-100 text-slate-500'}`}>{vehicle.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
-                          <td className="px-5 py-3.5 text-right font-semibold text-ink">Rp {formatPrice(parsePrice(vehicle.price))}</td>
+                          <td className="px-5 py-3.5 text-right font-semibold text-ink">
+                            {isNegoPrice(vehicle.price) ? (
+                              <span className="inline-flex rounded-full bg-cyan/10 px-2.5 py-1 text-[.72rem] font-bold text-cyan">Nego</span>
+                            ) : (
+                              `Rp ${formatPrice(parsePrice(vehicle.price))}`
+                            )}
+                          </td>
                           <td className="px-5 py-3.5 text-right"><button className="rounded-lg border border-line px-3 py-1.5 text-[.72rem] font-bold text-muted transition-colors hover:border-cyan/40 hover:text-cyan" type="button" onClick={() => openVehicleForm(vehicle)}>Ubah</button></td>
                         </tr>
                       ))}
@@ -1921,7 +1927,11 @@ function AdminDashboard() {
                         )
                       })()}
                       <div className="mt-3 flex items-center justify-between gap-3 border-t border-line pt-3">
-                        <strong className="text-[.82rem]">Rp {formatPrice(parsePrice(vehicle.price))}</strong>
+                        {isNegoPrice(vehicle.price) ? (
+                          <span className="inline-flex rounded-full bg-cyan/10 px-2.5 py-1 text-[.72rem] font-bold text-cyan">Harga Nego</span>
+                        ) : (
+                          <strong className="text-[.82rem]">Rp {formatPrice(parsePrice(vehicle.price))}</strong>
+                        )}
                         <button className="rounded-lg border border-line px-3 py-1.5 text-[.72rem] font-bold text-muted" type="button" onClick={() => openVehicleForm(vehicle)}>Ubah</button>
                       </div>
                     </article>
@@ -2866,7 +2876,7 @@ function AdminDashboard() {
             })} />{option.label}</label>)}</div></fieldset>
             <label className="grid gap-1.5"><span className="text-[.72rem] font-bold">Detail transmisi</span><input className={fieldClass} maxLength={120} value={vehicleDraft.transmission_details} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, transmission_details: event.target.value }))} placeholder="CVT / e-CVT Hybrid" /></label>
             <label className="grid gap-1.5"><span className="text-[.72rem] font-bold">Teknologi mesin</span><select className={fieldClass} value={vehicleDraft.powertrain_type} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, powertrain_type: event.target.value }))}><option value="">Belum ditentukan</option><option value="gasoline">Bensin</option><option value="hybrid">Hybrid</option><option value="ev_phev">EV / PHEV</option></select></label>
-            <label className="grid gap-1.5"><span className="text-[.72rem] font-bold">Harga dengan tol / 12 jam</span><input className={fieldClass} required maxLength={24} value={vehicleDraft.price} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, price: event.target.value }))} placeholder="1.100.000" /></label>
+            <label className="grid gap-1.5"><span className="text-[.72rem] font-bold">Harga dengan tol / 12 jam</span><input className={fieldClass} maxLength={24} value={vehicleDraft.price} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, price: event.target.value }))} placeholder="1.100.000 atau '-' (Nego)" /><span className="text-[.68rem] text-muted">Isi tanda &apos;-&apos; atau kosongkan jika harga Nego via WhatsApp</span></label>
             <label className="grid gap-1.5"><span className="text-[.72rem] font-bold">Harga tanpa tol / 12 jam</span><input className={fieldClass} maxLength={24} value={vehicleDraft.price_without_toll} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, price_without_toll: event.target.value }))} placeholder="1.000.000" /><span className="text-[.68rem] text-muted">Kosongkan jika sama dengan harga dengan tol</span></label>
             <label className="grid gap-1.5"><span className="text-[.72rem] font-bold">Tempat duduk</span><input className={fieldClass} required maxLength={40} value={vehicleDraft.seats} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, seats: event.target.value }))} placeholder="6 kursi" /></label>
             <div className="grid gap-2 rounded-lg border border-line p-3"><span className="text-[.8rem] font-bold text-ink">Jumlah unit per transmisi</span>{vehicleDraft.transmission_options.map((type) => <label className="grid grid-cols-[1fr_100px] items-center gap-3 text-[.8rem] font-medium text-slate-900" key={type}><span>{type === 'automatic' ? 'Matic' : 'Manual'}</span><input className={fieldClass} type="number" min="0" step="1" value={vehicleDraft.transmission_stock[type] ?? 0} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, transmission_stock: { ...draft.transmission_stock, [type]: event.target.value } }))} /></label>)}<span className="text-[.78rem] font-semibold text-slate-800">Total baru: {vehicleDraft.transmission_options.reduce((total, type) => total + (Number(vehicleDraft.transmission_stock[type]) || 0), 0)} unit</span>{vehicleDraft.existing_stock > 0 && <span className="text-[.76rem] font-medium leading-5 text-slate-700">Stok lama {vehicleDraft.existing_stock} unit · belum dialokasikan {Math.max(0, vehicleDraft.existing_stock - vehicleDraft.transmission_options.reduce((total, type) => total + (Number(vehicleDraft.transmission_stock[type]) || 0), 0))} unit</span>}</div>

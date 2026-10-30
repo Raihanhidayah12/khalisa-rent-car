@@ -1,9 +1,24 @@
+export function isNegoPrice(price) {
+  if (price === null || price === undefined) return true
+  const clean = String(price).trim()
+  if (!clean || clean === '-' || clean.toLowerCase() === 'nego' || clean === '0') return true
+  const num = parseInt(clean.replace(/\./g, ''), 10)
+  return !Number.isFinite(num) || num <= 0
+}
+
 export function parsePrice(priceStr) {
-  return parseInt(priceStr.replace(/\./g, ''), 10)
+  if (!priceStr) return 0
+  const clean = String(priceStr).replace(/\./g, '').trim()
+  if (clean === '-' || clean.toLowerCase() === 'nego') return 0
+  const val = parseInt(clean, 10)
+  return Number.isFinite(val) ? Math.max(0, val) : 0
 }
 
 export function formatPrice(number) {
-  return number.toLocaleString('id-ID')
+  if (number === null || number === undefined || number === '-' || String(number).toLowerCase() === 'nego') return 'Nego'
+  const num = typeof number === 'string' ? parsePrice(number) : Number(number)
+  if (!Number.isFinite(num) || num <= 0) return 'Nego'
+  return num.toLocaleString('id-ID')
 }
 
 export function formatDuration(duration, unit) {
@@ -94,6 +109,18 @@ export function getActivePriceInfo(vehicle, includeToll = true, checkDate = null
   const priceWithToll = vehicle.price
   const priceWithoutToll = vehicle.price_without_toll || vehicle.price
   const basePrice = includeToll ? priceWithToll : priceWithoutToll
+
+  if (isNegoPrice(basePrice)) {
+    return {
+      price: '-',
+      originalPrice: null,
+      isPromo: false,
+      isSpecial: false,
+      isNego: true,
+      promoEnd: null,
+      discount: 0,
+    }
+  }
 
   // Priority 1: Promo
   const promo = getActivePromo(vehicle, checkDate)

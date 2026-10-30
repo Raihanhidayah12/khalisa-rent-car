@@ -10,7 +10,7 @@ import AdminDashboard from './AdminDashboard'
 import BookingTracker from './BookingTracker'
 import LegalPage from './LegalPage'
 import { supabase } from './supabaseClient'
-import { formatDuration, formatPrice, isVehicleReady, parsePrice, getActivePriceInfo } from './vehicleUtils'
+import { formatDuration, formatPrice, isVehicleReady, parsePrice, getActivePriceInfo, isNegoPrice } from './vehicleUtils'
 import { formatJakartaDateTime, generateBookingCode, toJakartaISOString } from './bookingUtils'
 
 const logoSrc = logo?.src || logo
@@ -1393,9 +1393,14 @@ function RentalHome() {
     }
 
     const totalSelectedUnits = selectedVehicles.reduce((total, vehicle) => total + vehicle.quantity, 0)
-    const kendaraanLines = selectedVehicles.map((vehicle, index) =>
-      `${index + 1}. ${vehicle.name} (${getVehicleVariantLabel(vehicle, vehicle.transmission_type)}) x ${vehicle.quantity}\n   Estimasi biaya: Rp ${formatPrice(vehicle.price)} / ${formatDuration(durasi, bookingMode.unit)}`
-    ).join('\n')
+    const kendaraanLines = selectedVehicles.map((vehicle, index) => {
+      const activePrice = getVehiclePrice(vehicle)
+      const isNego = isNegoPrice(activePrice)
+      const costStr = isNego
+        ? 'Nego (Konsultasi via WA)'
+        : `Rp ${formatPrice(activePrice)} / ${formatDuration(durasi, bookingMode.unit)}`
+      return `${index + 1}. ${vehicle.name} (${getVehicleVariantLabel(vehicle, vehicle.transmission_type)}) x ${vehicle.quantity}\n   Estimasi biaya: ${costStr}`
+    }).join('\n')
 
     const lines = [
       'PERMINTAAN PEMESANAN KENDARAAN',
@@ -1703,7 +1708,7 @@ function RentalHome() {
                           const typeLabel = getVehicleVariantLabel(vehicle, transmissionType)
                           return (
                             <div className="flex items-center justify-between gap-3 rounded-md bg-slate-ice px-3 py-2" key={`${vehicle.id}-${transmissionType ?? 'default'}`}>
-                              <span className="grid min-w-0 gap-0.5"><strong className="text-[.74rem] text-ink">{typeLabel}</strong><small className="text-[.68rem] font-medium text-slate-700">{available} unit · Rp {formatPrice(unitPrice)} / unit</small>{quantity > 0 && <small className="text-[.68rem] font-semibold text-crimson">Subtotal Rp {formatPrice(unitPrice * quantity)}</small>}</span>
+                              <span className="grid min-w-0 gap-0.5"><strong className="text-[.74rem] text-ink">{typeLabel}</strong><small className="text-[.68rem] font-medium text-slate-700">{available} unit · {isNegoPrice(unitPrice) ? 'Nego' : `Rp ${formatPrice(unitPrice)}`} / unit</small>{quantity > 0 && <small className="text-[.68rem] font-semibold text-crimson">{isNegoPrice(unitPrice) ? 'Biaya Nego via WA' : `Subtotal Rp ${formatPrice(unitPrice * quantity)}`}</small>}</span>
                               <div className="flex items-center gap-2">
                                 <button className="grid size-8 place-items-center rounded-md border border-line bg-white text-muted disabled:cursor-not-allowed disabled:opacity-40" type="button" aria-label={`Kurangi ${vehicleGroup.name} ${typeLabel}`} disabled={quantity === 0} onClick={() => setVehicleTransmissionQuantity(vehicle, transmissionType, quantity - 1)}><Minus size={14} aria-hidden="true" /></button>
                                 <output className="min-w-5 text-center text-[.78rem] font-bold text-ink" aria-label={`Jumlah ${typeLabel}`}>{quantity}</output>
@@ -1938,9 +1943,10 @@ function RentalHome() {
                 return total + Math.max(0, totalAvailable - allocatedAvailable)
               }, 0)
               const modelPrice = Math.min(...variants.map((variant) => Math.round(parsePrice(getVehiclePrice(variant)) * hitungMultiplier(bookingMode, durasi))))
+              const isNego = variants.every((variant) => isNegoPrice(getVehiclePrice(variant))) || isNegoPrice(modelPrice)
               // Cek promo dari variant pertama yang punya promo aktif
-              const promoVariant = variants.find((v) => getActivePriceInfo(v, includeToll, selectedDate || null, bookingMode.unit, durasi).isPromo)
-              const specialVariant = !promoVariant && variants.find((v) => getActivePriceInfo(v, includeToll, selectedDate || null, bookingMode.unit, durasi).isSpecial)
+              const promoVariant = !isNego && variants.find((v) => getActivePriceInfo(v, includeToll, selectedDate || null, bookingMode.unit, durasi).isPromo)
+              const specialVariant = !isNego && !promoVariant && variants.find((v) => getActivePriceInfo(v, includeToll, selectedDate || null, bookingMode.unit, durasi).isSpecial)
               const modelOriginalPrice = (promoVariant || specialVariant)
                 ? Math.min(...variants.map((variant) => Math.round(parsePrice(getActivePriceInfo(variant, includeToll, selectedDate || null, bookingMode.unit, durasi).originalPrice || getVehiclePrice(variant)) * hitungMultiplier(bookingMode, durasi))))
                 : null
@@ -1985,14 +1991,20 @@ function RentalHome() {
                   <div className="mt-[17px] flex items-end justify-between gap-2 border-t border-line pt-[11px]">
                     <div>
                       <span className="text-[.68rem] text-[#64748b]">{variants.length > 1 ? 'Harga mulai' : 'Harga per unit'}</span>
-                      {modelOriginalPrice && (
-                        <span className="block text-[.7rem] text-slate-400 line-through">Rp {formatPrice(modelOriginalPrice)}</span>
+                      {isNego ? (
+                        <strong className="block font-display text-[1rem] font-bold text-cyan">Nego <small className="text-[.68rem] font-medium text-slate-500">/ Hubungi Kami</small></strong>
+                      ) : (
+                        <>
+                          {modelOriginalPrice && (
+                            <span className="block text-[.7rem] text-slate-400 line-through">Rp {formatPrice(modelOriginalPrice)}</span>
+                          )}
+                          <strong className={`block text-[.89rem] ${promoVariant ? 'text-yellow-600' : specialVariant ? 'text-blue-600' : 'text-crimson'}`}>Rp {formatPrice(modelPrice)}<small className="text-[.67rem] font-medium text-[#64748b]"> / {formatDuration(durasi, bookingMode.unit)}</small></strong>
+                          {modelOriginalPrice && promoVariant && (
+                            <span className="text-[.65rem] font-semibold text-yellow-600">Hemat Rp {formatPrice(modelOriginalPrice - modelPrice)}</span>
+                          )}
+                        </>
                       )}
-                      <strong className={`block text-[.89rem] ${promoVariant ? 'text-yellow-600' : specialVariant ? 'text-blue-600' : 'text-crimson'}`}>Rp {formatPrice(modelPrice)}<small className="text-[.67rem] font-medium text-[#64748b]"> / {formatDuration(durasi, bookingMode.unit)}</small></strong>
-                      {modelOriginalPrice && promoVariant && (
-                        <span className="text-[.65rem] font-semibold text-yellow-600">Hemat Rp {formatPrice(modelOriginalPrice - modelPrice)}</span>
-                      )}
-                      {!promoVariant && variants.some((v) => v.promo_price) && (() => {
+                      {!isNego && !promoVariant && variants.some((v) => v.promo_price) && (() => {
                         const promoVehicle = variants.find((v) => v.promo_price)
                         const promoEnd = promoVehicle?.promo_end
                         const promoStart = promoVehicle?.promo_start
@@ -2219,43 +2231,50 @@ function RentalHome() {
             </div>
             <div className="grid content-start gap-4">
               <div className="flex items-start justify-between gap-3 border-b border-line pb-3"><div><span className="text-[.68rem] text-muted">Harga mulai</span>{(() => {
-                const detailPriceInfo = getActivePriceInfo(vehicleDetailGroup.variants[0], includeToll, selectedDate || null, bookingMode.unit, durasi)
-                const detailActiveVariant = vehicleDetailGroup.variants.find((v) => {
+                const isGroupNego = vehicleDetailGroup.variants.every((v) => isNegoPrice(getVehiclePrice(v)))
+                const detailActiveVariant = !isGroupNego && vehicleDetailGroup.variants.find((v) => {
                   const info = getActivePriceInfo(v, includeToll, selectedDate || null, bookingMode.unit, durasi)
                   return info.isPromo || info.isSpecial
                 })
                 const detailPrice = Math.min(...vehicleDetailGroup.variants.map((v) => Math.round(parsePrice(getVehiclePrice(v)) * hitungMultiplier(bookingMode, durasi))))
-                const detailOrigPrice = detailActiveVariant
+                const isDetailNego = isGroupNego || isNegoPrice(detailPrice)
+                const detailOrigPrice = (!isDetailNego && detailActiveVariant)
                   ? Math.min(...vehicleDetailGroup.variants.map((v) => Math.round(parsePrice(getActivePriceInfo(v, includeToll, selectedDate || null, bookingMode.unit, durasi).originalPrice || getVehiclePrice(v)) * hitungMultiplier(bookingMode, durasi))))
                   : null
-                const isPromo = detailActiveVariant && getActivePriceInfo(detailActiveVariant, includeToll, selectedDate || null, bookingMode.unit, durasi).isPromo
-                const isSpecial = detailActiveVariant && getActivePriceInfo(detailActiveVariant, includeToll, selectedDate || null, bookingMode.unit, durasi).isSpecial
+                const isPromo = !isDetailNego && detailActiveVariant && getActivePriceInfo(detailActiveVariant, includeToll, selectedDate || null, bookingMode.unit, durasi).isPromo
+                const isSpecial = !isDetailNego && detailActiveVariant && getActivePriceInfo(detailActiveVariant, includeToll, selectedDate || null, bookingMode.unit, durasi).isSpecial
                 const specialLabel = isSpecial && getActivePriceInfo(detailActiveVariant, includeToll, selectedDate || null, bookingMode.unit, durasi).specialLabel
                 return (<>
-                  {detailOrigPrice && <span className="block text-[.78rem] text-slate-400 line-through">Rp {formatPrice(detailOrigPrice)}</span>}
-                  <strong className={`mt-0.5 block font-display text-[1.25rem] ${isPromo ? 'text-yellow-600' : isSpecial ? 'text-blue-600' : 'text-crimson'}`}>Rp {formatPrice(detailPrice)}<small className="text-[.72rem] font-medium text-muted"> / {formatDuration(durasi, bookingMode.unit)}</small></strong>
-                  {detailOrigPrice && isPromo && <span className="text-[.7rem] font-semibold text-yellow-600">Hemat Rp {formatPrice(detailOrigPrice - detailPrice)}</span>}
-                  {isSpecial && (() => {
-                    const minDays = Number(detailActiveVariant.special_min_days) || 3
-                    return (
-                      <span className="mt-[3px] block">
-                        <span className="text-[.7rem] font-semibold text-blue-600">{specialLabel || 'Harga Spesial'}</span>
-                        <span className="mt-[2px] block text-[.62rem] leading-[1.5] text-slate-500">Harga ini berlaku saat sewa ≥ {minDays} hari berturut-turut</span>
-                      </span>
-                    )
-                  })()}
-                  {!detailOrigPrice && !isPromo && (() => {
-                    const anySpecial = vehicleDetailGroup.variants.find((v) => v.special_price)
-                    if (!anySpecial) return null
-                    const minDays = Number(anySpecial.special_min_days) || 3
-                    const label = anySpecial.special_label || `Min. ${minDays} hari`
-                    return (
-                      <span className="mt-[3px] block">
-                        <span className="text-[.7rem] font-semibold text-blue-500">{label}</span>
-                        <span className="mt-[2px] block text-[.62rem] leading-[1.5] text-slate-500">Sewa ≥ {minDays} hari dapat harga spesial</span>
-                      </span>
-                    )
-                  })()}
+                  {isDetailNego ? (
+                    <strong className="mt-0.5 block font-display text-[1.25rem] font-bold text-cyan">Nego <small className="text-[.72rem] font-medium text-muted">/ Hubungi Kami</small></strong>
+                  ) : (
+                    <>
+                      {detailOrigPrice && <span className="block text-[.78rem] text-slate-400 line-through">Rp {formatPrice(detailOrigPrice)}</span>}
+                      <strong className={`mt-0.5 block font-display text-[1.25rem] ${isPromo ? 'text-yellow-600' : isSpecial ? 'text-blue-600' : 'text-crimson'}`}>Rp {formatPrice(detailPrice)}<small className="text-[.72rem] font-medium text-muted"> / {formatDuration(durasi, bookingMode.unit)}</small></strong>
+                      {detailOrigPrice && isPromo && <span className="text-[.7rem] font-semibold text-yellow-600">Hemat Rp {formatPrice(detailOrigPrice - detailPrice)}</span>}
+                      {isSpecial && (() => {
+                        const minDays = Number(detailActiveVariant.special_min_days) || 3
+                        return (
+                          <span className="mt-[3px] block">
+                            <span className="text-[.7rem] font-semibold text-blue-600">{specialLabel || 'Harga Spesial'}</span>
+                            <span className="mt-[2px] block text-[.62rem] leading-[1.5] text-slate-500">Harga ini berlaku saat sewa ≥ {minDays} hari berturut-turut</span>
+                          </span>
+                        )
+                      })()}
+                      {!detailOrigPrice && !isPromo && (() => {
+                        const anySpecial = vehicleDetailGroup.variants.find((v) => v.special_price)
+                        if (!anySpecial) return null
+                        const minDays = Number(anySpecial.special_min_days) || 3
+                        const label = anySpecial.special_label || `Min. ${minDays} hari`
+                        return (
+                          <span className="mt-[3px] block">
+                            <span className="text-[.7rem] font-semibold text-blue-500">{label}</span>
+                            <span className="mt-[2px] block text-[.62rem] leading-[1.5] text-slate-500">Sewa ≥ {minDays} hari dapat harga spesial</span>
+                          </span>
+                        )
+                      })()}
+                    </>
+                  )}
                 </>)
               })()}</div><span className="rounded-full bg-cyan/10 px-2.5 py-1 text-[.64rem] font-bold uppercase text-[#0369a1]">{vehicleDetailGroup.variants[0].category}</span></div>
               <div className="grid gap-2">
@@ -2263,9 +2282,10 @@ function RentalHome() {
                 {detailVariants.map(({ vehicle, transmissionType, available, unallocated }) => {
                   const label = unallocated ? 'Tipe belum dialokasikan' : getVehicleVariantLabel(vehicle, transmissionType)
                   const priceInfo = getVehiclePriceInfo(vehicle)
+                  const isUnitNego = isNegoPrice(priceInfo.price) || isNegoPrice(getVehiclePrice(vehicle))
                   const unitPrice = Math.round(parsePrice(priceInfo.price) * hitungMultiplier(bookingMode, durasi))
-                  const unitOriginalPrice = (priceInfo.isPromo || priceInfo.isSpecial) ? Math.round(parsePrice(priceInfo.originalPrice) * hitungMultiplier(bookingMode, durasi)) : null
-                  return <article className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2.5" key={`${vehicle.id}-${transmissionType ?? 'unallocated'}`}><div className="grid min-w-0 gap-1"><strong className={`text-[.76rem] ${unallocated ? 'text-amber-900' : 'text-ink'}`}>{label}</strong>{vehicle.transmission_details && <span className="truncate text-[.68rem] text-muted">{vehicle.transmission_details}</span>}<span className="text-[.68rem] text-slate-700">{hasSelectedSchedule && availabilityStatus === 'ready' ? `${available} unit tersedia di jadwal ini` : `${available} unit terdaftar`}</span></div><div className="shrink-0 text-right">{unitOriginalPrice && <span className="block text-[.64rem] text-slate-400 line-through">Rp {formatPrice(unitOriginalPrice)}</span>}<strong className={`text-[.76rem] ${priceInfo.isPromo ? 'text-yellow-600' : priceInfo.isSpecial ? 'text-blue-600' : 'text-crimson'}`}>Rp {formatPrice(unitPrice)}</strong><small className="block text-[.64rem] font-medium text-muted">per unit</small>{unitOriginalPrice && priceInfo.isPromo && <span className="block text-[.6rem] font-semibold text-yellow-600">Hemat Rp {formatPrice(unitOriginalPrice - unitPrice)}</span>}{unitOriginalPrice && priceInfo.isSpecial && <span className="block text-[.6rem] font-semibold text-blue-600">{priceInfo.specialLabel || 'Harga Spesial'}</span>}</div></article>
+                  const unitOriginalPrice = (!isUnitNego && (priceInfo.isPromo || priceInfo.isSpecial)) ? Math.round(parsePrice(priceInfo.originalPrice) * hitungMultiplier(bookingMode, durasi)) : null
+                  return <article className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2.5" key={`${vehicle.id}-${transmissionType ?? 'unallocated'}`}><div className="grid min-w-0 gap-1"><strong className={`text-[.76rem] ${unallocated ? 'text-amber-900' : 'text-ink'}`}>{label}</strong>{vehicle.transmission_details && <span className="truncate text-[.68rem] text-muted">{vehicle.transmission_details}</span>}<span className="text-[.68rem] text-slate-700">{hasSelectedSchedule && availabilityStatus === 'ready' ? `${available} unit tersedia di jadwal ini` : `${available} unit terdaftar`}</span></div><div className="shrink-0 text-right">{isUnitNego ? <strong className="text-[.76rem] font-bold text-cyan">Nego</strong> : <>{unitOriginalPrice && <span className="block text-[.64rem] text-slate-400 line-through">Rp {formatPrice(unitOriginalPrice)}</span>}<strong className={`text-[.76rem] ${priceInfo.isPromo ? 'text-yellow-600' : priceInfo.isSpecial ? 'text-blue-600' : 'text-crimson'}`}>Rp {formatPrice(unitPrice)}</strong><small className="block text-[.64rem] font-medium text-muted">per unit</small>{unitOriginalPrice && priceInfo.isPromo && <span className="block text-[.6rem] font-semibold text-yellow-600">Hemat Rp {formatPrice(unitOriginalPrice - unitPrice)}</span>}{unitOriginalPrice && priceInfo.isSpecial && <span className="block text-[.6rem] font-semibold text-blue-600">{priceInfo.specialLabel || 'Harga Spesial'}</span>}</>}</div></article>
                 })}
                 {detailVariants.length === 0 && <p className="m-0 rounded-lg bg-slate-ice px-3 py-3 text-[.74rem] text-slate-700">Tidak ada unit untuk jadwal ini.</p>}
               </div>
