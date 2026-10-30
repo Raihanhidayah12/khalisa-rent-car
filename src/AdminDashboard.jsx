@@ -1160,6 +1160,12 @@ function AdminDashboard() {
   }
 
   async function handleSaveDealPrice(bookingId) {
+    const currentBooking = bookings.find((b) => b.id === bookingId)
+    if (currentBooking?.status !== 'pending') {
+      setPriceActionError('Harga deal hanya bisa diubah saat status booking masih menunggu (pending).')
+      return
+    }
+
     const rawVal = dealPriceInput.replace(/\./g, '').trim()
     const newPrice = parseInt(rawVal, 10)
     if (!Number.isFinite(newPrice) || newPrice < 0) {
@@ -1191,6 +1197,7 @@ function AdminDashboard() {
 
   async function handleBookingStatusChange(bookingId, status) {
     setBookingActionError('')
+    setEditingPriceBookingId(null)
     const currentBooking = bookings.find((booking) => booking.id === bookingId)
     const allowedTransitions = {
       pending: ['confirmed', 'rejected', 'cancelled'],
@@ -2859,25 +2866,31 @@ function AdminDashboard() {
               <div className="border-t border-line px-5 py-4 max-[520px]:px-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="grid">
-                    <span className="text-[.82rem] font-semibold text-muted">Total Biaya / Deal</span>
+                    <span className="text-[.82rem] font-semibold text-muted">
+                      {selectedBooking.notes?.includes('NEGO') ? 'Total Biaya / Deal' : 'Estimasi Total'}
+                    </span>
                     {selectedBooking.notes?.includes('NEGO') && (
-                      <span className="text-[.68rem] font-medium text-emerald-600">Ada pengajuan nego via WA</span>
+                      <span className="text-[.68rem] font-medium text-emerald-600">
+                        {selectedBooking.status === 'pending' ? 'Ada pengajuan nego via WA' : 'Harga deal telah dikunci'}
+                      </span>
                     )}
                   </div>
                   {editingPriceBookingId === selectedBooking.id ? null : (
                     <div className="flex items-center gap-2">
                       <strong className="text-[1.05rem] text-ink">Rp {formatPrice(Number(selectedBooking.estimated_price) || 0)}</strong>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingPriceBookingId(selectedBooking.id)
-                          setDealPriceInput(formatPrice(Number(selectedBooking.estimated_price) || 0))
-                          setPriceActionError('')
-                        }}
-                        className="rounded-md border border-cyan/40 bg-cyan/5 px-2.5 py-1 text-[.72rem] font-bold text-cyan transition-colors hover:bg-cyan/10"
-                      >
-                        Ubah Deal
-                      </button>
+                      {selectedBooking.notes?.includes('NEGO') && selectedBooking.status === 'pending' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingPriceBookingId(selectedBooking.id)
+                            setDealPriceInput(formatPrice(Number(selectedBooking.estimated_price) || 0))
+                            setPriceActionError('')
+                          }}
+                          className="rounded-md border border-cyan/40 bg-cyan/5 px-2.5 py-1 text-[.72rem] font-bold text-cyan transition-colors hover:bg-cyan/10"
+                        >
+                          Ubah Deal
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
