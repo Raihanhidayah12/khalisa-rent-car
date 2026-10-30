@@ -15,6 +15,13 @@ export const metadata = {
   description:
     'Rental mobil Jakarta & sekitarnya oleh PT Khalisa Sumber Rezeki. Sewa harian, mingguan, hingga bulanan — dengan supir atau lepas kunci. Harga transparan, armada terawat, siap 24 jam.',
   keywords: [
+    'khalisa rental',
+    'khalisa',
+    'pt khalisa',
+    'pt khalisa sumber rezeki',
+    'khalisa rent car',
+    'khalisa rental mobil',
+    'khalisarental.id',
     'rental mobil jakarta',
     'sewa mobil jakarta barat',
     'sewa innova zenix jakarta',
@@ -65,6 +72,7 @@ const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'AutoRental',
   name: 'PT Khalisa Sumber Rezeki',
+  alternateName: ['Khalisa Rental', 'Khalisa Rent Car', 'Khalisa Rental Mobil', 'PT Khalisa', 'Khalisa'],
   image: 'https://www.khalisarental.id/og-cover.jpg',
   url: 'https://www.khalisarental.id/',
   telephone: ['+6281380835156', '+6281277772320'],
