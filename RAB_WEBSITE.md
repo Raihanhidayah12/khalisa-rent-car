@@ -2,10 +2,10 @@
 ## Website Rental Mobil PT Khalisa Sumber Rezeki
 
 **Tanggal penyusunan:** 2 Oktober 2026  
-**Tanggal pembaruan & finalisasi:** 27 Oktober 2026  
+**Tanggal pembaruan & finalisasi:** 30 Oktober 2026  
 **Jenis anggaran:** Estimasi jasa pembuatan, implementasi, dan penguatan website, satu kali (one-time)  
 **Nilai jasa:** **Rp2.500.000**  
-**Status domain khusus:** Tidak termasuk
+**Status domain khusus:** Domain kustom `khalisarental.id` aktif terhubung (biaya registrar dibayar terpisah oleh pemilik)
 
 > Dokumen ini adalah rincian penawaran dan serah terima jasa berdasarkan ruang lingkup fitur website yang tercantum, bukan bukti biaya historis atau invoice pembayaran. Total Rp2.500.000 dialokasikan penuh untuk pekerjaan jasa teknis; biaya pembelian domain dan tagihan provider dibayar terpisah.
 
@@ -50,33 +50,33 @@ Rata-rata nilai jasa pada estimasi ini sekitar **Rp51.000 per jam**. Jam kerja m
 - **Hasil:** Sistem tampilan responsif yang diterapkan pada halaman publik, form booking, dan dashboard operasional.
 
 ### 3. Halaman publik, katalog, dan detail kendaraan — Rp450.000
-- **Aktivitas:** Beranda, navigasi, dan bagian informasi usaha (2 jam × Rp50.000 = Rp100.000); katalog, filter kategori, dan pengelompokan model (2 jam × Rp50.000 = Rp100.000); kartu/detail kendaraan beserta varian, stok, dan harga (3 jam × Rp50.000 = Rp150.000); halaman syarat dan ketentuan serta cek booking (2 jam × Rp50.000 = Rp100.000).
-- **Rincian hasil:** Pengunjung dapat mencari model melalui kategori; melihat foto, spesifikasi, harga, ketersediaan dan varian transmisi/mesin pada kartu atau detail kendaraan; membaca syarat sewa; serta membuka halaman cek booking.
+- **Aktivitas:** Beranda, navigasi, dan bagian informasi usaha (2 jam × Rp50.000 = Rp100.000); katalog, filter kategori, dan pengelompokan model (2 jam × Rp50.000 = Rp100.000); kartu/detail kendaraan beserta varian, stok, harga acuan, badge "Bisa Nego", dan konsultasi harga via WhatsApp (3 jam × Rp50.000 = Rp150.000); halaman syarat dan ketentuan serta cek booking (2 jam × Rp50.000 = Rp100.000).
+- **Rincian hasil:** Pengunjung dapat mencari model melalui kategori; melihat foto, spesifikasi, harga, ketersediaan dan varian transmisi/mesin pada kartu atau detail kendaraan; opsi cepat "💬 Nego via WA" untuk negosiasi langsung ke admin; membaca syarat sewa; serta membuka halaman cek booking.
 
 ### 4. Formulir booking dan alur WhatsApp — Rp400.000
 - **Aktivitas dan estimasi:**
   - Pilihan layanan (Dengan Supir, Lepas Kunci, Paket Acara), tanggal, jam, durasi bulan/hari/jam, dan batas minimum 12 jam (2 jam × Rp50.000 = **Rp100.000**).
-  - Pemilihan model, varian, transmisi, kuantitas, opsi include tol, dan kalkulasi harga proporsional (2 jam × Rp50.000 = **Rp100.000**).
+  - Pemilihan model, varian, transmisi, kuantitas, opsi include tol, kalkulasi harga proporsional, dan opsi checkbox "Saya ingin ajukan nego harga via WhatsApp" (2 jam × Rp50.000 = **Rp100.000**).
   - Validasi nama dan format nomor telepon internasional E.164, autocomplete alamat via Geoapify, dan opsi pengambilan lokasi perangkat (2 jam × Rp50.000 = **Rp100.000**).
   - Penyimpanan data booking ke Supabase, sinkronisasi mode sewa dengan batasan database, pembuatan kode booking unik (`KHS-XXXXXX`), dan penyusunan pesan WhatsApp serta tautan Google Maps (2 jam × Rp50.000 = **Rp100.000**).
 - **Rincian durasi dan harga:** Satu bulan dihitung tetap 30 hari; satu hari 24 jam. Durasi minimum 12 jam. Tarif dasar dihitung proporsional `tarif dasar × (total jam ÷ 12)`.
 - **Rincian lokasi:** Pelanggan dapat mencari alamat di Jakarta dan sekitarnya menggunakan Geoapify, memilih hasil untuk menyimpan teks alamat dan koordinat, atau mendeteksi lokasi perangkat via GPS.
 
 ### 5. Dashboard admin dan pengelolaan operasional — Rp500.000
-- **Aktivitas:** Akses dashboard dan sesi admin (2 jam × Rp50.000 = Rp100.000); pemrosesan booking, penugasan supir, dan modal detail booking (3 jam × Rp50.000 = Rp150.000); CRUD armada/foto dan manajemen tim supir (3 jam × Rp50.000 = Rp150.000); ringkasan keuangan Jakarta time, grafik tren, ekspor Excel dengan filter periode, dan manajemen akun admin (2 jam × Rp50.000 = Rp100.000).
-- **Hasil:** Dashboard `/admin` terintegrasi, modal detail interaktif, ekspor data booking ke file `.xlsx` berformat rapi, statistik pemakaian jam-unit kendaraan, dan riwayat pesanan supir. Booking diselesaikan manual setelah kendaraan kembali dan diterima.
+- **Aktivitas:** Akses dashboard dan sesi admin persisten tanpa reset saat reload (2 jam × Rp50.000 = Rp100.000); pemrosesan booking, penugasan supir tervalidasi, ubah deal harga nego, dan modal detail booking (3 jam × Rp50.000 = Rp150.000); CRUD armada/foto dan manajemen tim supir (3 jam × Rp50.000 = Rp150.000); ringkasan keuangan Jakarta time, notifikasi Web Push & bel audio chime real-time, ekspor Excel dengan filter periode, dan manajemen akun admin (2 jam × Rp50.000 = Rp100.000).
+- **Hasil:** Dashboard `/admin` terintegrasi, notifikasi suara dan push desktop otomatis saat pesanan masuk/selesai, fitur ubah harga deal nego terkunci, validasi kewajiban pilih supir sebelum konfirmasi status, ekspor data booking ke file `.xlsx` berformat rapi, statistik pemakaian jam-unit kendaraan, dan riwayat pesanan supir. Booking diselesaikan manual setelah kendaraan kembali dan diterima.
 
 ### 6. Integrasi Supabase dan kontrol akses — Rp300.000
-- **Aktivitas:** Konfigurasi koneksi frontend dan environment (1 jam × Rp50.000 = Rp50.000); integrasi autentikasi/role admin berbasis server claims (1 jam × Rp50.000 = Rp50.000); alur baca/tulis katalog, booking, supir, dan cloud storage (2 jam × Rp50.000 = Rp100.000); integrasi RPC ketersediaan, konfirmasi otomatis supir, dan overload penugasan supir (2 jam × Rp50.000 = Rp100.000).
-- **Rincian hasil:** Frontend memakai Supabase URL dan anon key terisolasi; alur admin divalidasi ke server Supabase; ketersediaan supir dan armada diperiksa atomik; serta penugasan supir UUID terproteksi via RPC database.
+- **Aktivitas:** Konfigurasi koneksi frontend dan environment (1 jam × Rp50.000 = Rp50.000); integrasi autentikasi/role admin berbasis server claims (1 jam × Rp50.000 = Rp50.000); alur baca/tulis katalog, booking, supir, dan cloud storage (2 jam × Rp50.000 = Rp100.000); integrasi RPC ketersediaan, konfirmasi otomatis supir, fallback direct update penugasan supir, dan realtime postgres changes (2 jam × Rp50.000 = Rp100.000).
+- **Rincian hasil:** Frontend memakai Supabase URL dan anon key terisolasi; alur admin divalidasi ke server Supabase; ketersediaan supir dan armada diperiksa atomik; penugasan supir terlindung dari bentrok RPC; serta sinkronisasi realtime booking baru.
 
 ### 7. Pengujian, perbaikan bug, dan penguatan keamanan — Rp200.000
 - **Aktivitas:** Build dan pemeriksaan kode (1 jam × Rp50.000 = Rp50.000); pengujian alur booking/admin dan perbaikan bug tipe database (2 jam × Rp50.000 = Rp100.000); penguatan keamanan web & anti-brute force (1 jam × Rp50.000 = Rp50.000).
-- **Cakupan penguatan keamanan:** Penambalan dependensi berisiko (Vite & source-map); proteksi brute-force login admin otomatis (lockout 60 detik setelah 5 kali gagal); pengetatan izin database (RLS data pelanggan anonim); dan isolasi file foto di Cloud Storage.
+- **Cakupan penguatan keamanan:** Penambalan dependensi berisiko (Vite & source-map); proteksi brute-force login admin otomatis (lockout 60 detik setelah 5 kali gagal); pengetatan izin database (RLS data pelanggan anonim); isolasi file foto di Cloud Storage; dan perbaikan format mata uang konsisten.
 
 ### 8. Deployment, optimasi SEO, dan serah terima — Rp150.000
 - **Aktivitas:** Konfigurasi deployment Vercel dengan header keamanan HTTP lengkap (1 jam × Rp50.000 = Rp50.000); optimasi SEO teknis (`sitemap.xml`, `robots.txt`, dan Schema.org `AutoRental` JSON-LD) (1 jam × Rp50.000 = Rp50.000); serah terima source code, panduan admin, dan dokumentasi (1 jam × Rp50.000 = Rp50.000).
-- **Hasil:** Source code bersih, header keamanan produksi aktif di Vercel, metadata SEO ramah Google Search & Google Maps, panduan admin, dan garansi perbaikan bug 30 hari setelah serah terima.
+- **Hasil:** Source code bersih, header keamanan produksi aktif di Vercel, domain kustom `khalisarental.id` terkonfigurasi, metadata SEO ramah Google Search & Google Maps, panduan admin, dan garansi perbaikan bug 30 hari setelah serah terima.
 
 ---
 
@@ -85,38 +85,38 @@ Rata-rata nilai jasa pada estimasi ini sekitar **Rp51.000 per jam**. Jam kerja m
 ### Alur booking dari pelanggan sampai selesai
 
 1. **Pelanggan memilih layanan dan jadwal:** Pelanggan memilih tanggal, jam mulai, dan durasi dalam bulan, hari, jam, atau kombinasinya. Kapasitas supir diperiksa secara otomatis. Opsi **Butuh supir** hanya dapat dipilih jika ada supir yang siap pada jadwal tersebut.
-2. **Pelanggan memilih kendaraan:** Katalog menampilkan kendaraan yang ready. Pelanggan memilih varian transmisi/mesin dan jumlah unit; harga dan subtotal dihitung otomatis.
-3. **Pelanggan mengisi data dan mengirim permintaan:** Nama, nomor WhatsApp, dan lokasi penjemputan divalidasi. Permintaan tersimpan berstatus **Menunggu** dengan kode booking unik (`KHS-XXXXXX`). Tautan pesan WhatsApp dan Google Maps disiapkan.
-4. **Admin memeriksa permintaan:** Admin meninjau rincian jadwal, armada, lokasi penjemputan, dan estimasi biaya di dashboard `/admin`.
-5. **Admin mengonfirmasi booking:** Saat admin menekan **Dikonfirmasi**, database secara atomik mengunci stok dan menugaskan supir yang tersedia untuk booking dengan supir.
-6. **Admin mengelola penugasan:** Admin dapat menyesuaikan supir yang bertugas atau mengirim detail rincian tugas ke WhatsApp supir.
-7. **Admin menyelesaikan booking:** Setelah waktu sewa selesai dan kendaraan dipastikan telah kembali, admin menandai booking menjadi **Selesai**.
-8. **Ketersediaan diperbarui:** Supir kembali berstatus Tersedia dan armada memiliki jeda persiapan **5 jam** sebelum dapat disewa kembali.
+2. **Pelanggan memilih kendaraan:** Katalog menampilkan kendaraan yang ready dengan opsi **Bisa Nego**. Pelanggan memilih varian transmisi/mesin dan jumlah unit; harga acuan dan subtotal dihitung otomatis.
+3. **Pelanggan mengisi data dan mengirim permintaan:** Nama, nomor WhatsApp, lokasi penjemputan, dan opsi pengajuan negosiasi harga divalidasi. Permintaan tersimpan berstatus **Menunggu** dengan kode booking unik (`KHS-XXXXXX`). Tautan pesan WhatsApp dan Google Maps disiapkan.
+4. **Admin menerima notifikasi:** Browser admin membunyikan bel audio chime dan menampilkan Web Push Notification bahwa pesanan baru telah masuk.
+5. **Admin memeriksa dan negosiasi harga (jika ada):** Admin meninjau rincian di dashboard `/admin`. Jika pelanggan mengajukan nego dan tercapai kesepakatan lewat WhatsApp, admin menekan tombol **Ubah Deal** di modal booking untuk memperbarui nominal harga deal.
+6. **Admin menugaskan supir:** Untuk pesanan dengan mode sewa supir, admin wajib memilih supir yang tersedia terlebih dahulu pada kolom supir.
+7. **Admin mengonfirmasi booking:** Admin mengubah status menjadi **Dikonfirmasi**. Database mengunci stok unit dan nominal harga deal terkunci (tidak dapat diubah kembali).
+8. **Admin menyelesaikan booking:** Setelah waktu sewa selesai (admin menerima pemberitahuan desktop/suara), kendaraan diterima kembali, dan admin menandai booking menjadi **Selesai**.
+9. **Ketersediaan diperbarui:** Supir kembali berstatus Tersedia dan armada memiliki jeda persiapan **5 jam** sebelum dapat disewa kembali.
 
 ```mermaid
 flowchart TD
 	A[Pelanggan pilih layanan dan jadwal] --> B{Ketersediaan supir sesuai?}
 	B -- Tidak --> A
 	B -- Ya --> C[Pilih kendaraan, varian, dan jumlah]
-	C --> D[Isi kontak dan lokasi penjemputan]
+	C --> D[Isi kontak, jemput, dan opsi ajukan nego]
 	D --> E[Permintaan tersimpan: Menunggu + kode booking]
-	E --> F[Admin meninjau booking di dashboard]
-	F --> G{Admin konfirmasi?}
-	G -- Ditolak / dibatalkan --> H[Booking ditolak atau dibatalkan]
-	G -- Konfirmasi --> I{Stok dan jadwal valid?}
-	I -- Tidak --> F
-	I -- Ya --> J{Membutuhkan supir?}
-	J -- Ya --> K[Database menugaskan supir tersedia lalu mengonfirmasi]
-	J -- Tidak, lepas kunci --> L[Booking Dikonfirmasi dan stok dikunci]
-	K --> L
-	L --> M[Waktu pengembalian lewat]
-	M --> N{Admin menerima kendaraan?}
-	N -- Belum --> M
-	N -- Ya --> O[Admin mengubah status: Selesai]
-	O --> P[Supir kembali Tersedia]
-	O --> Q[Kendaraan tersedia setelah jeda persiapan 5 jam]
-	E -. Cek status dengan nomor WhatsApp + kode .-> R[Halaman cek booking]
-	O -. Status terbaru .-> R
+	E --> F[Admin terima notifikasi chime & push di dashboard]
+	F --> G{Pelanggan ajukan nego?}
+	G -- Ya --> H[Admin & pemesan sepakat di WA, admin input Ubah Deal]
+	G -- Tidak --> I{Perlu supir?}
+	H --> I
+	I -- Ya --> J[Admin tentukan supir di dropdown supir]
+	I -- Lepas kunci --> K{Admin konfirmasi?}
+	J --> K
+	K -- Ditolak / dibatalkan --> L[Booking ditolak atau dibatalkan]
+	K -- Konfirmasi --> M[Status Dikonfirmasi: Stok & harga deal dikunci]
+	M --> N[Jadwal sewa selesai & kendaraan diterima]
+	N --> O[Admin ubah status: Selesai]
+	O --> P[Supir Tersedia kembali & armada jeda 5 jam]
+	E -. Cek status dengan nomor WA + kode .-> Q[Halaman cek booking]
+	M -. Status terbaru .-> Q
+	O -. Status Selesai .-> Q
 ```
 
 ---

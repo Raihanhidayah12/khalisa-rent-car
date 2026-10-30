@@ -44,14 +44,15 @@ Administrator memiliki dashboard khusus `/admin` untuk mengelola armada, mengatu
 
 | Area | Kemampuan & Fungsi |
 | --- | --- |
-| **Katalog Armada** | Pengelompokan varian kendaraan otomatis menjadi satu model kartu. Menampilkan foto armada, kapasitas penumpang, transmisi (Matic/Manual), powertrain (Bensin/Hybrid/EV), ketersediaan unit, harga sewa, serta badge dinamis (Promo, Terlaris, Unit Baru). |
-| **Formulir Booking** | Memvalidasi jadwal sewa sebelum memilih unit. Durasi sewa fleksibel (kombinasi bulan, hari, dan jam) dengan batas minimal 12 jam. Perhitungan tarif proporsional transparan dengan opsi include biaya tol standar. |
+| **Katalog Armada** | Pengelompokan varian kendaraan otomatis menjadi satu model kartu. Menampilkan foto armada, kapasitas penumpang, transmisi (Matic/Manual), powertrain (Bensin/Hybrid/EV), ketersediaan unit, harga sewa transparan, badge dinamis (Promo, Terlaris, Unit Baru), serta fitur **Bisa Nego** dengan tombol cepat konsultasi harga via WhatsApp. |
+| **Formulir Booking** | Memvalidasi jadwal sewa sebelum memilih unit. Durasi sewa fleksibel (kombinasi bulan, hari, dan jam) dengan batas minimal 12 jam. Perhitungan tarif proporsional transparan dengan opsi include biaya tol standar, serta opsi centang **Pengajuan Nego Harga via WA**. |
 | **Pilihan Layanan** | Mendukung layanan **Sewa dengan Supir**, **Lepas Kunci** (harian/mingguan/bulanan), dan **Paket Acara** (Pernikahan, Wisuda, Korporat, Ulang Tahun) lengkap dengan opsi add-on dekorasi (bunga segar, pita, papan nama). |
 | **Lokasi Penjemputan** | Autocomplete alamat Jakarta & sekitarnya via Geoapify API, dukungan Geolocation browser untuk deteksi lokasi perangkat otomatis, dan input manual cadangan. Tautan Google Maps otomatis disertakan pada ringkasan pesanan. |
 | **Reservasi & Stok** | Booking berstatus **Dikonfirmasi** otomatis mengunci stok unit dan menugaskan supir yang tersedia. Memiliki jeda pembersihan/persiapan 5 jam setelah waktu sewa berakhir sebelum unit dapat dipesan kembali. |
-| **Dashboard Operasional** | Akses manajemen terproteksi `/admin`: kelola armada & tarif, upload foto ke storage cloud, pantau supir (standby, on duty, libur), ubah status pesanan, dan rekap keuangan berdasarkan zona waktu Jakarta. |
+| **Dashboard Operasional** | Akses manajemen terproteksi `/admin`: kelola armada & tarif, upload foto ke storage cloud, pantau supir (standby, on duty, libur), ubah status pesanan, ubah harga deal hasil negosiasi, dan rekap keuangan berdasarkan zona waktu Jakarta. Sesi login persisten dan stabil saat reload halaman. |
+| **Notifikasi Real-time & Audio Chime** | Web Push Notification browser dan bel audio sintetis (Web Audio API chime) yang berbunyi otomatis saat ada booking baru masuk atau jadwal sewa pelanggan telah selesai. |
 | **Filter Jadwal Interaktif** | Filter daftar booking langsung di website berdasarkan rentang waktu: **Semua waktu**, **Hari ini**, **Besok**, **7 hari**, **Per Bulan**, dan **Rentang Tanggal Bebas**. Kartu statistik dan hitungan chip otomatis sinkron dengan rentang waktu yang dipilih. |
-| **Detail Booking Interaktif** | Panel modal interaktif untuk melihat rincian pemesan, kontak WhatsApp, jadwal sewa, koordinat jemput, supir yang bertugas, catatan pemesan, dan ubah status tanpa reload halaman. |
+| **Detail Booking Interaktif** | Panel modal interaktif untuk melihat rincian pemesan, kontak WhatsApp, jadwal sewa, koordinat jemput, supir yang bertugas, catatan pemesan, penyesuaian harga deal nego, dan ubah status tanpa reload halaman. |
 | **Export Excel (.xlsx)** | Download rekap booking ke format Excel rapi dengan 3 opsi: **Tampilan Web Aktif** (langsung unduh sesuai filter yang dipilih di layar), **Per Bulan**, atau **Rentang Tanggal**. Menyertakan nomor urut, kode booking, badge status, format mata uang, dan baris total estimasi. |
 | **Cek Status Booking** | Halaman publik `/cek-booking` bagi pelanggan untuk mengecek status pesanan menggunakan kombinasi nomor telepon WhatsApp dan kode booking unik (`KHS-XXXXXX`). |
 
@@ -150,7 +151,7 @@ Aplikasi telah dimigrasikan ke **Next.js App Router** untuk memaksimalkan visibi
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `NEXT_PUBLIC_GEOAPIFY_API_KEY`
-4. Domain deployment produksi: [ptkhalisasumberrezeki.vercel.app](https://ptkhalisasumberrezeki.vercel.app).
+4. Domain deployment produksi: [khalisarental.id](https://www.khalisarental.id) (Domain Utama) / [ptkhalisasumberrezeki.vercel.app](https://ptkhalisasumberrezeki.vercel.app) (Domain Cadangan).
 
 ---
 
