@@ -2,40 +2,79 @@
 ## Website Rental Mobil PT Khalisa Sumber Rezeki
 
 **Tanggal penyusunan:** 2 Oktober 2026  
-**Tanggal pembaruan & finalisasi:** 30 Oktober 2026  
-**Jenis anggaran:** Estimasi jasa pembuatan, implementasi, dan penguatan website, satu kali (one-time)  
-**Nilai jasa:** **Rp2.500.000**  
-**Status domain khusus:** Domain kustom `khalisarental.id` aktif terhubung untuk periode 5 tahun (Rp1.100.000 / 5 tahun, dibayar langsung oleh pemilik ke registrar)
-
-> Dokumen ini adalah rincian penawaran dan serah terima jasa berdasarkan ruang lingkup fitur website yang tercantum, bukan bukti biaya historis atau invoice pembayaran. Total Rp2.500.000 dialokasikan penuh untuk pekerjaan jasa teknis; biaya pembelian domain dan tagihan provider dibayar terpisah.
+**Tanggal pembaruan & penyesuaian:** 30 Oktober 2026  
+**Jenis anggaran:** Penawaran paket investasi implementasi sistem dan operasional website  
+**Status domain:** Domain kustom `khalisarental.id` aktif untuk periode 5 tahun (Rp1.100.000 / 5 tahun dibayar terpisah oleh pemilik)  
+**Status hosting & database:** Bebas biaya bulanan (Rp0 / bulan menggunakan arsitektur serverless Vercel & Supabase Cloud)
 
 ---
 
-## Ringkasan Anggaran
+## Ringkasan Skema Penawaran
 
-| No. | Uraian pekerjaan | Estimasi waktu | Tarif dasar | Jumlah |
+Tersedia 2 (dua) opsi skema penawaran investasi yang disesuaikan dengan kebutuhan operasional PT Khalisa Sumber Rezeki:
+
+| Komponen Penawaran | Opsi 1: Paket Pro + Fitur Nego & Notifikasi ⭐ *(Rekomendasi)* | Opsi 2: Paket Enterprise + Maintenance 3 Bulan |
+|---|:---:|:---:|
+| **Biaya Jasa Sistem** | **Rp3.500.000** *(Sekali bayar)* | **Rp5.000.000** *(Sekali bayar)* |
+| **Katalog Armada & "Bisa Nego"** | Termasuk | Termasuk |
+| **Formulir Booking Cerdas & GPS** | Termasuk | Termasuk |
+| **Dashboard Admin & Ubah Deal Nego** | Termasuk | Termasuk |
+| **Notifikasi Audio Chime & Web Push** | Termasuk | Termasuk |
+| **Manajemen Supir & Validasi Jadwal** | Termasuk | Termasuk |
+| **Laporan Keuangan & Export Excel** | Termasuk | Termasuk |
+| **Keamanan Database (RLS & Anti-Brute Force)**| Termasuk | Termasuk |
+| **Garansi Bug Pasca Serah Terima** | 30 Hari Kalender | 30 Hari Kalender |
+| **Paket Pendampingan & Maintenance Rutin** | Tambahan opsional | **Termasuk Penuh (3 Bulan)** |
+| **Bantuan Input & Update Data Armada Baru** | Mandiri via Dashboard | Dibantu teknis selama 3 bulan |
+| **Biaya Domain Kustom (Aktif 5 Tahun)** | Rp1.100.000 | Rp1.100.000 |
+| **Biaya Sewa Server / Hosting Bulanan** | **Rp0 (Gratis)** | **Rp0 (Gratis)** |
+| **TOTAL INVESTASI BERSIH (5 TAHUN)** | **Rp4.600.000** | **Rp6.100.000** |
+| **Rata-rata Biaya / Tahun** | **~Rp920.000 / tahun** | **~Rp1.220.000 / tahun** |
+| **Rata-rata Biaya / Bulan** | **~Rp76.000 / bulan** | **~Rp101.000 / bulan** |
+
+---
+
+## Rincian Perhitungan Jam Kerja — Opsi 1 (Rp3.500.000)
+
+Rincian alokasi pekerjaan teknis untuk **Opsi 1 (Rp3.500.000)** dengan total estimasi waktu **54 jam kerja** (rata-rata tarif Rp64.800 / jam):
+
+| No. | Uraian pekerjaan teknis | Estimasi waktu | Tarif dasar | Jumlah |
 |---:|---|---:|---:|---:|
-| 1 | Analisis kebutuhan dan alur bisnis | 4 jam | Rp50.000 | Rp200.000 |
-| 2 | Desain UI/UX dan penyesuaian responsif | 5 jam | Rp60.000 | Rp300.000 |
-| 3 | Halaman publik, katalog, dan detail kendaraan | 9 jam | Rp50.000 | Rp450.000 |
-| 4 | Formulir booking, validasi, perhitungan, dan alur WhatsApp | 8 jam | Rp50.000 | Rp400.000 |
-| 5 | Dashboard admin dan pengelolaan operasional | 10 jam | Rp50.000 | Rp500.000 |
-| 6 | Integrasi Supabase dan kontrol akses aplikasi | 6 jam | Rp50.000 | Rp300.000 |
-| 7 | Pengujian, perbaikan bug, dan penguatan keamanan | 4 jam | Rp50.000 | Rp200.000 |
-| 8 | Konfigurasi deployment, optimasi SEO, dan serah terima | 3 jam | Rp50.000 | Rp150.000 |
-|  | **Total estimasi jasa (49 jam)** |  |  | **Rp2.500.000** |
+| 1 | Analisis kebutuhan bisnis, alur sewa jam/hari/bulan, dan struktur data | 4 jam | Rp65.000 | Rp260.000 |
+| 2 | Desain UI/UX modern, responsif (mobile & desktop), dan micro-interactions | 5 jam | Rp70.000 | Rp350.000 |
+| 3 | Katalog armada cerdas, pengelompokan varian model, badge Promo/Terlaris, fitur "Bisa Nego", dan quick WhatsApp link | 8 jam | Rp65.000 | Rp520.000 |
+| 4 | Formulir booking cerdas, validasi E.164, durasi fleksibel minimum 12 jam, tol otomatis, GPS/Geoapify, dan opsi ajukan nego via WA | 8 jam | Rp65.000 | Rp520.000 |
+| 5 | Dashboard operasional `/admin`: CRUD armada/foto cloud, rekap keuangan Jakarta time, filter jadwal interaktif, modal detail, fitur "Ubah Deal" harga nego, dan ekspor Excel rapi | 12 jam | Rp65.000 | Rp780.000 |
+| 6 | Sistem Notifikasi Real-time: Bel audio sintetis (Web Audio API chime) dan Web Push Notification desktop untuk booking baru & jadwal selesai | 4 jam | Rp70.000 | Rp280.000 |
+| 7 | Integrasi Supabase PostgreSQL, manajemen supir anti-bentrok, direct update fallback, dan proteksi Row Level Security (RLS) | 7 jam | Rp65.000 | Rp455.000 |
+| 8 | Pengujian sistem, penguatan keamanan (anti brute-force login), konfigurasi domain `khalisarental.id`, SEO Google, dan serah terima | 6 jam | Rp55.800 | Rp335.000 |
+|  | **Total Jasa Opsi 1 (54 jam)** |  |  | **Rp3.500.000** |
 
-Rata-rata nilai jasa pada estimasi ini sekitar **Rp51.000 per jam**. Jam kerja merupakan dasar penyusunan anggaran, bukan pencatatan timesheet aktual.
+---
 
-### Pemisahan total biaya
+## Rincian Perhitungan — Opsi 2 (Rp5.000.000)
 
-| Komponen | Biaya dalam RAB | Keterangan |
+Untuk **Opsi 2 (Rp5.000.000)**, mencakup seluruh pekerjaan sistem di atas ditambah **Paket Layanan Prioritas & Pendampingan Operasional selama 3 Bulan**:
+
+| No. | Komponen Pekerjaan & Layanan | Keterangan & Benefit | Nilai Alokasi |
+|---:|---|---|---:|
+| 1 | **Pengembangan Sistem Rental Lengkap (Sesuai Opsi 1)** | Seluruh modul publik, booking cerdas, dashboard admin, notifikasi real-time, supir, dan integrasi cloud | Rp3.500.000 |
+| 2 | **Paket Pendampingan Teknis & Maintenance (3 Bulan)** | Bantuan teknis prioritas selama 3 bulan pertama operasional: monitoring performa sistem, pemantauan error logs, dan backup data berkala | Rp900.000 |
+| 3 | **Bantuan Pengelolaan & Konten Armada** | Pendampingan input, update harga/promo, optimasi foto armada baru, dan pelatihan staf admin secara intensif | Rp600.000 |
+|  | **Total Jasa Opsi 2 (Full Enterprise + Pendampingan)** |  | **Rp5.000.000** |
+
+---
+
+## Pemisahan Total Biaya & Kepemilikan Infrastruktur
+
+| Komponen | Biaya | Status & Keterangan |
 |---|---:|---|
-| Jasa analisis, desain, pembuatan, integrasi, pengujian, keamanan, dan serah terima | Rp2.500.000 | Biaya satu kali sesuai rincian di atas. |
-| Domain `khalisarental.id` (Masa Aktif 5 Tahun) | Rp1.100.000 | Telah dibeli langsung oleh pemilik untuk durasi 5 tahun penuh (bebas tagihan tahunan hingga 2031). |
-| Hosting Vercel, Database Supabase, dan Geoapify | Tidak ditagihkan (Rp0) | Menggunakan paket gratis/kuota standar yang mencukupi untuk operasional. Biaya peningkatan kuota, jika ada, dibayar langsung ke provider. |
-| Pajak | Belum dihitung | Ditambahkan bila berlaku sesuai status penyedia jasa dan ketentuan perpajakan. |
-| **Total Investasi Lengkap (Website + Domain 5 Tahun)** | **Rp3.600.000** | **Website siap pakai aktif operasional 5 tahun tanpa biaya sewa bulanan.** |
+| **Jasa Pembuatan Sistem (Opsi 1 atau Opsi 2)** | Rp3.500.000 / Rp5.000.000 | Sekali bayar *(one-time investment)* sesuai opsi yang dipilih. |
+| **Domain Kustom `khalisarental.id` (5 Tahun Penuh)** | Rp1.100.000 | Telah dibayar langsung oleh pemilik ke registrar; **bebas tagihan tahunan hingga 2031**. |
+| **Hosting Frontend (Vercel Serverless)** | **Rp0 / bulan (Gratis)** | Menggunakan paket Hobby tier yang mampu melayani puluhan ribu pengunjung/bulan. |
+| **Database & File Storage (Supabase Cloud)** | **Rp0 / bulan (Gratis)** | Kuota database 500 MB dan storage foto 1 GB gratis mencukupi untuk operasional harian. |
+| **Sertifikat Keamanan SSL (HTTPS)** | **Rp0 (Gratis)** | Terpasang otomatis dan diperbarui otomatis seumur hidup. |
+| **Pajak** | Belum dihitung | Ditambahkan bila berlaku sesuai ketentuan perpajakan. |
 
 ---
 
