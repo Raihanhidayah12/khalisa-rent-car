@@ -1427,7 +1427,7 @@ function RentalHome() {
       kendaraanLines,
       '',
       ...(isNegotiationRequested ? [
-        '📌 Catatan Pemesan:',
+        'Catatan Pemesan:',
         '*Saya ingin mengajukan negosiasi harga untuk jadwal ini via WhatsApp.*',
         '',
         'Mohon info penawaran harga terbaik dan ketersediaan kendaraan. Terima kasih.',
