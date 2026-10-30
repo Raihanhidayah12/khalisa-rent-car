@@ -748,6 +748,10 @@ function AdminDashboard() {
   const [savingDriver, setSavingDriver] = useState(false)
   const [driverFormError, setDriverFormError] = useState('')
   const [selectedBooking, setSelectedBooking] = useState(null)
+  const [editingPriceBookingId, setEditingPriceBookingId] = useState(null)
+  const [dealPriceInput, setDealPriceInput] = useState('')
+  const [savingPrice, setSavingPrice] = useState(false)
+  const [priceActionError, setPriceActionError] = useState('')
   const [exportModalOpen, setExportModalOpen] = useState(false)
   const [exportMode, setExportMode] = useState('month') // 'month' | 'range'
   const [exportMonth, setExportMonth] = useState(() => {
@@ -1153,6 +1157,36 @@ function AdminDashboard() {
     } finally {
       setSavingVehicle(false)
     }
+  }
+
+  async function handleSaveDealPrice(bookingId) {
+    const rawVal = dealPriceInput.replace(/\./g, '').trim()
+    const newPrice = parseInt(rawVal, 10)
+    if (!Number.isFinite(newPrice) || newPrice < 0) {
+      setPriceActionError('Nominal harga tidak valid.')
+      return
+    }
+
+    setSavingPrice(true)
+    setPriceActionError('')
+
+    const { error } = await supabase
+      .from('booking_requests')
+      .update({ estimated_price: newPrice })
+      .eq('id', bookingId)
+
+    setSavingPrice(false)
+
+    if (error) {
+      console.error('[update deal price error]', error)
+      setPriceActionError(error.message || 'Gagal menyimpan harga deal.')
+      return
+    }
+
+    // Update local state
+    setBookings((prev) => prev.map((b) => b.id === bookingId ? { ...b, estimated_price: newPrice } : b))
+    setSelectedBooking((prev) => prev && prev.id === bookingId ? { ...prev, estimated_price: newPrice } : prev)
+    setEditingPriceBookingId(null)
   }
 
   async function handleBookingStatusChange(bookingId, status) {
@@ -2105,7 +2139,10 @@ function AdminDashboard() {
                       <tr className={`cursor-pointer border-t border-line align-top text-[.76rem] transition-colors hover:bg-slate-ice/80 ${booking.status === 'pending' ? 'bg-amber-50/50' : ''}`} key={booking.id} onClick={(event) => { if (!event.target.closest('button, a, select, input')) setSelectedBooking(booking) }}>
                         <td className="px-5 py-4">
                           <strong className="block text-ink">{booking.customer_name}</strong>
-                          {booking.booking_code && <span className="mt-0.5 block font-display text-[.66rem] font-bold tracking-wide text-cyan">{booking.booking_code}</span>}
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                            {booking.booking_code && <span className="font-display text-[.66rem] font-bold tracking-wide text-cyan">{booking.booking_code}</span>}
+                            {booking.notes?.includes('NEGO') && <span className="inline-flex rounded-full bg-emerald-50 px-1.5 py-0.5 text-[.6rem] font-bold text-emerald-700">Nego WA</span>}
+                          </div>
                           <div className="mt-1"><CustomerContact booking={booking} /></div>
                         </td>
                         <td className="px-5 py-4 text-muted"><span className="flex items-center gap-1.5"><CalendarDays size={13} aria-hidden="true" />{formatJakartaDateTime(booking.start_at, { day: 'numeric', month: 'numeric', year: 'numeric' })}</span><span className="mt-1 flex items-center gap-1.5"><Clock3 size={13} aria-hidden="true" />{formatJakartaDateTime(booking.start_at, { hour: '2-digit', minute: '2-digit', hour12: false })}–{formatJakartaDateTime(booking.end_at, { day: 'numeric', month: 'numeric', year: 'numeric' })} {formatJakartaDateTime(booking.end_at, { hour: '2-digit', minute: '2-digit', hour12: false })}</span></td>
@@ -2137,7 +2174,10 @@ function AdminDashboard() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <strong className="block text-[.86rem] text-ink">{booking.customer_name}</strong>
-                        {booking.booking_code && <span className="mt-0.5 block font-display text-[.66rem] font-bold tracking-wide text-cyan">{booking.booking_code}</span>}
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                          {booking.booking_code && <span className="font-display text-[.66rem] font-bold tracking-wide text-cyan">{booking.booking_code}</span>}
+                          {booking.notes?.includes('NEGO') && <span className="inline-flex rounded-full bg-emerald-50 px-1.5 py-0.5 text-[.6rem] font-bold text-emerald-700">Nego WA</span>}
+                        </div>
                         <div className="mt-1"><CustomerContact booking={booking} /></div>
                       </div>
                       <span className={`inline-flex shrink-0 rounded-full border px-2.5 py-0.5 text-[.65rem] font-bold ${bookingStatusTone(booking.status)}`}>{bookingStatusLabels[booking.status] ?? booking.status}</span>
@@ -2815,10 +2855,81 @@ function AdminDashboard() {
                 </div>
               )}
 
-              {/* Harga */}
-              <div className="flex items-center justify-between gap-3 px-5 py-4 max-[520px]:px-4">
-                <span className="text-[.82rem] font-semibold text-muted">Estimasi Total</span>
-                <strong className="text-[1rem] text-ink">Rp {formatPrice(Number(selectedBooking.estimated_price) || 0)}</strong>
+              {/* Harga & Ubah Deal */}
+              <div className="border-t border-line px-5 py-4 max-[520px]:px-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="grid">
+                    <span className="text-[.82rem] font-semibold text-muted">Total Biaya / Deal</span>
+                    {selectedBooking.notes?.includes('NEGO') && (
+                      <span className="text-[.68rem] font-medium text-emerald-600">Ada pengajuan nego via WA</span>
+                    )}
+                  </div>
+                  {editingPriceBookingId === selectedBooking.id ? null : (
+                    <div className="flex items-center gap-2">
+                      <strong className="text-[1.05rem] text-ink">Rp {formatPrice(Number(selectedBooking.estimated_price) || 0)}</strong>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingPriceBookingId(selectedBooking.id)
+                          setDealPriceInput(formatPrice(Number(selectedBooking.estimated_price) || 0))
+                          setPriceActionError('')
+                        }}
+                        className="rounded-md border border-cyan/40 bg-cyan/5 px-2.5 py-1 text-[.72rem] font-bold text-cyan transition-colors hover:bg-cyan/10"
+                      >
+                        Ubah Deal
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {editingPriceBookingId === selectedBooking.id && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      handleSaveDealPrice(selectedBooking.id)
+                    }}
+                    className="mt-3 grid gap-2 rounded-lg border border-cyan/30 bg-cyan/5 p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[.72rem] font-bold text-cyan">Nominal Kesepakatan Nego (Rp)</span>
+                      <span className="text-[.65rem] text-muted">Bisa langsung ketik angka</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        className="h-9 flex-1 rounded-md border border-line bg-white px-2.5 text-[.82rem] font-bold text-ink outline-none focus:border-cyan"
+                        value={dealPriceInput}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9]/g, '')
+                          setDealPriceInput(val ? parseInt(val, 10).toLocaleString('id-ID') : '')
+                        }}
+                        placeholder="Contoh: 950.000"
+                        autoFocus
+                      />
+                      <button
+                        type="submit"
+                        disabled={savingPrice}
+                        className="h-9 rounded-md bg-cyan px-3.5 text-[.74rem] font-bold text-white transition-opacity hover:bg-cyan/90 disabled:opacity-50"
+                      >
+                        {savingPrice ? 'Menyimpan...' : 'Simpan Deal'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={savingPrice}
+                        onClick={() => {
+                          setEditingPriceBookingId(null)
+                          setPriceActionError('')
+                        }}
+                        className="h-9 rounded-md border border-line bg-white px-2.5 text-[.74rem] font-bold text-muted hover:bg-slate-ice"
+                      >
+                        Batal
+                      </button>
+                    </div>
+                    {priceActionError && (
+                      <span className="text-[.68rem] text-red-600">{priceActionError}</span>
+                    )}
+                  </form>
+                )}
               </div>
 
               {/* Info Tol */}
