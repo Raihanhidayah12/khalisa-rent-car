@@ -3,4 +3,4 @@ Allow: /
 Disallow: /admin
 Disallow: /adminlogin
 
-Sitemap: https://ptkhalisasumberrezeki.vercel.app/sitemap.xml
+Sitemap: https://www.khalisarental.id/sitemap.xml

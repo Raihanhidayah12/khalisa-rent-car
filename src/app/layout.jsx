@@ -7,7 +7,7 @@ export const viewport = {
 }
 
 export const metadata = {
-  metadataBase: new URL('https://ptkhalisasumberrezeki.vercel.app'),
+  metadataBase: new URL('https://www.khalisarental.id'),
   title: {
     default: 'PT Khalisa Sumber Rezeki | Rental Mobil Jakarta',
     template: '%s | PT Khalisa Sumber Rezeki',
@@ -31,7 +31,7 @@ export const metadata = {
   },
   openGraph: {
     type: 'website',
-    url: 'https://ptkhalisasumberrezeki.vercel.app/',
+    url: 'https://www.khalisarental.id/',
     siteName: 'PT Khalisa Sumber Rezeki',
     title: 'PT Khalisa Sumber Rezeki | Rental Mobil Jakarta',
     description:
@@ -65,8 +65,8 @@ const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'AutoRental',
   name: 'PT Khalisa Sumber Rezeki',
-  image: 'https://ptkhalisasumberrezeki.vercel.app/og-cover.jpg',
-  url: 'https://ptkhalisasumberrezeki.vercel.app/',
+  image: 'https://www.khalisarental.id/og-cover.jpg',
+  url: 'https://www.khalisarental.id/',
   telephone: ['+6281380835156', '+6281277772320'],
   priceRange: 'Rp 850.000 - Rp 3.000.000',
   address: {
