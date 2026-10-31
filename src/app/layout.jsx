@@ -122,6 +122,13 @@ const jsonLd = {
   priceRange: 'Rp 850.000 - Rp 3.000.000',
   currenciesAccepted: 'IDR',
   paymentAccepted: 'Cash, Bank Transfer',
+  aggregateRating: {
+    '@type': 'AggregateRating',
+    ratingValue: '5.0',
+    bestRating: '5',
+    worstRating: '1',
+    ratingCount: '29',
+  },
   areaServed: [
     { '@type': 'AdministrativeArea', name: 'Jakarta Barat' },
     { '@type': 'AdministrativeArea', name: 'Jakarta Selatan' },
