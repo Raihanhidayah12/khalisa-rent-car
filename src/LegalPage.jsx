@@ -5,53 +5,92 @@ const logoSrc = logo?.src || logo
 
 const sections = [
   {
-    title: '1. Pemesanan & konfirmasi',
+    title: '1. Pemesanan & Konfirmasi',
     points: [
-      'Pemesanan diajukan melalui formulir di halaman utama atau melalui WhatsApp resmi PT Khalisa Sumber Rezeki.',
-      'Setiap permintaan berstatus "Menunggu" sampai admin mengkonfirmasi ketersediaan unit dan jadwal. Booking dianggap sah setelah status berubah menjadi "Dikonfirmasi".',
-      'Status booking dapat diperiksa kapan saja melalui halaman Cek Status Booking dengan nomor WhatsApp pemesan.',
+      'Pemesanan sewa kendaraan dapat diajukan secara langsung melalui formulir online di website resmi khalisarental.id atau melalui WhatsApp resmi PT Khalisa Sumber Rezeki.',
+      'Permintaan awal berstatus "Menunggu" dan akan segera diverifikasi oleh admin operasional untuk memastikan ketersediaan unit, jadwal, serta kelayakan dokumen.',
+      'Pemesanan dianggap sah dan mengikat setelah status berubah menjadi "Dikonfirmasi" serta pembayaran uang muka (DP) telah diterima.',
+      'Setiap pemesanan memiliki kode unik (contoh: KHS-XXXXXX) yang dapat dipantau statusnya kapan saja melalui halaman Cek Status Booking menggunakan nomor WhatsApp terdaftar.',
     ],
   },
   {
-    title: '2. Harga & pembayaran',
+    title: '2. Persyaratan Dokumen Penyewa',
     points: [
-      'Harga yang tampil di website adalah estimasi sewa per 12 jam per unit dan dapat berbeda mengikuti durasi, jenis layanan (dengan supir atau lepas kunci), serta tanggal pemesanan.',
-      'Total final dikonfirmasi admin saat proses konfirmasi booking, termasuk biaya supir, durasi tambahan, atau keperluan khusus lainnya.',
-      'Skema pembayaran (uang muka atau pelunasan) dan rekening tujuan diinformasikan admin melalui WhatsApp resmi.',
+      'Sewa Lepas Kunci (Perorangan): Penyewa wajib melampirkan foto e-KTP asli yang masih berlaku, SIM A aktif, serta dokumen pendukung verifikasi (seperti ID Card karyawan, NPWP, Kartu Keluarga, atau akun media sosial aktif).',
+      'Deposit Jaminan Lepas Kunci: Penyewa wajib menitipkan uang jaminan (refundable deposit) yang akan dikembalikan penuh 100% setelah masa sewa berakhir, unit diperiksa kondisinya, dan terbebas dari catatan tilang elektronik (ETLE).',
+      'Sewa Lepas Kunci (Korporat / Perusahaan): Melampirkan legalitas usaha (NIB / SIUP / NPWP Perusahaan), KTP penanggung jawab, SIM A pengemudi yang ditugaskan, serta Purchase Order (PO) atau Surat Perjanjian Sewa resmi.',
+      'Sewa Dengan Supir: Cukup melampirkan kartu identitas (KTP) dan nomor WhatsApp aktif pemesan atau penanggung jawab perjalanan selama sewa.',
     ],
   },
   {
-    title: '3. Perubahan & pembatalan',
+    title: '3. Tarif Sewa, Pembayaran & Pelunasan',
     points: [
-      'Perubahan jadwal atau kendaraan dapat diminta melalui WhatsApp admin selama unit pengganti masih tersedia.',
-      'Pembatalan oleh pemesan sebaiknya diinformasikan sesegera mungkin agar slot kendaraan dapat dilepas untuk pelanggan lain.',
-      'Admin berhak menolak atau membatalkan permintaan apabila data pemesan tidak valid, tujuan penggunaan tidak jelas, atau kondisi operasional tidak memungkinkan.',
+      'Tarif yang tertera di website merupakan tarif acuan transparan berbasis durasi pemesanan (harian, mingguan, bulanan) dengan dasar perhitungan kelipatan 12 jam.',
+      'Total biaya final diinformasikan oleh admin saat konfirmasi pemesanan, mencakup tipe unit kendaraan, durasi sewa, opsi dengan supir/lepas kunci, dan kesepakatan harga promo/nego.',
+      'Uang muka (DP) minimal sebesar 30% dari total nilai sewa wajib dibayarkan untuk mengunci slot jadwal armada.',
+      'Pelunasan sisa biaya sewa dan deposit jaminan dilakukan paling lambat saat serah terima kendaraan atau sebelum keberangkatan.',
+      'Seluruh transaksi pembayaran hanya sah jika ditransfer ke rekening bank resmi atas nama PT Khalisa Sumber Rezeki atau rekening resmi yang dikonfirmasi tertulis oleh admin WhatsApp resmi kami.',
     ],
   },
   {
-    title: '4. Syarat penyewa & aturan kendaraan',
+    title: '4. Bahan Bakar (BBM), Tol, Parkir & Akomodasi',
     points: [
-      'Penyewa lepas kunci wajib menyerahkan identitas yang masih berlaku dan memenuhi ketentuan yang disepakati saat konfirmasi.',
-      'Kendaraan hanya digunakan sesuai peruntukan dan wilayah yang disepakati; penggunaan untuk kegiatan melawan hukum dilarang.',
-      'Penyewa bertanggung jawab atas denda lalu lintas dan kerusakan akibat kelalaian selama masa sewa.',
-      'Supir dari PT Khalisa Sumber Rezeki berhak menolak rute atau permintaan yang membahayakan keselamatan.',
+      'Bahan Bakar Lepas Kunci: Menganut sistem same-to-same. Posisi indikator bahan bakar saat pengembalian unit wajib sama persis dengan saat serah terima di awal. Selisih bahan bakar yang berkurang akan dibebankan kepada penyewa sesuai harga resmi SPBU.',
+      'Tol & Parkir: Biaya operasional seperti kartu tol, tarif parkir, retribusi masuk tempat wisata, dan tiket penyeberangan kapal (jika ada) merupakan tanggung jawab penyewa, kecuali pemesan memilih paket sewa include kartu tol/all-in.',
+      'Akomodasi Supir: Untuk perjalanan ke luar kota yang mengharuskan supir menginap, biaya penginapan supir dan uang makan menjadi tanggung jawab penyewa sesuai kesepakatan tertulis di awal.',
     ],
   },
   {
-    title: '5. Kebijakan privasi',
+    title: '5. Batas Waktu, Keterlambatan & Overtime',
     points: [
-      'Data yang dikumpulkan melalui formulir pemesanan: nama pemesan, nomor WhatsApp, alamat penjemputan, jadwal sewa, dan pilihan kendaraan.',
-      'Data hanya digunakan untuk memproses pemesanan, konfirmasi jadwal, penugasan supir, dan komunikasi operasional terkait sewa.',
-      'Data tidak dijual atau dibagikan ke pihak ketiga di luar keperluan operasional sewa (misalnya informasi penjemputan kepada supir yang ditugaskan).',
-      'Data pemesanan disimpan selama dibutuhkan untuk keperluan administrasi dan dapat diminta untuk dihapus dengan menghubungi admin.',
-      'Dengan mencentang persetujuan pada formulir, pemesan menyetujui pemrosesan data sesuai ketentuan di atas.',
+      'Waktu mulai dan berakhirnya masa sewa dihitung tepat sesuai jam penjemputan dan pengembalian yang disepakati pada konfirmasi pesanan.',
+      'Toleransi keterlambatan pengembalian unit adalah maksimal 30 (tiga puluh) menit.',
+      'Kelebihan waktu (overtime) dikenakan tarif proporsional sebesar 10% per jam dari harga sewa harian unit yang digunakan.',
+      'Keterlambatan pengembalian unit lebih dari 4 (empat) jam tanpa konfirmasi dan persetujuan tertulis sebelumnya dari admin akan dihitung sebagai perpanjangan sewa 1 (satu) hari penuh.',
     ],
   },
   {
-    title: '6. Kontak',
+    title: '6. Wilayah Operasional & Pemakaian Luar Kota',
     points: [
-      'WhatsApp / telepon: 0813 8083 5156 dan 0812 7777 2320 (setiap hari, 24 jam).',
-      'Alamat: Jl. Gili Sampeng No.26, RT.9/RW.3, Kb. Jeruk, Kec. Kb. Jeruk, Kota Jakarta Barat, DKI Jakarta 11530.',
+      'Wilayah operasional standar layanan adalah Jakarta, Bogor, Depok, Tangerang, dan Bekasi (Jabodetabek).',
+      'Penggunaan armada ke luar wilayah Jabodetabek (wilayah Jawa Barat, Banten, Jawa Tengah, Jawa Timur, atau luar pulau) wajib diberitahukan dan mendapatkan izin tertulis dari admin sebelum jadwal keberangkatan.',
+      'Seluruh armada PT Khalisa Sumber Rezeki dilengkapi dengan sistem pemantau posisi GPS demi keamanan bersama. Dilarang keras merusak, melepas, atau memodifikasi perangkat pelacak kendaraan.',
+    ],
+  },
+  {
+    title: '7. Tanggung Jawab, Kerusakan & Tilang Elektronik (ETLE)',
+    points: [
+      'Penyewa wajib menjaga kebersihan, keselamatan, dan kelayakan kendaraan selama masa sewa berlangsung.',
+      'Dilarang keras memindahtangankan, menggadaikan, menyewakan kembali (sub-rent), membawa muatan terlarang/berbahaya, atau menggunakan kendaraan untuk segala aktivitas yang melanggar hukum Negara Republik Indonesia.',
+      'Penyewa bertanggung jawab penuh atas segala denda pelanggaran lalu lintas (termasuk denda tilang kamera elektronik / ETLE) yang terjadi selama masa pemakaian kendaraan.',
+      'Segala kerusakan fisik kendaraan akibat kelalaian penyewa (seperti tabrakan, baret, benturan, atau kehilangan komponen kendaraan) menjadi tanggung jawab penyewa sesuai ketentuan klaim asuransi (own risk) atau biaya perbaikan bengkel resmi.',
+      'Supir dari PT Khalisa Sumber Rezeki berhak menolak rute atau instruksi penyewa yang melanggar hukum, membahayakan keselamatan penumpang, atau merusak kendaraan.',
+    ],
+  },
+  {
+    title: '8. Perubahan Jadwal (Reschedule) & Pembatalan',
+    points: [
+      'Permohonan perubahan jadwal (reschedule) atau penggantian tipe kendaraan dapat diajukan paling lambat H-2 sebelum waktu sewa, bergantung pada ketersediaan unit armada pengganti.',
+      'Pembatalan pesanan sepihak oleh penyewa pada H-1 atau hari-H keberangkatan dapat mengakibatkan hangusnya uang muka (DP) sebagai kompensasi biaya alokasi slot armada.',
+      'Apabila pembatalan terjadi karena kendala operasional tak terduga dari pihak PT Khalisa Sumber Rezeki atau kondisi kahar (force majeure) yang tidak dapat digantikan, seluruh uang muka (DP) akan dikembalikan penuh (100% refund).',
+    ],
+  },
+  {
+    title: '9. Kebijakan Privasi & Perlindungan Data',
+    points: [
+      'Data pribadi yang dikumpulkan melalui website meliputi: nama lengkap, nomor telepon/WhatsApp, alamat penjemputan, foto dokumen identitas untuk verifikasi, serta riwayat reservasi.',
+      'Data tersebut digunakan secara eksklusif hanya untuk proses verifikasi legalitas penyewa, penugasan supir, konfirmasi reservasi, serta koordinasi teknis operasional perjalanan Anda.',
+      'PT Khalisa Sumber Rezeki berkomitmen melindungi privasi pelanggan dan tidak akan pernah menjual, menyewakan, atau memberikan data pribadi Anda kepada pihak ketiga mana pun tanpa persetujuan Anda.',
+      'Data disimpan dengan aman dan pelanggan berhak meminta penghapusan riwayat data identitas setelah seluruh kewajiban masa sewa dinyatakan selesai.',
+      'Dengan menggunakan layanan dan mencentang persetujuan pada formulir booking, pelanggan menyatakan menyetujui seluruh ketentuan privasi ini.',
+    ],
+  },
+  {
+    title: '10. Layanan Pelanggan & Kontak Resmi',
+    points: [
+      'Layanan Pelanggan WhatsApp 24 Jam: 0813 8083 5156 dan 0812 7777 2320.',
+      'Email Resmi Operasional: admin@khalisarental.id / info@khalisarental.id.',
+      'Kantor Pusat & Pool Armada: Jl. Gili Sampeng No.26, RT.9/RW.3, Kebon Jeruk, Kec. Kebon Jeruk, Kota Jakarta Barat, DKI Jakarta 11530.',
     ],
   },
 ]
@@ -72,14 +111,14 @@ function LegalPage() {
       <main className="mx-auto w-full max-w-[1180px] px-5 pb-16 pt-10 sm:px-7 sm:pt-14 lg:pb-24">
         <div className="border-b border-line pb-9 sm:pb-11">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <span className="inline-flex items-center gap-1.5 text-[.65rem] font-extrabold tracking-[.14em] text-crimson"><ShieldCheck size={14} aria-hidden="true" />KETENTUAN LAYANAN</span>
-            <span className="text-[.7rem] text-muted">Berlaku sejak 1 Oktober 2026</span>
+            <span className="inline-flex items-center gap-1.5 text-[.65rem] font-extrabold tracking-[.14em] text-crimson"><ShieldCheck size={14} aria-hidden="true" />KETENTUAN LAYANAN RESMI</span>
+            <span className="text-[.7rem] text-muted">Diperbarui Oktober 2026</span>
           </div>
           <h1 className="mb-0 mt-5 max-w-[850px] font-display text-[2.6rem] font-extrabold leading-[1.12] text-ink max-[700px]:text-[2.1rem] max-[420px]:text-[1.75rem]">Syarat, ketentuan & kebijakan privasi</h1>
-          <p className="mb-0 mt-4 max-w-[680px] text-[.92rem] leading-7 text-muted max-[420px]:text-[.82rem] max-[420px]:leading-6">Ketentuan ini berlaku untuk seluruh layanan sewa kendaraan PT Khalisa Sumber Rezeki, baik melalui website maupun WhatsApp resmi.</p>
+          <p className="mb-0 mt-4 max-w-[680px] text-[.92rem] leading-7 text-muted max-[420px]:text-[.82rem] max-[420px]:leading-6">Ketentuan ini mengikat seluruh layanan sewa kendaraan PT Khalisa Sumber Rezeki, baik pemesanan melalui website resmi maupun layanan WhatsApp operasional.</p>
         </div>
 
-        <div className="grid gap-9 pt-8 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-16 lg:pt-10">
+        <div className="grid gap-9 pt-8 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-16 lg:pt-10">
           <aside className="hidden lg:block">
             <nav className="sticky top-8" aria-label="Daftar isi ketentuan">
               <p className="mb-4 text-[.64rem] font-extrabold tracking-[.14em] text-muted">DAFTAR ISI</p>
@@ -132,8 +171,8 @@ function LegalPage() {
 
             <section className="mt-10 flex flex-col justify-between gap-5 border-t border-line bg-slate-ice px-5 py-6 sm:flex-row sm:items-center sm:px-7" aria-label="Kontak bantuan">
               <div>
-                <h2 className="m-0 font-display text-[1rem] font-bold">Butuh bantuan?</h2>
-                <p className="mb-0 mt-1 text-[.76rem] leading-5 text-muted">Hubungi tim kami untuk pertanyaan tentang ketentuan layanan.</p>
+                <h2 className="m-0 font-display text-[1rem] font-bold">Butuh bantuan atau pertanyaan khusus?</h2>
+                <p className="mb-0 mt-1 text-[.76rem] leading-5 text-muted">Tim operasional PT Khalisa Sumber Rezeki siap membantu mengonfirmasi kebutuhan sewa Anda.</p>
               </div>
               <a className="inline-flex w-fit items-center gap-2 rounded-md bg-crimson px-4 py-2.5 text-[.76rem] font-bold text-white transition-colors hover:bg-crimson-deep" href="https://wa.me/6281380835156" target="_blank" rel="noreferrer">Hubungi admin <ArrowUpRight size={14} aria-hidden="true" /></a>
             </section>
