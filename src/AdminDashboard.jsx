@@ -856,14 +856,14 @@ function AdminDashboard() {
       return
     }
     if (Notification.permission === 'granted') {
-      sendDesktopNotification('🔔 Notifikasi Aktif', 'Notifikasi pemesanan & jadwal selesai aktif! (Tes bunyi bel berhasil)')
+      sendDesktopNotification('Notifikasi Aktif', 'Notifikasi pemesanan & jadwal selesai aktif! (Tes bunyi bel berhasil)')
       return
     }
     try {
       const perm = await Notification.requestPermission()
       setNotificationStatus(perm)
       if (perm === 'granted') {
-        sendDesktopNotification('🔔 Notifikasi Diizinkan', 'Anda akan menerima notifikasi saat ada booking baru atau jadwal sewa selesai!')
+        sendDesktopNotification('Notifikasi Diizinkan', 'Anda akan menerima notifikasi saat ada booking baru atau jadwal sewa selesai!')
       }
     } catch (err) {
       console.warn('[Notification permission error]', err)
@@ -878,7 +878,7 @@ function AdminDashboard() {
         const newB = payload.new
         if (newB) {
           sendDesktopNotification(
-            '🚗 Booking Baru Masuk!',
+            'Booking Baru Masuk!',
             `${newB.customer_name || 'Pelanggan'} - ${newB.booking_mode || 'Pemesanan baru'}`
           )
           setBookings((prev) => [newB, ...prev.filter((b) => b.id !== newB.id)])
@@ -2010,7 +2010,7 @@ function AdminDashboard() {
                 <div className="mb-6 grid grid-cols-2 gap-4 max-[800px]:grid-cols-1">
                   {/* Top terlaris */}
                   <section className="rounded-2xl border border-line bg-white p-5 shadow-sm" aria-label="Kendaraan terlaris">
-                    <h3 className="m-0 mb-4 font-display text-[.9rem] font-bold text-ink">🏆 Kendaraan terlaris</h3>
+                    <h3 className="m-0 mb-4 font-display text-[.9rem] font-bold text-ink">Kendaraan terlaris</h3>
                     {topList.length === 0 ? (
                       <p className="text-[.76rem] text-muted">Belum ada data booking selesai.</p>
                     ) : (
@@ -2018,12 +2018,11 @@ function AdminDashboard() {
                         {topList.map(([name, count], i) => {
                           const vehicle = vehicles.find((v) => v.name === name)
                           const widthPct = Math.round((count / maxBookings) * 100)
-                          const medals = ['🥇', '🥈', '🥉']
                           return (
                             <div key={name} className="grid gap-1">
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex min-w-0 items-center gap-2">
-                                  <span className="shrink-0 text-[.8rem]">{medals[i] ?? `${i + 1}.`}</span>
+                                  <span className="shrink-0 text-[.72rem] font-bold text-slate-400">{i + 1}.</span>
                                   {vehicle?.image_url && <img className="size-7 shrink-0 rounded object-cover" src={vehicle.image_url} alt="" />}
                                   <span className="truncate text-[.76rem] font-semibold text-ink">{name}</span>
                                 </div>
@@ -2042,7 +2041,7 @@ function AdminDashboard() {
                   {/* Promo & Harga Spesial */}
                   <div className="grid content-start gap-4">
                     <section className="rounded-2xl border border-yellow-200 bg-yellow-50 p-5 shadow-sm" aria-label="Kendaraan promo aktif">
-                      <h3 className="m-0 mb-3 font-display text-[.9rem] font-bold text-yellow-800">🏷 Promo aktif</h3>
+                      <h3 className="m-0 mb-3 font-display text-[.9rem] font-bold text-yellow-800">Promo aktif</h3>
                       {promoVehicles.length === 0 ? (
                         <p className="text-[.76rem] text-yellow-700">Tidak ada promo aktif saat ini.</p>
                       ) : (
@@ -2161,9 +2160,9 @@ function AdminDashboard() {
                                 <strong className="font-semibold text-ink">{vehicle.name}</strong>
                                 {formatVehicleTransmissionStock(vehicle) && <small className="text-[.64rem] text-muted">{formatVehicleTransmissionStock(vehicle)}</small>}
                                 <span className="mt-1 flex flex-wrap gap-1">
-                                  {fleetTop3Names.includes(vehicle.name) && <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[.58rem] font-bold text-amber-700">🏆 Terlaris</span>}
-                                  {getActivePromo(vehicle) && <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-[.58rem] font-bold text-yellow-700">🏷 Promo aktif</span>}
-                                  {vehicle.special_price && !vehicle.promo_price && <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-[.58rem] font-bold text-blue-700">⭐ Harga spesial</span>}
+                                  {fleetTop3Names.includes(vehicle.name) && <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[.58rem] font-bold text-amber-700">Terlaris</span>}
+                                  {getActivePromo(vehicle) && <span className="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-[.58rem] font-bold text-yellow-700">Promo aktif</span>}
+                                  {vehicle.special_price && !vehicle.promo_price && <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[.58rem] font-bold text-blue-700">Harga spesial</span>}
                                 </span>
                               </span>
                             </div>
@@ -2210,9 +2209,9 @@ function AdminDashboard() {
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[.65rem] font-bold ${vehicle.status === 'maintenance' ? 'bg-slate-100 text-slate-600' : isVehicleReady(vehicle) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>{vehicle.status === 'maintenance' ? 'Perawatan' : isVehicleReady(vehicle) ? 'Ready' : 'Booking'}</span>
                             <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[.65rem] font-bold ${vehicle.is_active ? 'bg-cyan/10 text-[#0369a1]' : 'bg-slate-100 text-slate-500'}`}>{vehicle.is_active ? 'Aktif' : 'Nonaktif'}</span>
-                            {fleetTop3Names.includes(vehicle.name) && <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-[.65rem] font-bold text-amber-700">🏆 Terlaris</span>}
-                            {getActivePromo(vehicle) && <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2.5 py-0.5 text-[.65rem] font-bold text-yellow-700">🏷 Promo aktif</span>}
-                            {vehicle.special_price && !vehicle.promo_price && <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-[.65rem] font-bold text-blue-700">⭐ Harga spesial</span>}
+                            {fleetTop3Names.includes(vehicle.name) && <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-[.65rem] font-bold text-amber-700">Terlaris</span>}
+                            {getActivePromo(vehicle) && <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-[.65rem] font-bold text-yellow-700">Promo aktif</span>}
+                            {vehicle.special_price && !vehicle.promo_price && <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-[.65rem] font-bold text-blue-700">Harga spesial</span>}
                           </div>
                         </div>
                       </div>
@@ -2363,7 +2362,7 @@ function AdminDashboard() {
               <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5" role="tablist" aria-label="Filter status booking">
                 {[
                   ['all', 'Semua'],
-                  ['acara', '🎉 Acara'],
+                  ['acara', 'Acara'],
                   ['pending', 'Menunggu'],
                   ['confirmed', 'Dikonfirmasi'],
                   ['completed', 'Selesai'],
@@ -2411,7 +2410,7 @@ function AdminDashboard() {
                           <div className="mt-1"><CustomerContact booking={booking} /></div>
                         </td>
                         <td className="px-5 py-4 text-muted"><span className="flex items-center gap-1.5"><CalendarDays size={13} aria-hidden="true" />{formatJakartaDateTime(booking.start_at, { day: 'numeric', month: 'numeric', year: 'numeric' })}</span><span className="mt-1 flex items-center gap-1.5"><Clock3 size={13} aria-hidden="true" />{formatJakartaDateTime(booking.start_at, { hour: '2-digit', minute: '2-digit', hour12: false })}–{formatJakartaDateTime(booking.end_at, { day: 'numeric', month: 'numeric', year: 'numeric' })} {formatJakartaDateTime(booking.end_at, { hour: '2-digit', minute: '2-digit', hour12: false })}</span></td>
-                        <td className="max-w-[180px] px-5 py-4 text-muted">{isEventBooking(booking) ? (() => { const { eventType, addons } = parseEventNotes(booking.notes); return <><span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[.65rem] font-bold text-purple-700">🎉 {booking.booking_mode}</span><span className="mt-1 block text-[.67rem]">{formatDuration(booking.duration, booking.duration_unit)}</span>{eventType && <span className="mt-1 block text-[.67rem] font-semibold text-purple-600">{eventType}</span>}{addons && <span className="mt-0.5 block text-[.65rem] text-purple-400 line-clamp-1" title={addons}>{addons}</span>}</> })() : <>{(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ')}<span className="mt-1 block text-[.67rem]">{booking.booking_mode} · {formatDuration(booking.duration, booking.duration_unit)}</span></>}</td>
+                        <td className="max-w-[180px] px-5 py-4 text-muted">{isEventBooking(booking) ? (() => { const { eventType, addons } = parseEventNotes(booking.notes); return <><span className="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-[.65rem] font-bold text-purple-700">{booking.booking_mode}</span><span className="mt-1 block text-[.67rem]">{formatDuration(booking.duration, booking.duration_unit)}</span>{eventType && <span className="mt-1 block text-[.67rem] font-semibold text-purple-600">{eventType}</span>}{addons && <span className="mt-0.5 block text-[.65rem] text-purple-400 line-clamp-1" title={addons}>{addons}</span>}</> })() : <>{(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ')}<span className="mt-1 block text-[.67rem]">{booking.booking_mode} · {formatDuration(booking.duration, booking.duration_unit)}</span></>}</td>
                         <td className="max-w-[200px] px-5 py-4 text-muted">
                           <span className="flex items-start gap-1.5">
                             <MapPin className="mt-0.5 shrink-0" size={13} aria-hidden="true" />
@@ -2452,7 +2451,7 @@ function AdminDashboard() {
                       {' – '}
                       {formatJakartaDateTime(booking.end_at, { day: 'numeric', month: 'numeric', year: 'numeric' })} {formatJakartaDateTime(booking.end_at, { hour: '2-digit', minute: '2-digit', hour12: false })}
                     </p>
-                    <p className="mb-0 mt-1 text-[.73rem] text-muted">{isEventBooking(booking) ? (() => { const { eventType, addons } = parseEventNotes(booking.notes); return <><span className="inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-[.65rem] font-bold text-purple-700">🎉 {booking.booking_mode}</span>{eventType && <span className="ml-1 text-[.7rem] font-semibold text-purple-600">{eventType}</span>}</> })() : `${(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ')} · ${booking.booking_mode}`}</p>
+                    <p className="mb-0 mt-1 text-[.73rem] text-muted">{isEventBooking(booking) ? (() => { const { eventType, addons } = parseEventNotes(booking.notes); return <><span className="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-[.65rem] font-bold text-purple-700">{booking.booking_mode}</span>{eventType && <span className="ml-1 text-[.7rem] font-semibold text-purple-600">{eventType}</span>}</> })() : `${(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ')} · ${booking.booking_mode}`}</p>
                     <p className="mb-0 mt-1 line-clamp-2 text-[.73rem] text-muted">{booking.pickup_address}</p>
                     <div className="mt-3 grid gap-3 border-t border-line pt-3">
                       <DriverAssignControls booking={booking} bookings={bookings} drivers={drivers} onAssign={handleAssignDriver} />
@@ -3040,7 +3039,7 @@ function AdminDashboard() {
                 <p className="mb-2 text-[.7rem] font-bold uppercase tracking-wide text-muted">Kendaraan</p>
                 {isEventBooking(selectedBooking) ? (
                   <div className="grid gap-1.5">
-                    <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-purple-100 px-3 py-1 text-[.75rem] font-bold text-purple-700">🎉 {selectedBooking.booking_mode}</span>
+                    <span className="inline-flex w-fit items-center rounded-full bg-purple-100 px-3 py-1 text-[.75rem] font-bold text-purple-700">{selectedBooking.booking_mode}</span>
                     {(selectedBooking.vehicle_snapshot ?? []).length > 0 ? (
                       (selectedBooking.vehicle_snapshot ?? []).map((v, i) => (
                         <span key={i} className="flex items-center gap-2 text-[.82rem] text-ink">
@@ -3307,7 +3306,7 @@ function AdminDashboard() {
               {vehicleDraft.badge === 'Promo' && (
               <div className="col-span-2 grid gap-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4 max-[520px]:col-span-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[.8rem] font-bold text-amber-900">🏷️ Harga Promo</span>
+                  <span className="text-[.8rem] font-bold text-amber-900">Harga Promo</span>
                   {vehicleDraft.promo_price && vehicleDraft.promo_end && new Date(vehicleDraft.promo_end) >= new Date()
                     ? <span className="rounded-full bg-amber-500 px-2.5 py-0.5 text-[.64rem] font-bold text-white">Aktif</span>
                     : vehicleDraft.promo_price
