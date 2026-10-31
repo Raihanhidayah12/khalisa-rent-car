@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowRight, ArrowUpRight, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, Eye, EyeOff, Fuel, LocateFixed, LockKeyhole, Mail, Minus, Plus, Search, Settings2, UserRoundCheck, UsersRound, X } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUpRight, Building2, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clock3, CreditCard, Eye, EyeOff, Fuel, Gem, GraduationCap, LocateFixed, LockKeyhole, Mail, MessageCircle, Minus, Plus, Search, Settings2, Sparkles, UserRoundCheck, UsersRound, X } from 'lucide-react'
 import logo from './assets/Logo-cropped.png'
 import waLogo from './assets/Wa.png'
 import heroBackground from './assets/Latar.png'
@@ -169,19 +169,19 @@ const navigationLinks = [
 ]
 
 const eventTypes = [
-  { emoji: '💍', label: 'Pernikahan', desc: 'Mobil pengantin dengan dekorasi bunga segar, pita, dan papan nama pengantin.', accent: 'rgba(244,63,94,.14)' },
-  { emoji: '🎓', label: 'Wisuda', desc: 'Kendaraan representatif untuk hari kelulusan. Bisa ditambah bunga dan banner.', accent: 'rgba(139,92,246,.14)' },
-  { emoji: '🏢', label: 'Korporat', desc: 'Armada bersih untuk keperluan bisnis, kantor, dan perjalanan klien VIP.', accent: 'rgba(14,165,233,.14)' },
-  { emoji: '🎉', label: 'Ulang Tahun & Lainnya', desc: 'Dekorasi balon, pita, atau kustom sesuai tema acara yang kamu minta.', accent: 'rgba(245,158,11,.14)' },
+  { icon: Gem, label: 'Pernikahan', desc: 'Mobil pengantin dengan dekorasi bunga segar, pita, dan papan nama pengantin.', accent: 'rgba(244,63,94,.14)', color: '#f43f5e' },
+  { icon: GraduationCap, label: 'Wisuda', desc: 'Kendaraan representatif untuk hari kelulusan. Bisa ditambah bunga dan banner.', accent: 'rgba(139,92,246,.14)', color: '#a78bfa' },
+  { icon: Building2, label: 'Korporat', desc: 'Armada bersih untuk keperluan bisnis, kantor, dan perjalanan klien VIP.', accent: 'rgba(14,165,233,.14)', color: '#38bdf8' },
+  { icon: Sparkles, label: 'Ulang Tahun & Lainnya', desc: 'Dekorasi balon, pita, atau kustom sesuai tema acara yang kamu minta.', accent: 'rgba(245,158,11,.14)', color: '#fbbf24' },
 ]
 
 const addonOptions = [
-  { id: 'bunga_segar',    emoji: '💐', label: 'Bunga segar' },
-  { id: 'bunga_artif',   emoji: '🌸', label: 'Bunga artifisial' },
-  { id: 'pita',          emoji: '🎀', label: 'Pita dekorasi' },
-  { id: 'papan_nama',    emoji: '📛', label: 'Papan nama pengantin' },
-  { id: 'balon',         emoji: '🎈', label: 'Balon' },
-  { id: 'kustom',        emoji: '✨', label: 'Kustom / lainnya' },
+  { id: 'bunga_segar', label: 'Bunga segar' },
+  { id: 'bunga_artif', label: 'Bunga artifisial' },
+  { id: 'pita', label: 'Pita dekorasi' },
+  { id: 'papan_nama', label: 'Papan nama pengantin' },
+  { id: 'balon', label: 'Balon dekorasi' },
+  { id: 'kustom', label: 'Kustom / lainnya' },
 ]
 
 const benefits = [
@@ -1750,7 +1750,7 @@ function RentalHome() {
               {isEventBooking && (
                 <div className="grid gap-4">
                   <div className="flex items-center gap-2">
-                  <span className="text-base" aria-hidden="true">🎉</span>
+                  <Sparkles size={16} className="text-purple-600" aria-hidden="true" />
                   <span className="text-[.72rem] font-bold text-purple-700">Detail Acara <span className="font-normal text-purple-500">(opsional — isi untuk mempermudah admin)</span></span>
                 </div>
                 <div className="grid grid-cols-2 gap-3 max-[600px]:grid-cols-1">
@@ -1761,8 +1761,8 @@ function RentalHome() {
                       value={bookingEventType}
                       onChange={(e) => setBookingEventType(e.target.value)}
                     >
-                      {eventTypes.map((t) => <option key={t.label} value={t.label}>{t.emoji} {t.label}</option>)}
-                      <option value="Lainnya">✏️ Lainnya</option>
+                      {eventTypes.map((t) => <option key={t.label} value={t.label}>{t.label}</option>)}
+                      <option value="Lainnya">Lainnya</option>
                     </select>
                     {bookingEventType === 'Lainnya' && (
                       <input
@@ -1785,11 +1785,11 @@ function RentalHome() {
                           <button
                             key={opt.id}
                             type="button"
-                            className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[.68rem] font-semibold transition-all ${active ? 'border-purple-400 bg-purple-100 text-purple-700' : 'border-line bg-white text-muted hover:border-purple-300 hover:text-purple-600'}`}
+                            className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[.68rem] font-semibold transition-all ${active ? 'border-purple-400 bg-purple-100 text-purple-700' : 'border-line bg-white text-muted hover:border-purple-300 hover:text-purple-600'}`}
                             onClick={() => setBookingEventAddons((prev) => active ? prev.filter((id) => id !== opt.id) : [...prev, opt.id])}
                             aria-pressed={active}
                           >
-                            <span aria-hidden="true">{opt.emoji}</span>{opt.label}
+                            {opt.label}
                           </button>
                         )
                       })}
@@ -1890,7 +1890,10 @@ function RentalHome() {
           <div className="mt-8 rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-5 shadow-sm">
             <div className="flex items-start justify-between gap-4 max-[600px]:flex-col">
               <div>
-                <h3 className="m-0 text-[.95rem] font-bold text-amber-900">💳 Paket Kartu Tol & Parkir</h3>
+                <h3 className="m-0 flex items-center gap-2 text-[.95rem] font-bold text-amber-900">
+                  <CreditCard size={17} className="text-amber-800" aria-hidden="true" />
+                  Paket Kartu Tol &amp; Parkir
+                </h3>
                 <p className="mb-0 mt-1 text-[.75rem] leading-relaxed text-amber-800">Pilih paket sebelum memilih armada. Harga yang ditampilkan akan menyesuaikan.</p>
               </div>
               <div className="flex shrink-0 gap-2 rounded-lg bg-white p-1 shadow-sm max-[600px]:w-full">
@@ -2124,26 +2127,31 @@ function RentalHome() {
 
             {/* Kartu tipe acara */}
             <div className="mb-12 grid grid-cols-4 gap-4 max-[900px]:grid-cols-2 max-[600px]:gap-3 max-[440px]:grid-cols-2">
-              {eventTypes.map((type) => (
-                <button
-                  key={type.label}
-                  type="button"
-                  className={`group relative overflow-hidden rounded-2xl border p-6 text-left transition duration-200 hover:-translate-y-1 max-[600px]:p-4 ${isEventBooking && bookingEventType === type.label ? 'border-cyan/50 bg-cyan/10' : 'border-white/10 bg-white/5 hover:border-white/20'}`}
-                  onClick={() => {
-                    setIsEventBooking(true)
-                    setWithDriver(false)
-                    setBookingEventType(type.label)
-                    setBookingEventTypeOther('')
-                    document.querySelector('#beranda')?.scrollIntoView({ behavior: 'smooth' })
-                  }}
-                  aria-pressed={isEventBooking && bookingEventType === type.label}
-                >
-                  <div className="mb-3 grid size-11 place-items-center rounded-xl text-[1.4rem] max-[600px]:mb-2.5" style={{ background: type.accent }}>{type.emoji}</div>
-                  <h3 className="mb-1.5 font-display text-[.95rem] font-bold text-white max-[600px]:text-[.86rem]">{type.label}</h3>
-                  <p className="m-0 text-[.74rem] leading-[1.65] text-slate-400 max-[600px]:text-[.7rem]">{type.desc}</p>
-                  {isEventBooking && bookingEventType === type.label && <span className="absolute right-3 top-3 grid size-5 place-items-center rounded-full bg-cyan text-white"><Check size={11} strokeWidth={3} aria-hidden="true" /></span>}
-                </button>
-              ))}
+              {eventTypes.map((type) => {
+                const IconComponent = type.icon
+                return (
+                  <button
+                    key={type.label}
+                    type="button"
+                    className={`group relative overflow-hidden rounded-2xl border p-6 text-left transition duration-200 hover:-translate-y-1 max-[600px]:p-4 ${isEventBooking && bookingEventType === type.label ? 'border-cyan/50 bg-cyan/10' : 'border-white/10 bg-white/5 hover:border-white/20'}`}
+                    onClick={() => {
+                      setIsEventBooking(true)
+                      setWithDriver(false)
+                      setBookingEventType(type.label)
+                      setBookingEventTypeOther('')
+                      document.querySelector('#beranda')?.scrollIntoView({ behavior: 'smooth' })
+                    }}
+                    aria-pressed={isEventBooking && bookingEventType === type.label}
+                  >
+                    <div className="mb-3 grid size-11 place-items-center rounded-xl max-[600px]:mb-2.5" style={{ background: type.accent, color: type.color }}>
+                      <IconComponent size={22} strokeWidth={2.2} aria-hidden="true" />
+                    </div>
+                    <h3 className="mb-1.5 font-display text-[.95rem] font-bold text-white max-[600px]:text-[.86rem]">{type.label}</h3>
+                    <p className="m-0 text-[.74rem] leading-[1.65] text-slate-400 max-[600px]:text-[.7rem]">{type.desc}</p>
+                    {isEventBooking && bookingEventType === type.label && <span className="absolute right-3 top-3 grid size-5 place-items-center rounded-full bg-cyan text-white"><Check size={11} strokeWidth={3} aria-hidden="true" /></span>}
+                  </button>
+                )
+              })}
             </div>
 
             {/* Add-on strip */}
@@ -2154,13 +2162,13 @@ function RentalHome() {
                 {addonOptions.map((opt) => (
                   <span
                     key={opt.id}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/7 px-3.5 py-1.5 text-[.76rem] font-semibold text-slate-300"
+                    className="inline-flex items-center rounded-full border border-white/12 bg-white/7 px-3.5 py-1.5 text-[.76rem] font-semibold text-slate-300"
                   >
-                    <span aria-hidden="true">{opt.emoji}</span>{opt.label}
+                    {opt.label}
                   </span>
                 ))}
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/7 px-3.5 py-1.5 text-[.76rem] font-semibold text-slate-300">
-                  <span aria-hidden="true">✏️</span>Lainnya (tulis sendiri)
+                <span className="inline-flex items-center rounded-full border border-white/12 bg-white/7 px-3.5 py-1.5 text-[.76rem] font-semibold text-slate-300">
+                  Lainnya (tulis sendiri)
                 </span>
               </div>
               <p className="mb-0 mt-4 text-[.72rem] leading-[1.7] text-slate-500">Pilih add-on saat mengisi form pemesanan. Harga dikonfirmasi admin setelah request diterima.</p>
@@ -2326,7 +2334,8 @@ function RentalHome() {
               rel="noopener noreferrer"
               className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-50 px-3.5 text-[.74rem] font-bold text-emerald-700 transition-colors hover:bg-emerald-100"
             >
-              💬 Nego via WA
+              <MessageCircle size={15} aria-hidden="true" />
+              Nego via WA
             </a>
             <div className="flex items-center gap-2">
               <button className="h-10 rounded-lg border border-line px-4 text-[.76rem] font-bold text-muted hover:bg-slate-ice" type="button" onClick={() => setVehicleDetailGroup(null)}>Kembali</button>
