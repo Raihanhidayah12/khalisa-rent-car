@@ -3,8 +3,8 @@
 ### Skema Penawaran Khusus: Rp2.500.000 – Rp3.000.000
 
 **Tanggal penyusunan:** 2 Oktober 2026  
-**Tanggal pembaruan & penyesuaian:** 30 Oktober 2026  
-**Jenis anggaran:** Penawaran paket investasi implementasi website dan dashboard operasional  
+**Tanggal pembaruan & penyesuaian:** 31 Oktober 2026  
+**Jenis anggaran:** Penawaran paket investasi implementasi website, sistem operasional, dan optimasi digital  
 **Status domain:** Domain kustom `khalisarental.id` aktif untuk periode 5 tahun (Rp1.100.000 / 5 tahun dibayar terpisah oleh pemilik)  
 **Status hosting & database:** Bebas biaya bulanan (Rp0 / bulan menggunakan arsitektur serverless Vercel & Supabase Cloud)
 
@@ -26,6 +26,8 @@ Tersedia 2 (dua) opsi paket yang disesuaikan dengan kebutuhan dan efisiensi angg
 | **Notifikasi Audio Chime & Web Push Real-time** | Tidak termasuk (Cek manual) | **Termasuk Penuh (Bel audio + Push desktop)** |
 | **Rekap Keuangan Jakarta Time & Ekspor Excel (.xlsx)** | Termasuk | Termasuk |
 | **Halaman Cek Status Booking Mandiri (`/cek-booking`)** | Termasuk | Termasuk |
+| **Optimasi SEO Google AI Overview & Meta Thumbnail** | Termasuk | Termasuk |
+| **Halaman Syarat Ketentuan 10 Pasal & Kebijakan Privasi** | Termasuk | Termasuk |
 | **Proteksi Keamanan Database (RLS & Anti-Brute Force)** | Termasuk | Termasuk |
 | **Garansi Bug Teknis** | 30 Hari Kalender | 30 Hari Kalender |
 | **Biaya Domain Kustom (Aktif 5 Tahun Penuh)** | Rp1.100.000 | Rp1.100.000 |
@@ -43,20 +45,20 @@ Total waktu pengerjaan: **49 jam kerja** (rata-rata tarif dasar Rp51.000 / jam):
 | No. | Uraian pekerjaan teknis | Estimasi waktu | Tarif dasar | Jumlah |
 |---:|---|---:|---:|---:|
 | 1 | Analisis kebutuhan alur bisnis rental, struktur data varian, dan inventarisasi halaman | 4 jam | Rp50.000 | Rp200.000 |
-| 2 | Desain antarmuka UI/UX modern, responsif ponsel & desktop, dan penataan komponen | 5 jam | Rp60.000 | Rp300.000 |
+| 2 | Desain antarmuka UI/UX modern, responsif ponsel & desktop, ikon vektor Lucide bersih, dan penataan komponen | 5 jam | Rp60.000 | Rp300.000 |
 | 3 | Katalog armada cerdas, pengelompokan varian model, badge Promo/Terlaris, dan modal detail | 9 jam | Rp50.000 | Rp450.000 |
 | 4 | Formulir booking fleksibel (durasi jam/hari/bulan min. 12 jam, tol otomatis, GPS & alamat Geoapify) | 8 jam | Rp50.000 | Rp400.000 |
 | 5 | Dashboard operasional `/admin`: CRUD armada/foto cloud, rekap keuangan, filter jadwal, dan ekspor Excel | 10 jam | Rp50.000 | Rp500.000 |
 | 6 | Integrasi Supabase PostgreSQL, autentikasi admin server-claims, dan kontrol akses RLS | 6 jam | Rp50.000 | Rp300.000 |
 | 7 | Pengujian sistem, perbaikan bug tipe data, dan proteksi anti brute-force login | 4 jam | Rp50.000 | Rp200.000 |
-| 8 | Konfigurasi deployment Vercel, setup domain `khalisarental.id`, SEO Google, dan serah terima | 3 jam | Rp50.000 | Rp150.000 |
+| 8 | Konfigurasi deployment Vercel, setup domain `khalisarental.id`, SEO Google Search, Halaman Syarat Ketentuan resmi, dan serah terima | 3 jam | Rp50.000 | Rp150.000 |
 |  | **Total Jasa Opsi A (49 jam)** |  |  | **Rp2.500.000** |
 
 ---
 
 ## 3. Rincian Pekerjaan Teknis — Opsi B: Paket Pro Lengkap (Rp3.000.000)
 
-Mencakup seluruh modul Opsi A ditambah modul **Negosiasi Harga WhatsApp** dan **Sistem Notifikasi Real-time & Audio Chime** dengan total waktu **52 jam kerja**:
+Mencakup seluruh modul Opsi A ditambah modul **Negosiasi Harga WhatsApp**, **Sistem Notifikasi Real-time & Audio Chime**, serta **Optimasi SEO Google AI Overview / Meta Thumbnail** dengan total waktu **52 jam kerja**:
 
 | No. | Uraian pekerjaan teknis | Estimasi waktu | Tarif dasar | Jumlah |
 |---:|---|---:|---:|---:|
@@ -67,7 +69,7 @@ Mencakup seluruh modul Opsi A ditambah modul **Negosiasi Harga WhatsApp** dan **
 | 5 | Dashboard admin terintegrasi: CRUD armada, modal detail, fitur **"Ubah Deal"** harga nego terkunci, dan ekspor Excel | 11 jam | Rp60.000 | Rp660.000 |
 | 6 | **Sistem Notifikasi Real-time:** Bel audio sintetis (Web Audio API chime) & Web Push Notification desktop | 4 jam | Rp65.000 | Rp260.000 |
 | 7 | Integrasi Supabase, manajemen supir anti-bentrok jadwal, direct fallback, dan proteksi RLS | 6 jam | Rp55.000 | Rp330.000 |
-| 8 | Pengujian sistem, penguatan keamanan, persistensi sesi reload, SEO Google, dan serah terima | 5 jam | Rp37.000 | Rp185.000 |
+| 8 | Pengujian sistem, penguatan keamanan, persistensi reload, optimasi SEO Google AI Overview, meta thumbnail, dan serah terima | 5 jam | Rp37.000 | Rp185.000 |
 |  | **Total Jasa Opsi B (52 jam)** |  |  | **Rp3.000.000** |
 
 ---
@@ -101,21 +103,10 @@ flowchart TD
 
 ---
 
-## 5. Kepemilikan & Biaya Operasional Jangka Panjang
+## 5. Biaya Tambahan & Pemeliharaan di Luar Jasa
 
-| Komponen | Biaya | Status & Keterangan |
-|---|---:|---|
-| **Jasa Pembuatan Sistem (Opsi A / Opsi B)** | Rp2.500.000 / Rp3.000.000 | Sekali bayar *(one-time fee)*. |
-| **Domain Kustom `khalisarental.id` (5 Tahun)** | Rp1.100.000 | Telah dibeli langsung oleh pemilik ke registrar; **aktif aman hingga 2031**. |
-| **Hosting Frontend (Vercel Serverless)** | **Rp0 / bulan (Gratis)** | Menggunakan paket standar cloud yang mampu menangani puluhan ribu pengunjung/bulan. |
-| **Database & File Storage (Supabase Cloud)** | **Rp0 / bulan (Gratis)** | Penyimpanan data pelanggan, transaksi, dan foto armada di cloud tanpa tagihan bulanan. |
-| **Sertifikat Keamanan SSL (HTTPS)** | **Rp0 (Gratis)** | Gembok hijau keamanan web terpasang otomatis seumur hidup. |
-| **Pajak** | Belum dihitung | Ditambahkan bila berlaku sesuai ketentuan perpajakan. |
-
----
-
-## 6. Kesimpulan & Rekomendasi
-
-Selisih antara **Paket Standard (Rp2.500.000)** dan **Paket Pro Lengkap (Rp3.000.000)** hanya **Rp500.000**. Sangat direkomendasikan memilih **Opsi B (Rp3.000.000)** karena memberikan fitur krusial untuk operasional rental mobil harian:
-1. **Fitur Negosiasi Harga (Nego Deal):** Memudahkan konversi calon pelanggan yang ingin tawar-menawar lewat WhatsApp, dengan kemampuan admin memperbarui nominal harga deal di sistem.
-2. **Notifikasi Suara & Push Desktop:** Admin tidak perlu terus-menerus memantau layar laptop/HP, karena bel suara akan berbunyi otomatis begitu ada pemesanan baru masuk atau jadwal sewa berakhir.
+1. **Domain `khalisarental.id`:** Telah dibayarkan oleh pemilik sebesar Rp1.100.000 untuk masa aktif 5 tahun penuh (tidak ada tagihan tahunan hingga Oktober 2031).
+2. **Hosting Frontend & Serverless:** Menggunakan Vercel Hobby tier gratis (Rp0/bulan).
+3. **Database & Storage Foto:** Menggunakan Supabase Cloud Free tier gratis (Rp0/bulan).
+4. **Geocoding API:** Menggunakan Geoapify gratis 3.000 request/hari (Rp0/bulan).
+5. **Garansi Bug Teknis:** 30 hari kalender setelah serah terima sistem.

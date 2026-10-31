@@ -3,7 +3,7 @@
 ### Skema Penawaran Khusus: Rp3.000.000 – Rp3.500.000
 
 **Tanggal penyusunan:** 2 Oktober 2026  
-**Tanggal pembaruan & penyesuaian:** 30 Oktober 2026  
+**Tanggal pembaruan & penyesuaian:** 31 Oktober 2026  
 **Jenis anggaran:** Penawaran paket investasi implementasi website, sistem operasional, dan pendampingan bisnis  
 **Status domain:** Domain kustom `khalisarental.id` aktif untuk periode 5 tahun (Rp1.100.000 / 5 tahun dibayar terpisah oleh pemilik)  
 **Status hosting & database:** Bebas biaya bulanan (Rp0 / bulan menggunakan arsitektur serverless Vercel & Supabase Cloud)
@@ -26,6 +26,8 @@ Tersedia 2 (dua) opsi paket yang dirancang khusus untuk mendukung operasional re
 | **Notifikasi Bel Audio Chime & Push Desktop** | Termasuk | Termasuk |
 | **Rekap Keuangan Jakarta Time & Export Excel (.xlsx)** | Termasuk | Termasuk |
 | **Halaman Cek Status Booking Mandiri (`/cek-booking`)** | Termasuk | Termasuk |
+| **Optimasi SEO Google AI Overview & Meta Thumbnail** | Termasuk | Termasuk |
+| **Halaman Syarat Ketentuan 10 Pasal & Kebijakan Privasi** | Termasuk | Termasuk |
 | **Proteksi Keamanan Database (RLS & Anti-Brute Force)** | Termasuk | Termasuk |
 | **Garansi Bug Teknis Pasca Rilis** | 30 Hari Kalender | 30 Hari Kalender |
 | **Paket Pendampingan Operasional Awal** | Panduan standar | **Termasuk Penuh (1 Bulan Pertama)** |
@@ -46,13 +48,13 @@ Total waktu pengerjaan: **52 jam kerja** (rata-rata tarif dasar Rp57.600 / jam):
 | No. | Uraian pekerjaan teknis | Estimasi waktu | Tarif dasar | Jumlah |
 |---:|---|---:|---:|---:|
 | 1 | Analisis alur bisnis rental, relasi supir-jadwal, dan struktur data booking | 4 jam | Rp55.000 | Rp220.000 |
-| 2 | Desain antarmuka UI/UX modern, responsif ponsel/desktop, dan micro-interactions | 5 jam | Rp65.000 | Rp325.000 |
+| 2 | Desain antarmuka UI/UX modern, responsif ponsel/desktop, ikon vektor Lucide bersih, dan micro-interactions | 5 jam | Rp65.000 | Rp325.000 |
 | 3 | Katalog armada cerdas, pengelompokan varian, badge "Bisa Nego", dan konsultasi WA | 9 jam | Rp60.000 | Rp540.000 |
 | 4 | Formulir booking cerdas, validasi E.164, durasi fleksibel min. 12 jam, tol, GPS, dan checkbox nego WA | 8 jam | Rp60.000 | Rp480.000 |
 | 5 | Dashboard admin terintegrasi: CRUD armada/foto cloud, modal detail, fitur **"Ubah Deal"** harga nego terkunci, dan ekspor Excel | 11 jam | Rp60.000 | Rp660.000 |
 | 6 | **Sistem Notifikasi Real-time:** Bel audio sintetis (Web Audio API chime) & Web Push Notification desktop | 4 jam | Rp65.000 | Rp260.000 |
 | 7 | Integrasi Supabase, manajemen supir anti-bentrok jadwal, direct fallback, dan proteksi RLS | 6 jam | Rp55.000 | Rp330.000 |
-| 8 | Pengujian sistem, penguatan keamanan, persistensi sesi reload, SEO Google, dan serah terima | 5 jam | Rp37.000 | Rp185.000 |
+| 8 | Pengujian sistem, penguatan keamanan, persistensi reload, optimasi SEO Google AI Overview, meta thumbnail, dan serah terima | 5 jam | Rp37.000 | Rp185.000 |
 |  | **Total Jasa Opsi A (52 jam)** |  |  | **Rp3.000.000** |
 
 ---
@@ -63,7 +65,7 @@ Mencakup seluruh modul sistem Opsi A ditambah **Paket Layanan Pendampingan Opera
 
 | No. | Komponen Pekerjaan & Layanan | Keterangan & Benefit | Nilai Alokasi |
 |---:|---|---|---:|
-| 1 | **Pengembangan Sistem Rental Lengkap (Sesuai Opsi A)** | Seluruh modul website, booking cerdas, dashboard admin, notifikasi real-time, manajemen supir, dan integrasi cloud | Rp3.000.000 |
+| 1 | **Pengembangan Sistem Rental Lengkap (Sesuai Opsi A)** | Seluruh modul website, booking cerdas, dashboard admin, notifikasi real-time, manajemen supir, integrasi cloud, dan SEO AI Overview | Rp3.000.000 |
 | 2 | **Paket Pendampingan Operasional & Maintenance (1 Bulan)** | Pendampingan teknis prioritas di bulan pertama operasional: monitoring kestabilan sistem, pemantauan error logs, dan backup database | Rp300.000 |
 | 3 | **Pelatihan Staf Admin & Bantuan Konten Armada** | Sesi pelatihan langsung untuk pengelola admin, pendampingan input data armada baru, penyesuaian promo, dan optimasi foto | Rp200.000 |
 |  | **Total Jasa Opsi B (Pro Max + Pendampingan)** |  | **Rp3.500.000** |
@@ -99,21 +101,10 @@ flowchart TD
 
 ---
 
-## 5. Kepemilikan & Biaya Operasional Jangka Panjang
+## 5. Biaya Tambahan & Pemeliharaan di Luar Jasa
 
-| Komponen | Biaya | Status & Keterangan |
-|---|---:|---|
-| **Jasa Pembuatan Sistem (Opsi A / Opsi B)** | Rp3.000.000 / Rp3.500.000 | Sekali bayar *(one-time fee)* sesuai paket yang dipilih. |
-| **Domain Kustom `khalisarental.id` (5 Tahun)** | Rp1.100.000 | Telah dibeli langsung oleh pemilik ke registrar; **aktif aman hingga 2031**. |
-| **Hosting Frontend (Vercel Serverless)** | **Rp0 / bulan (Gratis)** | Menggunakan paket standar cloud yang mampu menangani puluhan ribu pengunjung/bulan. |
-| **Database & File Storage (Supabase Cloud)** | **Rp0 / bulan (Gratis)** | Penyimpanan data pelanggan, transaksi, dan foto armada di cloud tanpa tagihan bulanan. |
-| **Sertifikat Keamanan SSL (HTTPS)** | **Rp0 (Gratis)** | Gembok hijau keamanan web terpasang otomatis seumur hidup. |
-| **Pajak** | Belum dihitung | Ditambahkan bila berlaku sesuai ketentuan perpajakan. |
-
----
-
-## 6. Kesimpulan & Rekomendasi
-
-Kedua opsi penawaran ini memberikan nilai investasi yang sangat kompetitif untuk PT Khalisa Sumber Rezeki:
-1. **Opsi A (Rp3.000.000):** Sangat cocok jika pemilik rental ingin solusi hemat dengan sistem yang sudah 100% lengkap (termasuk fitur nego deal dan notifikasi suara).
-2. **Opsi B (Rp3.500.000):** Pilihan paling direkomendasikan karena hanya dengan selisih Rp500.000, pemilik rental mendapatkan **jaminan pendampingan operasional selama 1 bulan penuh** serta pelatihan staf admin sampai benar-benar mahir menggunakan dashboard.
+1. **Domain `khalisarental.id`:** Telah dibayarkan oleh pemilik sebesar Rp1.100.000 untuk masa aktif 5 tahun penuh (tidak ada tagihan tahunan hingga Oktober 2031).
+2. **Hosting Frontend & Serverless:** Menggunakan Vercel Hobby tier gratis (Rp0/bulan).
+3. **Database & Storage Foto:** Menggunakan Supabase Cloud Free tier gratis (Rp0/bulan).
+4. **Geocoding API:** Menggunakan Geoapify gratis 3.000 request/hari (Rp0/bulan).
+5. **Garansi Bug Teknis:** 30 hari kalender setelah serah terima sistem.
