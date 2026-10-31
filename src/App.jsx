@@ -2374,7 +2374,7 @@ function RentalHome() {
           <div className="grid content-start gap-3">
             <h2 className="m-0 mb-2 text-[.65rem] font-extrabold tracking-[.15em] text-white/40">ALAMAT</h2>
             <p className="m-0 max-w-[230px] text-[.77rem] leading-[1.75] text-[#aeb9c8]">Jl. Gili Sampeng No.26, RT.9/RW.3, Kb. Jeruk, Kec. Kb. Jeruk, Kota Jakarta Barat, DKI Jakarta 11530</p>
-            <a className="inline-flex w-fit items-center gap-1.5 text-[.72rem] font-medium text-cyan/70 transition-colors hover:text-cyan" href="https://maps.google.com/?q=Jl.+Gili+Sampeng+No.26+RT.9+RW.3+Kb.+Jeruk+Kec.+Kb.+Jeruk+Kota+Jakarta+Barat+DKI+Jakarta+11530" target="_blank" rel="noreferrer">
+            <a className="inline-flex w-fit items-center gap-1.5 text-[.72rem] font-medium text-cyan/70 transition-colors hover:text-cyan" href="https://maps.app.goo.gl/mQZUCtjTWChRZf6y6" target="_blank" rel="noreferrer">
               Lihat di Google Maps <ArrowUpRight size={12} aria-hidden="true" />
             </a>
           </div>

@@ -99,8 +99,8 @@ export const metadata = {
     thumbnail: 'https://www.khalisarental.id/og-cover.jpg',
     'geo.region': 'ID-JK',
     'geo.placename': 'Jakarta Barat',
-    'geo.position': '-6.1944;106.7778',
-    ICBM: '-6.1944, 106.7778',
+    'geo.position': '-6.1926484;106.7772491',
+    ICBM: '-6.1926484, 106.7772491',
   },
 }
 
@@ -118,6 +118,12 @@ const jsonLd = {
   },
   description: 'Sewa mobil Jakarta Barat murah 24 jam — lepas kunci atau dengan supir. Pilihan armada lengkap & terawat: Avanza, Innova Reborn, Zenix, Fortuner, Alphard, Hiace. Harga jujur & bisa nego!',
   url: 'https://www.khalisarental.id/',
+  hasMap: 'https://maps.app.goo.gl/mQZUCtjTWChRZf6y6',
+  sameAs: [
+    'https://maps.app.goo.gl/mQZUCtjTWChRZf6y6',
+    'https://www.instagram.com/khalisa.rent.car.solutions',
+    'https://www.tiktok.com/@khalisarentcarsolutions',
+  ],
   telephone: ['+6281380835156', '+6281277772320'],
   priceRange: 'Rp 850.000 - Rp 3.000.000',
   currenciesAccepted: 'IDR',
@@ -166,8 +172,8 @@ const jsonLd = {
   },
   geo: {
     '@type': 'GeoCoordinates',
-    latitude: -6.1944,
-    longitude: 106.7778,
+    latitude: -6.1926484,
+    longitude: 106.7772491,
   },
   openingHoursSpecification: {
     '@type': 'OpeningHoursSpecification',

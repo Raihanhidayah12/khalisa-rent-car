@@ -90,7 +90,7 @@ const sections = [
     points: [
       'Layanan Pelanggan WhatsApp 24 Jam: 0813 8083 5156 dan 0812 7777 2320.',
       'Email Resmi Operasional: admin@khalisarental.id / info@khalisarental.id.',
-      'Kantor Pusat & Pool Armada: Jl. Gili Sampeng No.26, RT.9/RW.3, Kebon Jeruk, Kec. Kebon Jeruk, Kota Jakarta Barat, DKI Jakarta 11530.',
+      'Kantor Pusat & Pool Armada: Jl. Gili Sampeng No.26, RT.9/RW.3, Kebon Jeruk, Kec. Kebon Jeruk, Kota Jakarta Barat, DKI Jakarta 11530 (Lokasi Google Maps: https://maps.app.goo.gl/mQZUCtjTWChRZf6y6).',
     ],
   },
 ]
