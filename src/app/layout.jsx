@@ -9,11 +9,11 @@ export const viewport = {
 export const metadata = {
   metadataBase: new URL('https://www.khalisarental.id'),
   title: {
-    default: 'PT Khalisa Sumber Rezeki | Rental Mobil Jakarta',
-    template: '%s | PT Khalisa Sumber Rezeki',
+    default: 'Rental & Sewa Mobil Jakarta Barat Lepas Kunci Murah | Khalisa Rent Car',
+    template: '%s | Khalisa Rent Car',
   },
   description:
-    'Rental mobil Jakarta & sekitarnya oleh PT Khalisa Sumber Rezeki. Sewa harian, mingguan, hingga bulanan — dengan supir atau lepas kunci. Harga transparan, armada terawat, siap 24 jam.',
+    'Sewa mobil Jakarta Barat murah 24 jam — lepas kunci atau dengan supir. Pilihan armada lengkap & terawat: Avanza, Innova Reborn, Zenix, Fortuner, Alphard, Hiace. Harga jujur & bisa nego!',
     keywords: [
     'khalisa rental',
     'khalisa',
@@ -74,28 +74,29 @@ export const metadata = {
   openGraph: {
     type: 'website',
     url: 'https://www.khalisarental.id/',
-    siteName: 'PT Khalisa Sumber Rezeki',
-    title: 'PT Khalisa Sumber Rezeki | Rental Mobil Jakarta',
+    siteName: 'Khalisa Rent Car - PT Khalisa Sumber Rezeki',
+    title: 'Rental & Sewa Mobil Jakarta Barat Lepas Kunci Murah | Khalisa Rent Car',
     description:
-      'Sewa mobil harian, mingguan, hingga bulanan di Jakarta & sekitarnya — dengan supir atau lepas kunci. Harga transparan, armada terawat, siap 24 jam.',
+      'Sewa mobil Jakarta Barat murah 24 jam — lepas kunci atau dengan supir. Pilihan armada lengkap & terawat: Avanza, Innova Reborn, Zenix, Fortuner, Alphard, Hiace. Harga jujur & bisa nego!',
     images: [
       {
         url: '/og-cover.jpg',
         width: 1200,
         height: 630,
-        alt: 'PT Khalisa Sumber Rezeki Rental Mobil Jakarta',
+        alt: 'Rental Mobil Jakarta Barat Lepas Kunci Murah - Khalisa Rent Car',
       },
     ],
     locale: 'id_ID',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'PT Khalisa Sumber Rezeki | Rental Mobil Jakarta',
+    title: 'Rental & Sewa Mobil Jakarta Barat Lepas Kunci Murah | Khalisa Rent Car',
     description:
-      'Sewa mobil harian, mingguan, hingga bulanan di Jakarta & sekitarnya — dengan supir atau lepas kunci.',
+      'Sewa mobil Jakarta Barat murah 24 jam — lepas kunci atau dengan supir. Pilihan armada lengkap: Avanza, Innova Reborn, Zenix, Fortuner, Alphard, Hiace. Harga jujur & bisa nego!',
     images: ['/og-cover.jpg'],
   },
   other: {
+    thumbnail: 'https://www.khalisarental.id/og-cover.jpg',
     'geo.region': 'ID-JK',
     'geo.placename': 'Jakarta Barat',
     'geo.position': '-6.1944;106.7778',
@@ -106,9 +107,16 @@ export const metadata = {
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'AutoRental',
-  name: 'PT Khalisa Sumber Rezeki',
-  alternateName: ['Khalisa Rental', 'Khalisa Rent Car', 'Khalisa Rental Mobil', 'PT Khalisa', 'Khalisa'],
+  name: 'Khalisa Rent Car - PT Khalisa Sumber Rezeki',
+  alternateName: ['Khalisa Rental', 'Khalisa Rent Car', 'Khalisa Rental Mobil', 'PT Khalisa', 'Khalisa', 'PT Khalisa Sumber Rezeki'],
   image: 'https://www.khalisarental.id/og-cover.jpg',
+  primaryImageOfPage: {
+    '@type': 'ImageObject',
+    url: 'https://www.khalisarental.id/og-cover.jpg',
+    width: 1200,
+    height: 630,
+  },
+  description: 'Sewa mobil Jakarta Barat murah 24 jam — lepas kunci atau dengan supir. Pilihan armada lengkap & terawat: Avanza, Innova Reborn, Zenix, Fortuner, Alphard, Hiace. Harga jujur & bisa nego!',
   url: 'https://www.khalisarental.id/',
   telephone: ['+6281380835156', '+6281277772320'],
   priceRange: 'Rp 850.000 - Rp 3.000.000',
@@ -170,6 +178,7 @@ export default function RootLayout({ children }) {
         <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png" />
         <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        <link rel="image_src" href="https://www.khalisarental.id/og-cover.jpg" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
