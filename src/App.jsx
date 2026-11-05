@@ -191,7 +191,7 @@ const benefits = [
   { number: '04', title: 'Respons cepat', description: 'Tim PT Khalisa Sumber Rezeki siap membantu proses pemesanan dan perjalanan.' },
 ]
 
-const scrollRevealClasses = 'translate-y-10 opacity-0 scale-[0.98] transition-[opacity,transform] duration-[900ms] [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] data-[reveal=visible]:translate-y-0 data-[reveal=visible]:opacity-100 data-[reveal=visible]:scale-100 motion-reduce:translate-y-0 motion-reduce:opacity-100 motion-reduce:scale-100 motion-reduce:transition-none'
+const scrollRevealClasses = 'translate-y-8 opacity-0 transition-[opacity,transform] duration-700 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)] data-[reveal=visible]:translate-y-0 data-[reveal=visible]:opacity-100 motion-reduce:translate-y-0 motion-reduce:opacity-100 motion-reduce:transition-none'
 const geoapifyApiKey = process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY || process.env.VITE_GEOAPIFY_API_KEY
 
 function formatPickupAddress(location) {
@@ -710,13 +710,36 @@ function AdminLogin() {
   const [loading, setLoading] = useState(false)
   const [checkingSession, setCheckingSession] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
-  const [failedAttempts, setFailedAttempts] = useState(0)
-  const [lockoutSeconds, setLockoutSeconds] = useState(0)
+  const [failedAttempts, setFailedAttempts] = useState(() => {
+    try {
+      return Number(localStorage.getItem('admin_login_failed_attempts')) || 0
+    } catch {
+      return 0
+    }
+  })
+  const [lockoutSeconds, setLockoutSeconds] = useState(() => {
+    try {
+      const lockoutUntil = Number(localStorage.getItem('admin_lockout_until')) || 0
+      const remaining = Math.ceil((lockoutUntil - Date.now()) / 1000)
+      return remaining > 0 ? remaining : 0
+    } catch {
+      return 0
+    }
+  })
 
   useEffect(() => {
-    if (lockoutSeconds <= 0) return
+    if (lockoutSeconds <= 0) {
+      try { localStorage.removeItem('admin_lockout_until') } catch {}
+      return
+    }
     const timer = setInterval(() => {
-      setLockoutSeconds((prev) => Math.max(0, prev - 1))
+      setLockoutSeconds((prev) => {
+        const next = Math.max(0, prev - 1)
+        if (next === 0) {
+          try { localStorage.removeItem('admin_lockout_until') } catch {}
+        }
+        return next
+      })
     }, 1000)
     return () => clearInterval(timer)
   }, [lockoutSeconds])
@@ -774,15 +797,22 @@ function AdminLogin() {
       if (error) {
         const nextAttempts = failedAttempts + 1
         setFailedAttempts(nextAttempts)
+        try { localStorage.setItem('admin_login_failed_attempts', String(nextAttempts)) } catch {}
         if (nextAttempts >= 5) {
-          setLockoutSeconds(60)
-          setFailedAttempts(0)
-          setErrorMessage('Terlalu banyak percobaan gagal. Halaman login dikunci sementara selama 60 detik.')
+          const lockDuration = nextAttempts >= 8 ? 300 : 60
+          setLockoutSeconds(lockDuration)
+          try { localStorage.setItem('admin_lockout_until', String(Date.now() + lockDuration * 1000)) } catch {}
+          setErrorMessage(`Terlalu banyak percobaan gagal. Halaman login dikunci sementara selama ${lockDuration} detik.`)
         } else {
           setErrorMessage(`Email atau kata sandi tidak valid. Sisa percobaan: ${5 - nextAttempts}`)
         }
         return
       }
+
+      try {
+        localStorage.removeItem('admin_login_failed_attempts')
+        localStorage.removeItem('admin_lockout_until')
+      } catch {}
 
       const { error: refreshError } = await supabase.auth.refreshSession()
       if (refreshError) {
@@ -891,8 +921,34 @@ function RentalHome() {
   const [extraDurationHours, setExtraDurationHours] = useState(String(bookingMode.min))
   const [selectedVehicleModelKeys, setSelectedVehicleModelKeys] = useState([])
   const [vehicleDetailGroup, setVehicleDetailGroup] = useState(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [detailModalMounted, setDetailModalMounted] = useState(false)
+  const modalCloseTimerRef = useRef(null)
+
+  const openVehicleDetail = (vehicleGroup) => {
+    if (modalCloseTimerRef.current) clearTimeout(modalCloseTimerRef.current)
+    setVehicleDetailGroup(vehicleGroup)
+    setDetailModalMounted(true)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setDetailModalOpen(true)
+      })
+    })
+  }
+
+  const closeVehicleDetail = () => {
+    setDetailModalOpen(false)
+    if (modalCloseTimerRef.current) clearTimeout(modalCloseTimerRef.current)
+    modalCloseTimerRef.current = setTimeout(() => {
+      setDetailModalMounted(false)
+      setVehicleDetailGroup(null)
+    }, 280)
+  }
+
   const [selectedVehicles, setSelectedVehicles] = useState([])
   const [formErrors, setFormErrors] = useState({})
+  const [submittingBooking, setSubmittingBooking] = useState(false)
+  const lastBookingSubmitRef = useRef(0)
   const [bookingConfirmation, setBookingConfirmation] = useState(null)
   const [selectedDate, setSelectedDate] = useState('')
   const [selectedTime, setSelectedTime] = useState('')
@@ -1157,11 +1213,11 @@ function RentalHome() {
   }, [mobileMenuOpen])
 
   useEffect(() => {
-    if (!vehicleDetailGroup) return undefined
+    if (!detailModalMounted) return undefined
 
     const previousOverflow = document.body.style.overflow
     const closeOnEscape = (event) => {
-      if (event.key === 'Escape') setVehicleDetailGroup(null)
+      if (event.key === 'Escape') closeVehicleDetail()
     }
 
     document.body.style.overflow = 'hidden'
@@ -1170,7 +1226,7 @@ function RentalHome() {
       document.body.style.overflow = previousOverflow
       window.removeEventListener('keydown', closeOnEscape)
     }
-  }, [vehicleDetailGroup])
+  }, [detailModalMounted])
 
   useEffect(() => {
     let active = true
@@ -1205,8 +1261,21 @@ function RentalHome() {
   async function handleSearch(event) {
     event.preventDefault()
     const form = event.currentTarget
+
+    // 1. Anti-bot honeypot check
+    if (form.hp_field?.value) return
+
+    // 2. Throttling multiple submissions
+    if (submittingBooking) return
+    const now = Date.now()
+    if (now - lastBookingSubmitRef.current < 3500) {
+      setFormErrors({ booking: 'Mohon tunggu sejenak sebelum mengajukan kembali.' })
+      return
+    }
+
     const pickup = form.pickup?.value?.trim()
-    const customerName = form.customer_name?.value?.trim()
+    const rawName = form.customer_name?.value?.trim() ?? ''
+    const customerName = rawName.replace(/[<>'"`;]/g, '').trim()
     const customerPhone = form.customer_phone?.value?.trim()
     const date = form.start?.value
     const time = form.time?.value
@@ -1222,6 +1291,7 @@ function RentalHome() {
     // Validasi semua field wajib
     const errors = {}
     if (!customerName || customerName.length < 2) errors.customerName = 'Isi nama pemesan'
+    else if (customerName.length > 80) errors.customerName = 'Nama pemesan maksimal 80 karakter'
     if (!normalizedPhone) errors.customerPhone = 'Nomor tidak valid. Pilih negara atau masukkan kode negara, misalnya +62.'
     if (!pickup || !selectedPickup) errors.pickup = 'Pilih lokasi dari saran di Jakarta dan sekitarnya'
     if (!date) errors.date = 'Pilih tanggal'
@@ -1250,6 +1320,10 @@ function RentalHome() {
       return
     }
 
+    setSubmittingBooking(true)
+    lastBookingSubmitRef.current = Date.now()
+
+    try {
     if (withDriver) {
       const queryKey = `${date}|${time}|${durasi}|${availabilityRefresh}`
       try {
@@ -1439,6 +1513,9 @@ function RentalHome() {
     const waUrl = `https://wa.me/6281380835156?text=${encodeURIComponent(lines)}`
     setBookingConfirmation({ waUrl, bookingCode })
     if (whatsappWindow) whatsappWindow.location.href = waUrl
+    } finally {
+      setSubmittingBooking(false)
+    }
   }
 
 
@@ -1459,7 +1536,7 @@ function RentalHome() {
 
   function handleVehicleCardClick(event, vehicleGroup) {
     if (event.target.closest('button, a')) return
-    setVehicleDetailGroup(vehicleGroup)
+    openVehicleDetail(vehicleGroup)
   }
 
   function setVehicleTransmissionQuantity(vehicle, transmissionType, quantity) {
@@ -1524,7 +1601,7 @@ function RentalHome() {
         <div><span>Setiap hari, 24 jam</span><a href="tel:081380835156">0813 8083 5156</a></div>
       </div>
 
-      <header className="public-site-header sticky top-[14px] z-30 mx-auto -mb-[100px] mt-[14px] flex min-h-[76px] w-[min(1320px,calc(100%-48px))] items-center justify-between gap-7 rounded-[12px] border border-white/15 bg-ink/90 px-7 shadow-[0_14px_40px_rgba(15,23,42,.28)] backdrop-blur-xl max-[900px]:px-[4%] max-[760px]:w-[calc(100%-32px)] max-[760px]:flex-nowrap max-[760px]:gap-x-4 max-[760px]:px-4 max-[760px]:py-3 max-[600px]:mt-3 max-[600px]:w-[calc(100%-24px)] max-[600px]:gap-2 max-[600px]:rounded-[10px] max-[600px]:py-[10px] max-[360px]:w-[calc(100%-16px)] max-[360px]:gap-x-2 max-[360px]:px-3">
+      <header className="public-site-header animate-hero-header sticky top-[14px] z-30 mx-auto -mb-[100px] mt-[14px] flex min-h-[76px] w-[min(1320px,calc(100%-48px))] items-center justify-between gap-7 rounded-[12px] border border-white/15 bg-ink/90 px-7 shadow-[0_14px_40px_rgba(15,23,42,.28)] backdrop-blur-xl max-[900px]:px-[4%] max-[760px]:w-[calc(100%-32px)] max-[760px]:flex-nowrap max-[760px]:gap-x-4 max-[760px]:px-4 max-[760px]:py-3 max-[600px]:mt-3 max-[600px]:w-[calc(100%-24px)] max-[600px]:gap-2 max-[600px]:rounded-[10px] max-[600px]:py-[10px] max-[360px]:w-[calc(100%-16px)] max-[360px]:gap-x-2 max-[360px]:px-3">
         <a className="inline-flex shrink-0 items-center gap-3 max-[760px]:gap-2" href="#beranda" aria-label="PT Khalisa Sumber Rezeki, beranda" aria-expanded={mobileMenuOpen} aria-controls="mobile-nav-panel" onClick={handleBrandClick}>
           <span className="grid h-11 w-[58px] shrink-0 place-items-center overflow-hidden rounded-md bg-white p-0.5"><img className="h-full w-full object-contain" src={logoSrc} alt="" /></span>
           <span className="grid gap-1 max-[600px]:gap-0.5"><strong className="font-display text-[.91rem] font-extrabold tracking-[.08em] text-white max-[760px]:text-[.82rem] max-[600px]:text-[.74rem] max-[360px]:text-[.68rem]">PT KHALISA</strong><small className="text-[.6rem] font-semibold tracking-[.14em] text-cyan max-[760px]:text-[.55rem] max-[600px]:text-[.5rem] max-[360px]:text-[.46rem]">SUMBER REZEKI</small></span>
@@ -1561,17 +1638,17 @@ function RentalHome() {
           <img className="absolute inset-0 size-full object-cover object-[center_57%] max-[760px]:object-[center_57%] max-[600px]:object-[0%_center]" src={landingBackgroundSrc} alt="Latar mobil untuk perjalanan" />
           <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,23,42,.88)_0%,rgba(15,23,42,.60)_39%,rgba(15,23,42,.06)_76%),linear-gradient(0deg,rgba(15,23,42,.4),transparent_32%)] max-[760px]:bg-[linear-gradient(90deg,rgba(15,23,42,.84),rgba(15,23,42,.32)),linear-gradient(0deg,rgba(15,23,42,.38),transparent_55%)]" />
           <div className="absolute left-[9%] top-1/2 w-[min(760px,60%)] -translate-y-1/2 max-[900px]:left-[6%] max-[900px]:w-[min(680px,68%)] max-[760px]:left-[7%] max-[760px]:top-[53%] max-[760px]:w-[86%] max-[760px]:max-w-none max-[600px]:top-[53%]">
-            <span className="mb-1 inline-flex items-center gap-[9px] rounded-full border border-white/20 bg-white/10 px-3 py-2 text-[.72rem] font-semibold text-white/90 shadow-sm backdrop-blur-md max-[760px]:border-white/20 max-[760px]:bg-white/10 max-[760px]:text-white/90"><i className="size-2 rounded-full bg-cyan shadow-[0_0_0_5px_rgba(14,165,233,.2)]" /> Rental mobil pilihan di Jakarta & sekitarnya</span>
-            <h1 className="my-7 font-display text-[clamp(3rem,5.2vw,4.8rem)] font-extrabold leading-[1.08] text-white max-[900px]:text-[clamp(2.35rem,5vw,3.5rem)] max-[760px]:text-[clamp(2.35rem,7vw,3.2rem)] max-[760px]:text-white max-[600px]:my-[17px] max-[600px]:text-[clamp(2.4rem,10vw,3.2rem)] max-[360px]:text-[2.25rem]">Perjalanan nyaman,<br /><em className="not-italic text-cyan">cerita lebih berkesan.</em></h1>
-            <p className="m-0 max-w-[500px] text-base leading-[1.85] text-white/85 max-[760px]:max-w-[460px] max-[760px]:text-[.92rem] max-[760px]:text-white/85 max-[600px]:max-w-[340px] max-[600px]:text-[.88rem] max-[360px]:text-[.82rem]">Temukan kendaraan yang pas untuk liburan, perjalanan bisnis, dan momen penting bersama PT Khalisa Sumber Rezeki.</p>
-            <div className="mt-9 flex flex-wrap items-center gap-5 max-[600px]:mt-7">
+            <span className="animate-hero-badge mb-1 inline-flex items-center gap-[9px] rounded-full border border-white/20 bg-white/10 px-3 py-2 text-[.72rem] font-semibold text-white/90 shadow-sm backdrop-blur-md max-[760px]:border-white/20 max-[760px]:bg-white/10 max-[760px]:text-white/90"><i className="size-2 rounded-full bg-cyan shadow-[0_0_0_5px_rgba(14,165,233,.2)]" /> Rental mobil pilihan di Jakarta & sekitarnya</span>
+            <h1 className="animate-hero-title my-7 font-display text-[clamp(3rem,5.2vw,4.8rem)] font-extrabold leading-[1.08] text-white max-[900px]:text-[clamp(2.35rem,5vw,3.5rem)] max-[760px]:text-[clamp(2.35rem,7vw,3.2rem)] max-[760px]:text-white max-[600px]:my-[17px] max-[600px]:text-[clamp(2.4rem,10vw,3.2rem)] max-[360px]:text-[2.25rem]">Perjalanan nyaman,<br /><em className="not-italic text-cyan">cerita lebih berkesan.</em></h1>
+            <p className="animate-hero-desc m-0 max-w-[500px] text-base leading-[1.85] text-white/85 max-[760px]:max-w-[460px] max-[760px]:text-[.92rem] max-[760px]:text-white/85 max-[600px]:max-w-[340px] max-[600px]:text-[.88rem] max-[360px]:text-[.82rem]">Temukan kendaraan yang pas untuk liburan, perjalanan bisnis, dan momen penting bersama PT Khalisa Sumber Rezeki.</p>
+            <div className="animate-hero-cta mt-9 flex flex-wrap items-center gap-5 max-[600px]:mt-7">
               <a className="inline-flex items-center gap-2 px-1 py-3 text-[.82rem] font-bold text-white/90 transition-colors hover:text-cyan" href="#armada">Jelajahi armada <ArrowDown className="text-cyan" aria-hidden="true" size={16} /></a>
             </div>
           </div>
           <div className="absolute bottom-[70px] left-[6.4%] right-[6.4%] flex justify-end text-[.65rem] font-bold tracking-[.13em] text-white/80 max-[760px]:left-[7%] max-[760px]:right-[7%] max-[760px]:text-white/80 max-[600px]:bottom-[62px] max-[600px]:text-[.54rem]"><span>KENYAMANAN DI SETIAP PERJALANAN</span></div>
         </section>
 
-        <section ref={formRef} className={`relative z-10 mx-auto -mt-[32px] w-[min(1240px,87.2%)] rounded-[10px] border border-line bg-white px-8 pb-6 shadow-[0_18px_48px_rgba(15,23,42,.1)] max-[900px]:w-[92%] max-[600px]:-mt-[27px] max-[600px]:w-[calc(100%-28px)] max-[600px]:px-[15px] max-[600px]:pb-[15px] ${scrollRevealClasses}`} aria-label="Pencarian kendaraan" data-scroll-reveal data-reveal="hidden">
+        <section ref={formRef} className="animate-hero-form relative z-10 mx-auto -mt-[32px] w-[min(1240px,87.2%)] rounded-[10px] border border-line bg-white px-8 pb-6 shadow-[0_18px_48px_rgba(15,23,42,.1)] max-[900px]:w-[92%] max-[600px]:-mt-[27px] max-[600px]:w-[calc(100%-28px)] max-[600px]:px-[15px] max-[600px]:pb-[15px]" aria-label="Pencarian kendaraan">
           <div className="flex flex-wrap items-center gap-3 border-b border-line py-3 max-[600px]:gap-x-2 max-[600px]:gap-y-1.5">
             <span className="text-[.72rem] font-bold text-crimson">Durasi sewa</span>
             <label className="flex items-center gap-1.5 text-[.7rem] text-muted">
@@ -1650,6 +1727,7 @@ function RentalHome() {
             </div>
           </div>
           <form id="booking-request-form" className="booking-request-form grid grid-cols-6 items-start gap-x-4 gap-y-4 py-6 max-[900px]:grid-cols-3 max-[600px]:grid-cols-1 max-[600px]:gap-x-3 max-[600px]:gap-y-3 max-[600px]:py-4" onSubmit={handleSearch}>
+            <input type="text" name="hp_field" className="hidden" tabIndex={-1} autoComplete="off" aria-hidden="true" />
             <label className="col-span-2 grid min-w-0 gap-1.5 max-[900px]:col-span-1">
               <span className={`text-[.7rem] font-bold max-[600px]:text-[.64rem] ${formErrors.customerName ? 'text-red-500' : 'text-crimson'}`}>Nama pemesan</span>
               <input className="h-10 min-w-0 border-b border-line bg-transparent px-0 text-[.79rem] text-muted outline-none placeholder:text-[#94a3b8] focus:border-cyan" type="text" name="customer_name" autoComplete="name" maxLength={120} required placeholder="Nama lengkap" aria-invalid={Boolean(formErrors.customerName)} />
@@ -1865,12 +1943,19 @@ function RentalHome() {
             {formErrors.booking && <p className="col-span-6 m-0 rounded-md bg-red-50 px-3 py-2.5 text-[.72rem] text-red-700 max-[900px]:col-span-3 max-[600px]:col-span-1" role="alert">{formErrors.booking}</p>}
 
             <button
-              className="col-span-1 flex min-w-[137px] items-center justify-center gap-2 rounded-[5px] bg-crimson px-[18px] py-[14px] text-[.8rem] font-bold text-white transition-colors duration-200 hover:bg-crimson-deep max-[900px]:col-span-3 max-[600px]:col-span-1 max-[600px]:w-full"
+              className="col-span-1 flex min-w-[137px] items-center justify-center gap-2 rounded-[5px] bg-crimson px-[18px] py-[14px] text-[.8rem] font-bold text-white transition-colors duration-200 hover:bg-crimson-deep disabled:cursor-wait disabled:opacity-60 max-[900px]:col-span-3 max-[600px]:col-span-1 max-[600px]:w-full"
               type={selectedVehicles.length > 0 ? 'submit' : 'button'}
+              disabled={submittingBooking}
               onClick={selectedVehicles.length > 0 ? undefined : () => selectedVehicleModels.length > 0 ? setFormErrors((errors) => ({ ...errors, vehicles: 'Pilih tipe transmisi dan jumlah unit.' })) : document.querySelector('#armada')?.scrollIntoView({ behavior: 'smooth' })}
             >
               <Search aria-hidden="true" size={17} />
-              {selectedVehicles.length > 0 ? `Kirim ${selectedVehicles.reduce((total, vehicle) => total + vehicle.quantity, 0)} kendaraan` : selectedVehicleModels.length > 0 ? 'Pilih jumlah unit' : 'Pilih kendaraan'}
+              {submittingBooking
+                ? 'Memproses...'
+                : selectedVehicles.length > 0
+                  ? `Kirim ${selectedVehicles.reduce((total, vehicle) => total + vehicle.quantity, 0)} kendaraan`
+                  : selectedVehicleModels.length > 0
+                    ? 'Pilih jumlah unit'
+                    : 'Pilih kendaraan'}
             </button>
           </form>
           {bookingConfirmation && <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-[.74rem] text-emerald-800" role="status">
@@ -2244,11 +2329,11 @@ function RentalHome() {
         </section>
       </main>
 
-      {vehicleDetailGroup && <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/65 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setVehicleDetailGroup(null) }}>
-        <section className="max-h-[92dvh] w-full max-w-[900px] overflow-y-auto scrollbar-none rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl max-[600px]:max-h-[90dvh]" role="dialog" aria-modal="true" aria-labelledby="vehicle-detail-title">
+      {detailModalMounted && vehicleDetailGroup && <div className={`fixed inset-0 z-50 flex items-end justify-center p-0 transition-[background-color,backdrop-filter,opacity] duration-300 sm:items-center sm:p-4 ${detailModalOpen ? 'bg-ink/65 opacity-100 backdrop-blur-[3px]' : 'pointer-events-none bg-ink/0 opacity-0 backdrop-blur-none'}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeVehicleDetail() }}>
+        <section className={`max-h-[92dvh] w-full max-w-[900px] overflow-y-auto scrollbar-none rounded-t-2xl bg-white shadow-2xl transition-[transform,opacity] duration-300 sm:rounded-2xl max-[600px]:max-h-[90dvh] ${detailModalOpen ? 'translate-y-0 scale-100 opacity-100 [transition-timing-function:cubic-bezier(0.16,1,0.3,1)]' : 'translate-y-12 sm:scale-95 opacity-0 [transition-timing-function:cubic-bezier(0.4,0,1,1)]'}`} role="dialog" aria-modal="true" aria-labelledby="vehicle-detail-title">
           <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-white px-5 py-4 max-[600px]:px-4 max-[600px]:py-3">
             <div><span className="text-[.64rem] font-bold uppercase text-muted">Detail armada</span><h2 className="m-0 mt-1 font-display text-[1.08rem] font-bold text-ink" id="vehicle-detail-title">{vehicleDetailGroup.name}</h2></div>
-            <button className="grid size-9 place-items-center rounded-lg text-muted hover:bg-slate-ice" type="button" aria-label="Tutup detail kendaraan" onClick={() => setVehicleDetailGroup(null)}><X size={18} aria-hidden="true" /></button>
+            <button className="grid size-9 place-items-center rounded-lg text-muted hover:bg-slate-ice" type="button" aria-label="Tutup detail kendaraan" onClick={closeVehicleDetail}><X size={18} aria-hidden="true" /></button>
           </header>
           <div className="grid gap-5 p-5 sm:grid-cols-[.95fr_1.05fr] max-[600px]:gap-4 max-[600px]:p-4">
             <div className="grid content-start gap-3">
@@ -2338,8 +2423,8 @@ function RentalHome() {
               Nego via WA
             </a>
             <div className="flex items-center gap-2">
-              <button className="h-10 rounded-lg border border-line px-4 text-[.76rem] font-bold text-muted hover:bg-slate-ice" type="button" onClick={() => setVehicleDetailGroup(null)}>Kembali</button>
-              <button className="h-10 rounded-lg bg-crimson px-4 text-[.76rem] font-bold text-white hover:bg-crimson-deep disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-700" type="button" disabled={!canChooseVehicleDetail} onClick={() => { handleSelectVehicle(vehicleDetailGroup); setVehicleDetailGroup(null) }}>{vehicleDetailIsSelected ? 'Sudah dipilih' : hasSelectedSchedule && availabilityStatus === 'ready' ? 'Pilih mobil' : 'Pilih jadwal dulu'}</button>
+              <button className="h-10 rounded-lg border border-line px-4 text-[.76rem] font-bold text-muted transition hover:bg-slate-ice" type="button" onClick={closeVehicleDetail}>Kembali</button>
+              <button className="h-10 rounded-lg bg-crimson px-4 text-[.76rem] font-bold text-white transition hover:bg-crimson-deep disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-700" type="button" disabled={!canChooseVehicleDetail} onClick={() => { handleSelectVehicle(vehicleDetailGroup); closeVehicleDetail() }}>{vehicleDetailIsSelected ? 'Sudah dipilih' : hasSelectedSchedule && availabilityStatus === 'ready' ? 'Pilih mobil' : 'Pilih jadwal dulu'}</button>
             </div>
           </footer>
         </section>
@@ -2389,7 +2474,7 @@ function RentalHome() {
           <a className="transition-colors hover:text-white" href="#beranda">Kembali ke atas ↑</a>
         </div>
       </footer>
-      <a className="fixed bottom-[22px] right-[22px] z-20 grid size-16 place-items-center rounded-full transition-transform duration-200 hover:scale-110 focus-visible:outline focus-visible:outline-4 focus-visible:outline-cyan/50 max-[600px]:bottom-[14px] max-[600px]:right-[14px] max-[600px]:size-14" href="https://wa.me/6281380835156" target="_blank" rel="noreferrer" aria-label="Chat PT Khalisa Sumber Rezeki melalui WhatsApp"><img className="size-full object-contain drop-shadow-[0_5px_14px_rgba(34,197,94,.48)]" src={waLogoSrc} alt="" /></a>
+      <a className="animate-wa-pulse fixed bottom-[22px] right-[22px] z-20 grid size-16 place-items-center rounded-full transition-transform duration-200 hover:scale-110 focus-visible:outline focus-visible:outline-4 focus-visible:outline-cyan/50 max-[600px]:bottom-[14px] max-[600px]:right-[14px] max-[600px]:size-14" href="https://wa.me/6281380835156" target="_blank" rel="noreferrer" aria-label="Chat PT Khalisa Sumber Rezeki melalui WhatsApp"><img className="size-full object-contain drop-shadow-[0_5px_14px_rgba(34,197,94,.48)]" src={waLogoSrc} alt="" /></a>
     </div>
   )
 }

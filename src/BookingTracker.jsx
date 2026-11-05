@@ -131,7 +131,7 @@ function BookingTracker() {
       setError('Masukkan nomor WhatsApp yang dipakai saat memesan, contoh: 08123456789.')
       return
     }
-    if (bookingCode.replace(/\D/g, '').length < 6) {
+    if (bookingCode.replace(/^KHS-?/i, '').trim().length < 6) {
       setError('Masukkan kode booking (contoh: KHS-XXXXXX) yang diterima setelah memesan.')
       return
     }

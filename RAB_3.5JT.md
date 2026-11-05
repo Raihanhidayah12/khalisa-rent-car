@@ -26,21 +26,21 @@ Dokumen ini memuat rincian paket investasi pengembangan website resmi dan sistem
 
 ---
 
-## 2. Rincian Anggaran Biaya per Modul Sistem (Rp3.500.000)
+## 2. Rincian Anggaran Biaya per Paket Modul Sistem (Rp3.500.000)
 
-Rincian alokasi pekerjaan teknis disusun berdasarkan **52 jam kerja efektif** dengan rincian per modul sebagai berikut:
+Rincian alokasi investasi disusun berbasis paket modul fungsional (*deliverables*) sebagai berikut:
 
-| No. | Modul & Lingkup Pekerjaan | Jam Kerja | Tarif Dasar / Jam | Subtotal |
-|:---:|---|:---:|:---:|---:|
-| **1** | **Analisis Kebutuhan & Struktur Alur Bisnis Rental**<br>• Analisis sistem sewa jam, hari, dan bulan (minimal 12 jam)<br>• Pemetaan alur supir, armada ready/booking, dan skema database | 4 jam | Rp65.000 | **Rp260.000** |
-| **2** | **Desain UI/UX Antarmuka Modern & Responsif**<br>• Desain kustom elegan ramah pengguna (ponsel, tablet, desktop)<br>• Standarisasi ikon vektor modern Lucide (bebas emoji kartun) | 5 jam | Rp70.000 | **Rp350.000** |
-| **3** | **Katalog Armada Cerdas & Multi-Varian**<br>• Pengelompokan varian transmisi (Matic/Manual) & mesin (Bensin/Hybrid/EV)<br>• Badge dinamis (Promo, Terlaris, Unit Baru), coret harga diskon<br>• Tombol cepat konsultasi negosiasi WhatsApp ("Nego via WA") | 8 jam | Rp65.000 | **Rp520.000** |
-| **4** | **Formulir Booking Cerdas & Mesin Geolokasi**<br>• Kalkulator sewa proporsional fleksibel & toggle include paket tol<br>• Autocomplete alamat Jakarta & sekitarnya via Geoapify API<br>• Deteksi titik koordinat perangkat via GPS browser otomatis<br>• Validasi nomor telepon internasional E.164 & kode booking unik (`KHS-XXXXXX`) | 8 jam | Rp65.000 | **Rp520.000** |
-| **5** | **Dashboard Operasional Administrator (`/admin`)**<br>• CRUD Armada & upload foto mobil ke Cloud Storage<br>• Filter jadwal interaktif (Semua, Hari ini, Besok, 7 hari, Per Bulan, Custom Tanggal)<br>• Fitur **"Ubah Deal"** harga hasil negosiasi yang mengunci saat dikonfirmasi<br>• Ekspor rekap data booking ke file Excel rapi (`.xlsx`) berformat akuntansi | 11 jam | Rp65.000 | **Rp715.000** |
-| **6** | **Sistem Notifikasi Real-time & Bel Suara (Audio Chime)**<br>• Bel audio sintetis (*Web Audio API chime*) saat pesanan baru masuk<br>• Web Push Notification desktop otomatis tanpa perlu reload layar<br>• Notifikasi pengingat jadwal sewa pelanggan yang telah selesai | 4 jam | Rp70.000 | **Rp280.000** |
-| **7** | **Backend Supabase PostgreSQL & Manajemen Supir**<br>• Database relasional PostgreSQL dengan proteksi *Row Level Security (RLS)*<br>• Validasi jadwal supir anti-bentrok (otomatis menolak supir yang bertugas)<br>• Tombol **"Kirim ke Supir"** otomatis via WhatsApp terformat rapi + Maps<br>• Otomatisasi jeda pembersihan/persiapan armada 5 jam pasca sewa | 7 jam | Rp65.000 | **Rp455.000** |
-| **8** | **Deployment Vercel, Optimasi SEO AI Overview & Legal**<br>• Konfigurasi domain produksi `khalisarental.id` & header keamanan HTTP<br>• Optimasi SEO Google AI Overview, Schema.org `AutoRental` & rating 5.0<br>• Integrasi titik resmi Google Maps PT. Khalisa Sumber Rezeki<br>• Penyusunan halaman **Syarat, Ketentuan & Privasi 10 Pasal Resmi** | 5 jam | Rp80.000 | **Rp400.000** |
-| | **TOTAL BIAYA JASA IMPLEMENTASI SISTEM** | **52 Jam** | | **Rp3.500.000** |
+| No. | Modul Sistem & Ruang Lingkup Pekerjaan | Cakupan Fitur Utama | Biaya Investasi |
+|:---:|---|---|---:|
+| **1** | **Arsitektur Sistem & Alur Bisnis Rental** | • Analisis & pemodelan alur sewa jam, hari, dan bulanan<br>• Perancangan database relasional PostgreSQL & aturan sewa | **Rp300.000** |
+| **2** | **Desain UI/UX & Antarmuka Responsif** | • Tampilan antarmuka modern, elegan & mobile-first (ponsel/tablet/PC)<br>• Standarisasi ikon vektor modern Lucide & visual branding | **Rp350.000** |
+| **3** | **Katalog Armada Cerdas & Multi-Varian** | • Pengelompokan varian transmisi (Matic/Manual) & mesin (Bensin/EV/Hybrid)<br>• Badge dinamis (Promo, Terlaris, Unit Baru), coret harga diskon<br>• Tombol cepat konsultasi negosiasi WhatsApp ("Nego via WA") | **Rp500.000** |
+| **4** | **Formulir Booking Cerdas & Mesin Geolokasi** | • Kalkulator estimasi sewa otomatis + toggle supir & paket tol<br>• Autocomplete alamat Jabodetabek via API Geoapify<br>• Deteksi titik koordinat perangkat jemput via GPS browser otomatis<br>• Validasi nomor telepon internasional E.164 & kode booking unik (`KHS-XXXXXX`) | **Rp550.000** |
+| **5** | **Dashboard Operasional Administrator (`/admin`)** | • Manajemen Armada (CRUD) & upload foto unit ke Cloud Storage<br>• Filter jadwal operasional (Hari ini, Besok, 7 hari, Bulanan, Custom Tanggal)<br>• Fitur **"Ubah Deal"** harga hasil negosiasi yang mengunci saat dikonfirmasi<br>• Ekspor rekap data booking ke file Excel rapi (`.xlsx`) berformat akuntansi | **Rp700.000** |
+| **6** | **Sistem Notifikasi Real-time & Bel Suara (Audio Chime)** | • Bel audio sintetis (*Web Audio API chime*) saat pesanan baru masuk<br>• Web Push Notification desktop otomatis tanpa reload layar<br>• Notifikasi pengingat jadwal sewa pelanggan yang telah selesai | **Rp300.000** |
+| **7** | **Backend Supabase PostgreSQL & Manajemen Supir** | • Proteksi data berlapis *Row Level Security (RLS)*<br>• Validasi jadwal supir anti-bentrok (otomatis tolak supir yang bertugas)<br>• Tombol **"Kirim ke Supir"** otomatis via WhatsApp terformat rapi + Google Maps<br>• Otomatisasi jeda pembersihan/persiapan armada 5 jam pasca sewa | **Rp450.000** |
+| **8** | **Deployment Cloud, Optimasi SEO AI Overview & Legal** | • Konfigurasi domain produksi `khalisarental.id` & header keamanan SSL<br>• Optimasi SEO Google AI Overview, Schema.org `AutoRental` & rating 5.0<br>• Integrasi titik resmi Google Maps PT. Khalisa Sumber Rezeki<br>• Penyusunan halaman **Syarat, Ketentuan & Privasi 10 Pasal Resmi** | **Rp350.000** |
+| | **TOTAL INVESTASI PENGEMBANGAN SISTEM** | **Paket Lengkap (Turn-key Solution)** | **Rp3.500.000** |
 
 ---
 
