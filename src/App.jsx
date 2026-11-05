@@ -2103,7 +2103,7 @@ function RentalHome() {
                   <div className="mt-[17px] flex items-end justify-between gap-2 border-t border-line pt-[11px]">
                     <div>
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[.68rem] text-[#64748b]">{variants.length > 1 ? 'Harga mulai' : 'Harga per unit'}</span>
+                        <span className="text-[.68rem] text-[#64748b]">Mulai dari</span>
                         <span className="inline-flex rounded-full bg-emerald-50 px-1.5 py-0.5 text-[.58rem] font-bold text-emerald-700">Bisa Nego</span>
                       </div>
                       {isNego ? (
@@ -2351,7 +2351,7 @@ function RentalHome() {
               </div>
             </div>
             <div className="grid content-start gap-4">
-              <div className="flex items-start justify-between gap-3 border-b border-line pb-3"><div><div className="flex items-center gap-1.5"><span className="text-[.68rem] text-muted">Harga mulai</span><span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[.6rem] font-bold text-emerald-700">Bisa Nego via WA</span></div>{(() => {
+              <div className="flex items-start justify-between gap-3 border-b border-line pb-3"><div><div className="flex items-center gap-1.5"><span className="text-[.68rem] text-muted">Mulai dari</span><span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[.6rem] font-bold text-emerald-700">Bisa Nego via WA</span></div>{(() => {
                 const isGroupNego = vehicleDetailGroup.variants.every((v) => isNegoPrice(getVehiclePrice(v)))
                 const detailActiveVariant = !isGroupNego && vehicleDetailGroup.variants.find((v) => {
                   const info = getActivePriceInfo(v, includeToll, selectedDate || null, bookingMode.unit, durasi)
