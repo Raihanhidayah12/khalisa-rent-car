@@ -9,6 +9,7 @@ const logoSrc = logo?.src || logo
 import { adminReloadSessionStorageKey, supabase, supabaseAuthStorageKey } from './supabaseClient'
 import { formatJakartaDateTime, generateBookingCode, toJakartaISOString } from './bookingUtils'
 import { formatDuration, formatPrice, getAvailableVehicleStock, getVehicleStock, isVehicleReady, parsePrice, getActivePromo, isNegoPrice } from './vehicleUtils'
+import { compressImageFile, formatFileSize } from './imageUtils'
 
 const emptyVehicleDraft = {
   name: '',
@@ -2541,13 +2542,15 @@ function AdminDashboard() {
     setVehicleFormError('')
 
     const fileExtensions = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }
-    if (vehicleImage && !fileExtensions[vehicleImage.file.type]) {
-      setVehicleFormError('Gunakan foto JPG, PNG, atau WebP.')
-      return
-    }
-    if (vehicleImage && vehicleImage.file.size > 5 * 1024 * 1024) {
-      setVehicleFormError('Ukuran foto maksimal 5 MB.')
-      return
+    if (vehicleImage) {
+      if (!fileExtensions[vehicleImage.file.type]) {
+        setVehicleFormError('Format foto tidak valid. Gunakan format JPG, PNG, atau WebP.')
+        return
+      }
+      if (vehicleImage.file.size > 5 * 1024 * 1024) {
+        setVehicleFormError(`Ukuran foto kendaraan terlalu besar (${formatFileSize(vehicleImage.file.size)}). Maksimal ukuran foto adalah 5 MB.`)
+        return
+      }
     }
     if (!vehicleDraft.transmission_options.some((type) => Number(vehicleDraft.transmission_stock[type]) > 0)) {
       setVehicleFormError('Pilih tipe transmisi yang benar-benar memiliki unit.')
@@ -2609,14 +2612,29 @@ function AdminDashboard() {
     setSavingVehicle(true)
     try {
       if (vehicleImage) {
-        uploadedPath = `vehicles/${crypto.randomUUID()}.${fileExtensions[vehicleImage.file.type]}`
+        let fileToUpload = vehicleImage.file
+        if (fileToUpload.size > 500 * 1024) {
+          try {
+            fileToUpload = await compressImageFile(fileToUpload, { maxWidthOrHeight: 1920, quality: 0.84 })
+          } catch (compErr) {
+            console.warn('[Vehicle photo compression fallback]', compErr)
+          }
+        }
+        const ext = fileExtensions[fileToUpload.type] || 'jpg'
+        uploadedPath = `vehicles/${crypto.randomUUID()}.${ext}`
         const { error: uploadError } = await supabase.storage
           .from('vehicle-images')
-          .upload(uploadedPath, vehicleImage.file, {
+          .upload(uploadedPath, fileToUpload, {
             cacheControl: '3600',
-            contentType: vehicleImage.file.type,
+            contentType: fileToUpload.type,
           })
-        if (uploadError) throw uploadError
+        if (uploadError) {
+          const msg = uploadError.message || ''
+          if (msg.toLowerCase().includes('size') || msg.toLowerCase().includes('payload') || uploadError.statusCode === '413') {
+            throw new Error(`Ukuran foto kendaraan melebihi batas penyimpanan (${formatFileSize(fileToUpload.size)}). Silakan gunakan foto yang lebih kecil.`)
+          }
+          throw uploadError
+        }
         imageUrl = supabase.storage.from('vehicle-images').getPublicUrl(uploadedPath).data.publicUrl
       }
 
@@ -2729,16 +2747,55 @@ function AdminDashboard() {
 
   async function uploadPaymentProofFile(file) {
     if (!file) throw new Error('File bukti pembayaran tidak ditemukan.')
-    const formData = new FormData()
-    formData.append('file', file)
 
-    const res = await fetch('/api/upload-payment-proof', {
-      method: 'POST',
-      body: formData,
-    })
-    const json = await res.json()
-    if (!res.ok || !json.publicUrl) {
-      throw new Error(json.error || 'Gagal mengunggah file bukti pembayaran.')
+    // 1. Auto kompresi jika file adalah gambar (mereduksi 10-20 MB kamera HP menjadi ~250-500 KB)
+    let fileToUpload = file
+    if (file.type && file.type.startsWith('image/')) {
+      try {
+        fileToUpload = await compressImageFile(file, { maxWidthOrHeight: 1920, quality: 0.82 })
+      } catch (cErr) {
+        console.warn('[Auto compress error, fallback to original]', cErr)
+      }
+    }
+
+    // 2. Validasi batas ukuran payload server (4.5 MB)
+    const MAX_ALLOWED_BYTES = 4.5 * 1024 * 1024
+    if (fileToUpload.size > MAX_ALLOWED_BYTES) {
+      throw new Error(
+        `Ukuran file bukti pembayaran terlalu besar (${formatFileSize(fileToUpload.size)}). ` +
+        `Batas maksimal adalah 4.5 MB. Harap gunakan foto dengan resolusi lebih kecil atau file terkompresi.`
+      )
+    }
+
+    const formData = new FormData()
+    formData.append('file', fileToUpload)
+
+    let res
+    try {
+      res = await fetch('/api/upload-payment-proof', {
+        method: 'POST',
+        body: formData,
+      })
+    } catch (networkErr) {
+      throw new Error(`Koneksi gagal saat mengunggah bukti pembayaran: ${networkErr.message || 'Jaringan internet bermasalah'}`)
+    }
+
+    const rawText = await res.text()
+    let json = null
+    try {
+      json = JSON.parse(rawText)
+    } catch {
+      if (res.status === 413 || rawText.includes('FUNCTION_PAYLOAD_TOO_LARGE') || rawText.includes('Payload Too Large')) {
+        throw new Error(
+          `Ukuran file bukti pembayaran terlalu besar untuk diproses server (${formatFileSize(fileToUpload.size)}). ` +
+          `Batas maksimal adalah 4.5 MB. Harap pilih foto yang lebih kecil.`
+        )
+      }
+      throw new Error(`Gagal mengunggah file bukti pembayaran (HTTP ${res.status}): ${rawText.slice(0, 100) || 'Respon server tidak valid'}`)
+    }
+
+    if (!res.ok || !json?.publicUrl) {
+      throw new Error(json?.error || 'Gagal mengunggah file bukti pembayaran.')
     }
     return json.publicUrl
   }
@@ -6171,12 +6228,60 @@ function AdminDashboard() {
             </>)}
 
             <div className="col-span-2 grid gap-3 max-[520px]:col-span-1">
-              <label className="grid gap-1.5"><span className="text-[.72rem] font-bold">Foto kendaraan</span><input className="block w-full rounded-xl border border-line px-3 py-2 text-[.76rem] file:mr-3 file:rounded-lg file:border-0 file:bg-slate-ice file:px-3 file:py-1.5 file:text-[.72rem] file:font-bold" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => {
-                const file = event.target.files?.[0]
-                if (file) setVehicleImage({ file, previewUrl: URL.createObjectURL(file) })
-              }} /></label>
-              {(vehicleImage?.previewUrl || vehicleDraft.image_url) && <img className="h-36 w-full rounded-xl border border-line bg-slate-ice object-contain p-2" src={vehicleImage?.previewUrl ?? vehicleDraft.image_url} alt="Pratinjau foto kendaraan" />}
-              <span className="text-[.74rem] font-medium text-slate-700">JPG, PNG, atau WebP. Maksimal 5 MB. Foto lama dipertahankan jika tidak memilih foto baru.</span>
+              <label className="grid gap-1.5">
+                <span className="text-[.72rem] font-bold">Foto kendaraan</span>
+                <input
+                  className="block w-full rounded-xl border border-line px-3 py-2 text-[.76rem] file:mr-3 file:rounded-lg file:border-0 file:bg-slate-ice file:px-3 file:py-1.5 file:text-[.72rem] file:font-bold"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0]
+                    if (!file) return
+                    const allowed = ['image/jpeg', 'image/png', 'image/webp']
+                    if (!allowed.includes(file.type)) {
+                      setVehicleFormError('Format foto tidak didukung. Harap gunakan format JPG, PNG, atau WebP.')
+                      event.target.value = ''
+                      return
+                    }
+                    if (file.size > 25 * 1024 * 1024) {
+                      setVehicleFormError(`Ukuran foto terlalu besar (${formatFileSize(file.size)}). Maksimal ukuran file adalah 25 MB sebelum kompresi.`)
+                      event.target.value = ''
+                      return
+                    }
+                    setVehicleFormError('')
+                    let processed = file
+                    if (file.size > 500 * 1024) {
+                      try {
+                        processed = await compressImageFile(file, { maxWidthOrHeight: 1920, quality: 0.84 })
+                      } catch (cErr) {
+                        console.warn('[Auto compress error]', cErr)
+                      }
+                    }
+                    if (processed.size > 5 * 1024 * 1024) {
+                      setVehicleFormError(`Ukuran foto kendaraan melebihi batas 5 MB (${formatFileSize(processed.size)}). Silakan gunakan foto yang lebih kecil.`)
+                      event.target.value = ''
+                      return
+                    }
+                    setVehicleImage({ file: processed, previewUrl: URL.createObjectURL(processed) })
+                  }}
+                />
+              </label>
+              {(vehicleImage?.previewUrl || vehicleDraft.image_url) && (
+                <img
+                  className="h-36 w-full rounded-xl border border-line bg-slate-ice object-contain p-2"
+                  src={vehicleImage?.previewUrl ?? vehicleDraft.image_url}
+                  alt="Pratinjau foto kendaraan"
+                />
+              )}
+              <span className="text-[.74rem] font-medium text-slate-700">
+                JPG, PNG, atau WebP. Maksimal 5 MB (Otomatis Dioptimasi).{' '}
+                {vehicleImage && (
+                  <span className="font-bold text-emerald-700">
+                    Foto terpilih: {formatFileSize(vehicleImage.file.size)}
+                  </span>
+                )}{' '}
+                Foto lama dipertahankan jika tidak memilih foto baru.
+              </span>
             </div>
             <label className="col-span-2 flex items-center gap-2.5 text-[.78rem] font-medium max-[520px]:col-span-1"><input className="size-4 accent-crimson" type="checkbox" checked={vehicleDraft.is_active} onChange={(event) => setVehicleDraft((draft) => ({ ...draft, is_active: event.target.checked }))} />Tampilkan di katalog publik</label>
             {vehicleFormError && <p className="col-span-2 m-0 rounded-xl bg-red-50 px-3 py-2.5 text-[.74rem] text-red-700 max-[520px]:col-span-1" role="alert">{vehicleFormError}</p>}
@@ -7124,9 +7229,9 @@ function AdminDashboard() {
                               <p className="m-0 truncate text-[.74rem] font-bold text-ink">
                                 {bookingDraft.payment_proof_file ? bookingDraft.payment_proof_file.name : 'Bukti Transfer'}
                               </p>
-                              <p className="mb-0 mt-0.5 text-[.64rem] text-muted">
+                              <p className="mb-0 mt-0.5 text-[.64rem] font-medium text-emerald-700">
                                 {bookingDraft.payment_proof_file
-                                  ? `${(bookingDraft.payment_proof_file.size / 1024).toFixed(1)} KB`
+                                  ? `${formatFileSize(bookingDraft.payment_proof_file.size)} · Siap diunggah`
                                   : 'Terpilih'}
                               </p>
                             </div>
@@ -7146,22 +7251,52 @@ function AdminDashboard() {
                             Pilih Foto Bukti Transfer / Struk ATM
                           </span>
                           <span className="text-[.64rem] text-muted">
-                            JPG, PNG, WEBP, atau PDF (Maksimal 10 MB)
+                            JPG, PNG, WEBP (Otomatis Dioptimasi) atau PDF (Maksimal 4.5 MB)
                           </span>
                           <input
                             type="file"
                             className="hidden"
                             accept="image/jpeg,image/png,image/webp,application/pdf"
-                            onChange={(e) => {
+                            onChange={async (e) => {
                               const file = e.target.files?.[0]
-                              if (file) {
-                                const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : null
-                                setBookingDraft((d) => ({
-                                  ...d,
-                                  payment_proof_file: file,
-                                  payment_proof_preview: preview,
-                                }))
+                              if (!file) return
+                              const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+                              if (!allowed.includes(file.type)) {
+                                setBookingFormError('Format file tidak didukung. Harap pilih gambar (JPG, PNG, WEBP) atau dokumen PDF.')
+                                e.target.value = ''
+                                return
                               }
+                              const isPdf = file.type === 'application/pdf'
+                              if (isPdf && file.size > 4.5 * 1024 * 1024) {
+                                setBookingFormError(`Ukuran file PDF terlalu besar (${formatFileSize(file.size)}). Batas maksimal dokumen adalah 4.5 MB.`)
+                                e.target.value = ''
+                                return
+                              }
+                              if (file.size > 25 * 1024 * 1024) {
+                                setBookingFormError(`Ukuran foto terlalu besar (${formatFileSize(file.size)}). Maksimal ukuran file adalah 25 MB sebelum kompresi.`)
+                                e.target.value = ''
+                                return
+                              }
+                              setBookingFormError('')
+                              let processed = file
+                              if (file.type.startsWith('image/') && file.size > 500 * 1024) {
+                                try {
+                                  processed = await compressImageFile(file, { maxWidthOrHeight: 1920, quality: 0.82 })
+                                } catch (compErr) {
+                                  console.warn('Auto kompresi gagal:', compErr)
+                                }
+                              }
+                              if (processed.size > 4.5 * 1024 * 1024) {
+                                setBookingFormError(`Ukuran file bukti pembayaran terlalu besar (${formatFileSize(processed.size)}). Batas maksimal server adalah 4.5 MB. Harap gunakan foto dengan resolusi lebih kecil.`)
+                                e.target.value = ''
+                                return
+                              }
+                              const preview = processed.type.startsWith('image/') ? URL.createObjectURL(processed) : null
+                              setBookingDraft((d) => ({
+                                ...d,
+                                payment_proof_file: processed,
+                                payment_proof_preview: preview,
+                              }))
                             }}
                           />
                         </label>
@@ -7522,9 +7657,9 @@ function AdminDashboard() {
                           <p className="m-0 truncate text-[.76rem] font-bold text-ink">
                             {paymentConfirmDraft.file ? paymentConfirmDraft.file.name : 'Bukti Transfer Tersimpan'}
                           </p>
-                          <p className="mb-0 mt-0.5 text-[.66rem] text-muted">
+                          <p className="mb-0 mt-0.5 text-[.66rem] font-medium text-emerald-700">
                             {paymentConfirmDraft.file
-                              ? `${(paymentConfirmDraft.file.size / 1024).toFixed(1)} KB`
+                              ? `${formatFileSize(paymentConfirmDraft.file.size)} · Siap diunggah`
                               : 'Format file valid'}
                           </p>
                         </div>
@@ -7546,22 +7681,52 @@ function AdminDashboard() {
                         Klik atau Tarik Foto Bukti Transfer ke Sini
                       </span>
                       <span className="mt-0.5 text-[.66rem] text-muted">
-                        Format: JPG, PNG, WEBP, atau PDF (Maksimal 10 MB)
+                        Format: JPG, PNG, WEBP (Otomatis Dioptimasi), atau PDF (Maksimal 4.5 MB)
                       </span>
                       <input
                         type="file"
                         className="hidden"
                         accept="image/jpeg,image/png,image/webp,application/pdf"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0]
-                          if (file) {
-                            const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : null
-                            setPaymentConfirmDraft((d) => ({
-                              ...d,
-                              file,
-                              file_preview: preview,
-                            }))
+                          if (!file) return
+                          const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+                          if (!allowed.includes(file.type)) {
+                            setPaymentConfirmError('Format file tidak didukung. Harap pilih gambar (JPG, PNG, WEBP) atau dokumen PDF.')
+                            e.target.value = ''
+                            return
                           }
+                          const isPdf = file.type === 'application/pdf'
+                          if (isPdf && file.size > 4.5 * 1024 * 1024) {
+                            setPaymentConfirmError(`Ukuran file PDF terlalu besar (${formatFileSize(file.size)}). Batas maksimal dokumen adalah 4.5 MB.`)
+                            e.target.value = ''
+                            return
+                          }
+                          if (file.size > 25 * 1024 * 1024) {
+                            setPaymentConfirmError(`Ukuran foto terlalu besar (${formatFileSize(file.size)}). Maksimal ukuran file adalah 25 MB sebelum kompresi.`)
+                            e.target.value = ''
+                            return
+                          }
+                          setPaymentConfirmError('')
+                          let processed = file
+                          if (file.type.startsWith('image/') && file.size > 500 * 1024) {
+                            try {
+                              processed = await compressImageFile(file, { maxWidthOrHeight: 1920, quality: 0.82 })
+                            } catch (compErr) {
+                              console.warn('Auto kompresi gagal:', compErr)
+                            }
+                          }
+                          if (processed.size > 4.5 * 1024 * 1024) {
+                            setPaymentConfirmError(`Ukuran file bukti transfer terlalu besar (${formatFileSize(processed.size)}). Batas maksimal server adalah 4.5 MB. Harap gunakan foto dengan resolusi lebih kecil.`)
+                            e.target.value = ''
+                            return
+                          }
+                          const preview = processed.type.startsWith('image/') ? URL.createObjectURL(processed) : null
+                          setPaymentConfirmDraft((d) => ({
+                            ...d,
+                            file: processed,
+                            file_preview: preview,
+                          }))
                         }}
                       />
                     </label>
@@ -7814,8 +7979,10 @@ function AdminDashboard() {
                           <p className="m-0 truncate text-[.76rem] font-bold text-ink">
                             {settlementDraft.file ? settlementDraft.file.name : 'Bukti Pelunasan'}
                           </p>
-                          <p className="mb-0 mt-0.5 text-[.66rem] text-muted">
-                            {settlementDraft.file ? `${(settlementDraft.file.size / 1024).toFixed(1)} KB` : 'Format valid'}
+                          <p className="mb-0 mt-0.5 text-[.66rem] font-medium text-emerald-700">
+                            {settlementDraft.file
+                              ? `${formatFileSize(settlementDraft.file.size)} · Siap diunggah`
+                              : 'Format valid'}
                           </p>
                         </div>
                       </div>
@@ -7834,22 +8001,52 @@ function AdminDashboard() {
                         Klik atau Tarik Foto Bukti Pelunasan ke Sini
                       </span>
                       <span className="mt-0.5 text-[.66rem] text-muted">
-                        Format: JPG, PNG, WEBP, atau PDF (Maksimal 10 MB)
+                        Format: JPG, PNG, WEBP (Otomatis Dioptimasi) atau PDF (Maksimal 4.5 MB)
                       </span>
                       <input
                         type="file"
                         className="hidden"
                         accept="image/jpeg,image/png,image/webp,application/pdf"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0]
-                          if (file) {
-                            const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : null
-                            setSettlementDraft((d) => ({
-                              ...d,
-                              file,
-                              file_preview: preview,
-                            }))
+                          if (!file) return
+                          const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+                          if (!allowed.includes(file.type)) {
+                            setSettlementError('Format file tidak didukung. Harap pilih gambar (JPG, PNG, WEBP) atau dokumen PDF.')
+                            e.target.value = ''
+                            return
                           }
+                          const isPdf = file.type === 'application/pdf'
+                          if (isPdf && file.size > 4.5 * 1024 * 1024) {
+                            setSettlementError(`Ukuran file PDF terlalu besar (${formatFileSize(file.size)}). Batas maksimal dokumen adalah 4.5 MB.`)
+                            e.target.value = ''
+                            return
+                          }
+                          if (file.size > 25 * 1024 * 1024) {
+                            setSettlementError(`Ukuran file terlalu besar (${formatFileSize(file.size)}). Maksimal ukuran file adalah 25 MB sebelum kompresi.`)
+                            e.target.value = ''
+                            return
+                          }
+                          setSettlementError('')
+                          let processed = file
+                          if (file.type.startsWith('image/') && file.size > 500 * 1024) {
+                            try {
+                              processed = await compressImageFile(file, { maxWidthOrHeight: 1920, quality: 0.82 })
+                            } catch (compErr) {
+                              console.warn('Auto kompresi gagal:', compErr)
+                            }
+                          }
+                          if (processed.size > 4.5 * 1024 * 1024) {
+                            setSettlementError(`Ukuran file bukti pelunasan terlalu besar (${formatFileSize(processed.size)}). Batas maksimal server adalah 4.5 MB. Harap gunakan foto dengan resolusi lebih kecil.`)
+                            e.target.value = ''
+                            return
+                          }
+                          const preview = processed.type.startsWith('image/') ? URL.createObjectURL(processed) : null
+                          setSettlementDraft((d) => ({
+                            ...d,
+                            file: processed,
+                            file_preview: preview,
+                          }))
                         }}
                       />
                     </label>
