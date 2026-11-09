@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import { ArrowUpRight, Bell, CalendarDays, CarFront, Check, Clock3, Download, LayoutDashboard, LogOut, MapPin, MessageSquare, Phone, Plus, RefreshCw, Search, ShieldCheck, Trash2, UserCheck, UserRound, Wallet, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowUpRight, AlertCircle, Bell, CalendarCheck, CalendarDays, CarFront, Check, CheckCircle2, Clock3, Copy, Download, ExternalLink, FileText, LayoutDashboard, LogOut, MapPin, MessageSquare, Phone, Plus, Receipt, RefreshCw, Search, ShieldCheck, Sparkles, Trash2, UploadCloud, UserCheck, UserRound, Wallet, X, ZoomIn } from 'lucide-react'
 import ExcelJS from 'exceljs'
 import logo from './assets/Logo-cropped.png'
 
 const logoSrc = logo?.src || logo
 import { adminReloadSessionStorageKey, supabase, supabaseAuthStorageKey } from './supabaseClient'
-import { formatJakartaDateTime } from './bookingUtils'
+import { formatJakartaDateTime, generateBookingCode, toJakartaISOString } from './bookingUtils'
 import { formatDuration, formatPrice, getAvailableVehicleStock, getVehicleStock, isVehicleReady, parsePrice, getActivePromo, isNegoPrice } from './vehicleUtils'
 
 const emptyVehicleDraft = {
@@ -40,7 +40,141 @@ const emptyDriverDraft = {
   sim_type: 'SIM A',
   notes: '',
 }
-const isEventBooking = (booking) => String(booking?.booking_mode ?? '').toLowerCase().startsWith('acara')
+const eventTypeOptions = [
+  'Pernikahan',
+  'Wisuda',
+  'Korporat',
+  'Ulang Tahun & Lainnya',
+  'Lainnya',
+]
+
+const eventAddonOptions = [
+  { id: 'bunga_segar', label: 'Bunga segar' },
+  { id: 'bunga_artif', label: 'Bunga artifisial' },
+  { id: 'pita', label: 'Pita dekorasi' },
+  { id: 'papan_nama', label: 'Papan nama pengantin' },
+  { id: 'balon', label: 'Balon dekorasi' },
+  { id: 'kustom', label: 'Kustom / lainnya' },
+]
+
+const paymentMethodOptions = [
+  'Transfer BCA',
+  'Transfer Mandiri',
+  'Transfer BRI',
+  'Transfer BNI',
+  'Transfer BSI',
+  'QRIS',
+  'Tunai / Cash di Pool',
+  'Transfer Bank Lainnya',
+]
+
+function getBookingPaymentInfo(booking) {
+  if (!booking) return null
+  let raw = null
+  if (booking.admin_note) {
+    try {
+      const parsed = typeof booking.admin_note === 'string' ? JSON.parse(booking.admin_note) : booking.admin_note
+      if (parsed && typeof parsed === 'object') {
+        raw = parsed.payment || parsed
+      }
+    } catch {
+      // not valid JSON
+    }
+  }
+  if (!raw) return null
+
+  const estPrice = Number(booking.estimated_price) || 0
+  const isNewSchema = 'type' in raw || 'dp_amount' in raw || 'settlement' in raw
+
+  if (isNewSchema) {
+    const totalAmount = Number(raw.total_amount ?? estPrice) || estPrice
+    const dpAmount = Number(raw.dp_amount ?? raw.amount ?? 0)
+    const remainingAmount = typeof raw.remaining_amount !== 'undefined'
+      ? Number(raw.remaining_amount)
+      : Math.max(0, totalAmount - dpAmount)
+    const isPaid = raw.status === 'paid' || remainingAmount <= 0
+    return {
+      type: raw.type || (remainingAmount > 0 ? 'dp' : 'full'),
+      status: isPaid ? 'paid' : 'partial',
+      total_amount: totalAmount,
+      dp_amount: dpAmount,
+      remaining_amount: isPaid ? 0 : remainingAmount,
+      dp_method: raw.dp_method || raw.method || '-',
+      dp_sender_name: raw.dp_sender_name || raw.sender_name || booking.customer_name || '-',
+      dp_proof_url: raw.dp_proof_url || raw.proof_url || '',
+      dp_notes: raw.dp_notes || raw.notes || '',
+      dp_at: raw.dp_at || raw.confirmed_at || booking.created_at,
+      settlement: raw.settlement || null,
+      // Backward compatibility aliases
+      method: raw.dp_method || raw.method || '-',
+      sender_name: raw.dp_sender_name || raw.sender_name || booking.customer_name || '-',
+      amount: dpAmount,
+      proof_url: raw.dp_proof_url || raw.proof_url || '',
+      notes: raw.dp_notes || raw.notes || '',
+      confirmed_at: raw.dp_at || raw.confirmed_at || booking.created_at,
+    }
+  }
+
+  // Legacy schema: { method, sender_name, amount, proof_url, notes, confirmed_at }
+  const legacyAmount = Number(raw.amount) || 0
+  const remaining = estPrice > 0 ? Math.max(0, estPrice - legacyAmount) : 0
+  const isPaid = remaining <= 0 || legacyAmount >= estPrice
+  return {
+    type: remaining > 0 ? 'dp' : 'full',
+    status: isPaid ? 'paid' : 'partial',
+    total_amount: estPrice,
+    dp_amount: legacyAmount,
+    remaining_amount: isPaid ? 0 : remaining,
+    dp_method: raw.method || '-',
+    dp_sender_name: raw.sender_name || booking.customer_name || '-',
+    dp_proof_url: raw.proof_url || '',
+    dp_notes: raw.notes || '',
+    dp_at: raw.confirmed_at || booking.created_at,
+    settlement: null,
+    // Aliases
+    method: raw.method || '-',
+    sender_name: raw.sender_name || booking.customer_name || '-',
+    amount: legacyAmount,
+    proof_url: raw.proof_url || '',
+    notes: raw.notes || '',
+    confirmed_at: raw.confirmed_at || booking.created_at,
+  }
+}
+
+const emptyBookingDraft = {
+  customer_name: '',
+  customer_phone: '',
+  vehicle_id: '',
+  transmission_type: 'automatic',
+  booking_mode: 'Sewa mobil lepas kunci',
+  event_type: 'Pernikahan',
+  event_type_other: '',
+  event_addons: [],
+  event_addon_custom: '',
+  driver_id: '',
+  start_date: '',
+  start_time: '08:00',
+  duration_months: '0',
+  duration_days: '1',
+  duration_hours_part: '0',
+  duration_hours: 24,
+  pickup_address: 'Pool Khalisa Rent Car',
+  deal_price: '',
+  toll_included: false,
+  toll_amount: '',
+  status: 'confirmed',
+  payment_type: 'dp',
+  payment_method: 'Transfer BCA',
+  payment_sender_name: '',
+  payment_amount: '',
+  payment_proof_file: null,
+  payment_proof_preview: null,
+  payment_notes: '',
+  notes: '[ORDER VIA WA]',
+}
+const isEventBooking = (booking) =>
+  String(booking?.booking_mode ?? '').toLowerCase().includes('acara') ||
+  String(booking?.notes ?? '').includes('[PAKET ACARA')
 function parseEventNotes(notes) {
   if (!notes) return { eventType: null, addons: null, catatan: null }
   const lines = notes.split('\n')
@@ -90,11 +224,97 @@ function isDriverBookedForWindow(driverId, booking, bookings) {
   if (!Number.isFinite(startAt) || !Number.isFinite(endAt)) return true
 
   return bookings.some((otherBooking) => {
-    if (otherBooking.id === booking.id || otherBooking.driver_id !== driverId || !['pending', 'confirmed'].includes(otherBooking.status)) return false
+    if (otherBooking.id === booking.id || String(otherBooking.driver_id) !== String(driverId) || !['pending', 'confirmed'].includes(otherBooking.status)) return false
     const otherStartAt = Date.parse(otherBooking.start_at)
     const otherEndAt = Date.parse(otherBooking.end_at)
     return !Number.isFinite(otherStartAt) || !Number.isFinite(otherEndAt) || (otherStartAt < endAt && otherEndAt > startAt)
   })
+}
+
+function checkVehicleAvailableInWindow(vehicle, window, bookings, transmissionType = null, rpcAvailability = null) {
+  if (!vehicle) return { available: false, remaining: 0, reason: 'Armada tidak valid' }
+  if (vehicle.is_active === false) {
+    return { available: false, remaining: 0, reason: 'Nonaktif' }
+  }
+  if (vehicle.status === 'maintenance' || String(vehicle.status || '').toLowerCase().includes('perawatan')) {
+    return { available: false, remaining: 0, reason: 'Perawatan / Bengkel' }
+  }
+  if (!window || !window.start_at || !window.end_at) {
+    return { available: true, remaining: 1, reason: 'Tersedia' }
+  }
+
+  // 1. Prioritaskan data RPC Supabase bila tersedia
+  if (rpcAvailability && rpcAvailability[vehicle.id]) {
+    const row = rpcAvailability[vehicle.id]
+    const totalRemaining = Math.max(0, (Number(row.stock) || 0) - (Number(row.booked) || 0))
+    if (transmissionType && row.transmission_availability?.[transmissionType]) {
+      const tRem = Number(row.transmission_availability[transmissionType].remaining) || 0
+      if (tRem <= 0 || totalRemaining <= 0) {
+        return { available: false, remaining: 0, reason: 'Penuh / Sedang Dipinjam' }
+      }
+      return { available: true, remaining: Math.min(tRem, totalRemaining), reason: 'Tersedia' }
+    }
+    if (totalRemaining <= 0) {
+      return { available: false, remaining: 0, reason: 'Penuh / Sedang Dipinjam' }
+    }
+    return { available: true, remaining: totalRemaining, reason: 'Tersedia' }
+  }
+
+  // 2. Perhitungan lokal real-time dari array bookings di memori (0ms latency)
+  const winStart = Date.parse(window.start_at)
+  const winEnd = Date.parse(window.end_at)
+  if (!Number.isFinite(winStart) || !Number.isFinite(winEnd)) {
+    return { available: true, remaining: 1, reason: 'Tersedia' }
+  }
+
+  let bookedCount = 0
+  let bookedTypedCount = 0
+
+  for (const b of bookings) {
+    if (!['pending', 'confirmed'].includes(b.status)) continue
+    const bStart = Date.parse(b.start_at)
+    const bEnd = Date.parse(b.end_at)
+    if (!Number.isFinite(bStart) || !Number.isFinite(bEnd)) continue
+    if (!(bStart < winEnd && bEnd > winStart)) continue
+
+    const snapshot = Array.isArray(b.vehicle_snapshot) ? b.vehicle_snapshot : []
+    const vIds = Array.isArray(b.vehicle_ids) ? b.vehicle_ids : []
+    const matching = snapshot.filter((item) => String(item.id) === String(vehicle.id))
+    const hasId = vIds.some((id) => String(id) === String(vehicle.id))
+
+    if (matching.length > 0) {
+      for (const item of matching) {
+        const qty = Math.max(1, Number(item.quantity) || 1)
+        bookedCount += qty
+        if (transmissionType && item.transmission_type === transmissionType) {
+          bookedTypedCount += qty
+        }
+      }
+    } else if (hasId) {
+      bookedCount += 1
+      if (transmissionType) bookedTypedCount += 1
+    }
+  }
+
+  const totalStock = Math.max(1, Number(vehicle.stock) || 1)
+  const transStock = transmissionType && vehicle.transmission_stock?.[transmissionType] != null
+    ? Number(vehicle.transmission_stock[transmissionType])
+    : totalStock
+
+  const remainingTotal = Math.max(0, totalStock - bookedCount)
+  const remainingTyped = Math.max(0, transStock - bookedTypedCount)
+
+  if (transmissionType) {
+    if (remainingTyped <= 0 || remainingTotal <= 0) {
+      return { available: false, remaining: 0, reason: 'Penuh / Sedang Dipinjam' }
+    }
+    return { available: true, remaining: Math.min(remainingTyped, remainingTotal), reason: 'Tersedia' }
+  }
+
+  if (remainingTotal <= 0) {
+    return { available: false, remaining: 0, reason: 'Penuh / Sedang Dipinjam' }
+  }
+  return { available: true, remaining: remainingTotal, reason: 'Tersedia' }
 }
 
 function getDriverCompletedWork(driverId, bookings) {
@@ -225,8 +445,9 @@ function getFinanceDateRange(period, todayKey, monthKey, startDate, endDate) {
 const tabMeta = {
   finance: { kicker: 'RINGKASAN', title: 'Ikhtisar', description: 'Pantau estimasi nilai booking dan kondisi operasional hari ini.' },
   bookings: { kicker: 'RESERVASI', title: 'Booking', description: 'Kelola permintaan booking, status, dan penugasan supir.' },
-  drivers: { kicker: 'TIM PENGEMUDI', title: 'Kelola supir', description: 'Pantau ketersediaan, penugasan, dan status supir operasional.' },
+  schedule: { kicker: 'KETERSEDIAAN', title: 'Cek Jadwal Ready', description: 'Cek ketersediaan unit armada dan supir secara instan untuk merespons pertanyaan calon penyewa via WhatsApp.' },
   fleet: { kicker: 'KATALOG UNIT', title: 'Armada', description: 'Ikhtisar dan kelola armada aktif PT Khalisa Sumber Rezeki.' },
+  drivers: { kicker: 'TIM PENGEMUDI', title: 'Kelola supir', description: 'Pantau ketersediaan, penugasan, dan status supir operasional.' },
   admins: { kicker: 'AKSES TIM', title: 'Akun admin', description: 'Buat akun terpisah untuk anggota tim administrator.' },
 }
 const primaryAdminEmail = 'pt.khalisasumberrezekii@gmail.com'
@@ -339,13 +560,40 @@ function StatCard({ label, value, tone = 'neutral', onClick, active = false }) {
     accent: 'text-[#0369a1]',
   }
 
+  const isRupiah = typeof value === 'string' && value.startsWith('Rp ')
+  const cleanValue = isRupiah ? value.slice(3) : value
+
+  const strVal = String(value ?? '')
+  const isLong = strVal.length > 15
+  const isMedium = strVal.length > 10
+
   const content = (
     <>
-      <span className={`block text-[.68rem] font-semibold ${labelTone[tone]}`}>{label}</span>
-      <strong className={`mt-2 block break-words font-display text-[1.25rem] font-extrabold tracking-tight max-[520px]:text-[1.15rem] sm:text-[1.65rem] ${valueTone[tone]}`}>{value}</strong>
+      <span className={`block truncate text-[.68rem] font-semibold ${labelTone[tone]}`} title={label}>
+        {label}
+      </span>
+      <strong
+        className={`mt-2 block font-display font-extrabold tracking-tight whitespace-nowrap truncate ${
+          isLong
+            ? 'text-[1.05rem] sm:text-[1.2rem] xl:text-[1.35rem]'
+            : isMedium
+            ? 'text-[1.15rem] sm:text-[1.32rem] xl:text-[1.5rem]'
+            : 'text-[1.25rem] sm:text-[1.45rem] xl:text-[1.65rem]'
+        } ${valueTone[tone]}`}
+        title={strVal}
+      >
+        {isRupiah ? (
+          <>
+            <span className="text-[.72em] font-bold text-muted/75 mr-1 select-none">Rp</span>
+            <span>{cleanValue}</span>
+          </>
+        ) : (
+          value
+        )}
+      </strong>
     </>
   )
-  const className = `relative min-w-0 overflow-hidden rounded-2xl border bg-white p-4 pl-5 shadow-[0_8px_24px_rgba(15,23,42,.04)] transition-[box-shadow,border-color] hover:shadow-[0_10px_28px_rgba(15,23,42,.08)] before:absolute before:inset-y-0 before:left-0 before:w-1 sm:p-5 sm:pl-6 ${barTone[tone]} ${active ? 'border-cyan ring-2 ring-cyan/15' : 'border-line'}`
+  const className = `relative min-w-0 overflow-hidden rounded-2xl border bg-white p-3.5 pl-4.5 sm:p-5 sm:pl-6 shadow-[0_8px_24px_rgba(15,23,42,.04)] transition-[box-shadow,border-color] hover:shadow-[0_10px_28px_rgba(15,23,42,.08)] before:absolute before:inset-y-0 before:left-0 before:w-1 ${barTone[tone]} ${active ? 'border-cyan ring-2 ring-cyan/15' : 'border-line'}`
 
   if (onClick) {
     return <button className={`${className} w-full cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan focus-visible:ring-offset-2`} type="button" aria-pressed={active} onClick={onClick}>{content}</button>
@@ -376,7 +624,7 @@ function AdminNavButton({ active, icon, label, count, alert, onClick }) {
   )
 }
 
-const fieldClass = 'h-10 rounded-xl border border-line bg-white px-3 text-[.8rem] text-ink outline-none transition-colors focus:border-cyan'
+const fieldClass = 'h-10 w-full min-w-0 rounded-xl border border-line bg-white px-3 text-[.8rem] text-ink outline-none transition-colors focus:border-cyan'
 const panelClass = 'animate-tab-fade overflow-hidden rounded-2xl border border-line bg-white shadow-[0_8px_24px_rgba(15,23,42,.04)]'
 const toolbarClass = 'flex min-w-0 flex-1 flex-wrap justify-end gap-2 max-[600px]:w-full max-[600px]:flex-none'
 
@@ -474,103 +722,120 @@ function BookingStatusSelect({ booking, onChange }) {
   const endPassed = booking.end_at ? new Date() >= new Date(booking.end_at) : true
   const canComplete = booking.status === 'confirmed' && endPassed
 
+  const statusToneClass = booking.status === 'confirmed'
+    ? 'border-blue-300 bg-blue-50/60 text-blue-900 font-semibold'
+    : booking.status === 'pending'
+    ? 'border-amber-300 bg-amber-50/60 text-amber-900 font-semibold'
+    : 'border-line bg-white text-ink font-medium'
+
   return (
-    <>
-    <select
-      className="h-9 w-full min-w-[148px] rounded-lg border border-line bg-white px-2.5 text-[.72rem] font-semibold text-ink outline-none focus:border-cyan"
-      value={booking.status}
-      title={booking.status === 'confirmed' && !endPassed ? `Bisa diselesaikan setelah ${new Date(booking.end_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}` : undefined}
-      disabled={!isActive}
-      aria-label={`Status booking ${booking.customer_name}`}
-      onChange={(event) => onChange(bookingId, event.target.value)}
-    >
-      <option value="pending" disabled={booking.status !== 'pending'}>Menunggu</option>
-      <option value="confirmed" disabled={booking.status !== 'pending'}>Dikonfirmasi</option>
-      <option value="rejected" disabled={!isActive}>Ditolak</option>
-      <option value="completed" disabled={!canComplete}>Selesai</option>
-      <option value="cancelled" disabled={!isActive}>Dibatalkan</option>
-    </select>
-    {booking.status === 'confirmed' && !endPassed && booking.end_at && (
-      <span className="mt-1 block text-[.62rem] leading-tight text-amber-600">
-        Selesai tersedia setelah {new Date(booking.end_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-      </span>
-    )}
-    </>
+    <div className="grid gap-1">
+      <select
+        className={`h-8 w-full min-w-[136px] rounded-lg border px-2 text-[.72rem] outline-none transition-colors focus:border-cyan ${statusToneClass}`}
+        value={booking.status}
+        title={booking.status === 'confirmed' && !endPassed ? `Bisa diselesaikan setelah ${new Date(booking.end_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}` : undefined}
+        disabled={!isActive}
+        aria-label={`Status booking ${booking.customer_name}`}
+        onChange={(event) => onChange(bookingId, event.target.value)}
+      >
+        <option value="pending" disabled={booking.status !== 'pending'}>Menunggu</option>
+        <option value="confirmed" disabled={booking.status !== 'pending'}>Dikonfirmasi</option>
+        <option value="completed" disabled={!canComplete}>Selesai</option>
+        <option value="rejected" disabled={!isActive}>Ditolak</option>
+        <option value="cancelled" disabled={!isActive}>Dibatalkan</option>
+      </select>
+      {booking.status === 'confirmed' && !endPassed && booking.end_at && (
+        <span className="text-[.61rem] leading-tight text-slate-400">
+          Selesai: {new Date(booking.end_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+        </span>
+      )}
+    </div>
   )
 }
 
 function CustomerContact({ booking }) {
   const waNumber = cleanPhone(booking.customer_phone)
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      {waNumber && (
-        <a className="inline-flex items-center gap-1 text-[.72rem] font-semibold text-emerald-700 hover:underline" href={`https://wa.me/${waNumber}`} target="_blank" rel="noopener noreferrer">
-          <MessageSquare size={12} aria-hidden="true" />
-          WA
+    <div className="flex flex-wrap items-center gap-1.5">
+      {waNumber ? (
+        <a
+          className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[.7rem] font-medium text-emerald-700 hover:bg-emerald-100 hover:underline transition-colors whitespace-nowrap"
+          href={`https://wa.me/${waNumber}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Chat WhatsApp pemesan"
+        >
+          <MessageSquare size={11} aria-hidden="true" />
+          <span>{booking.customer_phone}</span>
+        </a>
+      ) : (
+        <a
+          className="inline-flex items-center gap-1 text-[.7rem] text-muted hover:text-cyan whitespace-nowrap"
+          href={`tel:${booking.customer_phone}`}
+        >
+          <Phone size={11} aria-hidden="true" />
+          <span>{booking.customer_phone}</span>
         </a>
       )}
-      <a className="inline-flex items-center gap-1 text-[.72rem] text-muted hover:text-cyan" href={`tel:${booking.customer_phone}`}>
-        <Phone size={12} aria-hidden="true" />
-        {booking.customer_phone}
-      </a>
     </div>
   )
 }
 
 function DriverAssignControls({ booking, bookings, drivers, onAssign }) {
   const assignedDriver = drivers.find((driver) => driver.id === booking.driver_id)
-  const isWithDriver = String(booking.booking_mode ?? '').toLowerCase().includes('supir')
+  const isWithDriver = String(booking.booking_mode ?? '').toLowerCase().includes('supir') || isEventBooking(booking)
   const isClosed = ['cancelled', 'rejected', 'completed'].includes(booking.status)
 
-  let badgeTone = 'border-slate-200 bg-slate-100 text-slate-600'
-  let dotTone = 'bg-slate-400'
-  let badgeLabel = 'Lepas kunci'
+  if (!isWithDriver) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[.65rem] font-medium text-slate-500 whitespace-nowrap">
+        <span className="size-1.5 rounded-full bg-slate-400" />
+        Lepas kunci
+      </span>
+    )
+  }
 
-  if (assignedDriver) {
-    badgeTone = 'border-blue-200 bg-blue-50 text-blue-700'
-    dotTone = 'bg-blue-500'
-    badgeLabel = assignedDriver.name
-  } else if (isClosed) {
-    badgeTone = 'border-slate-200 bg-slate-100 text-slate-500'
-    dotTone = 'bg-slate-400'
-    badgeLabel = booking.status === 'cancelled' ? 'Dibatalkan' : booking.status === 'rejected' ? 'Ditolak' : 'Selesai'
-  } else if (isWithDriver) {
-    badgeTone = 'border-amber-200 bg-amber-50 text-amber-800'
-    dotTone = 'bg-amber-500'
-    badgeLabel = 'Perlu supir'
+  if (isClosed) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[.65rem] font-medium text-slate-600 whitespace-nowrap">
+        <span className="size-1.5 rounded-full bg-slate-400" />
+        {assignedDriver ? assignedDriver.name : 'Tanpa supir'}
+      </span>
+    )
   }
 
   return (
-    <div className="grid gap-1.5">
-      <span className={`inline-flex w-fit items-center gap-1 rounded-full border px-2 py-0.5 text-[.65rem] font-bold ${badgeTone}`}>
-        <span className={`size-1.5 rounded-full ${dotTone}`} />
-        {badgeLabel}
-      </span>
-      {isWithDriver ? (
-        <select
-          className={`h-8 w-full rounded-lg border border-line px-2 text-[.72rem] outline-none focus:border-cyan ${
-            isClosed ? 'cursor-not-allowed bg-slate-ice text-muted opacity-60' : 'bg-white text-ink'
-          }`}
-          value={booking.driver_id ?? ''}
-          disabled={isClosed}
-          aria-label={`Penugasan supir untuk ${booking.customer_name}`}
-          onChange={(event) => onAssign(extractBookingId(booking?.id || booking), event.target.value)}
-        >
-          <option value="">{assignedDriver ? '-- Lepas supir --' : isClosed ? '-- Tidak ditugaskan --' : '-- Pilih supir --'}</option>
-          {drivers.map((driver) => (
+    <div className="grid gap-1">
+      {!assignedDriver && (
+        <span className="inline-flex w-fit items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[.63rem] font-bold text-amber-800 animate-pulse">
+          <span className="size-1.5 rounded-full bg-amber-500" />
+          Perlu supir
+        </span>
+      )}
+      <select
+        className={`h-8 w-full min-w-[142px] truncate rounded-lg border px-2 text-[.72rem] font-medium outline-none transition-colors ${
+          assignedDriver ? 'border-blue-200 bg-blue-50/50 text-blue-900 focus:border-blue-500' : 'border-line bg-white text-ink focus:border-cyan'
+        }`}
+        value={booking.driver_id ?? ''}
+        aria-label={`Penugasan supir untuk ${booking.customer_name}`}
+        onChange={(event) => onAssign(extractBookingId(booking?.id || booking), event.target.value)}
+      >
+        <option value="">{assignedDriver ? '-- Lepas supir --' : '-- Pilih supir --'}</option>
+        {drivers.map((driver) => {
+          const isBusy = isDriverBookedForWindow(driver.id, booking, bookings)
+          const tag = driver.status === 'off' ? ' (Libur)' : isBusy ? ' (Bentrok)' : ''
+          return (
             <option
               key={driver.id}
               value={driver.id}
-              disabled={driver.id !== booking.driver_id && (!['available', 'on_duty'].includes(driver.status) || isDriverBookedForWindow(driver.id, booking, bookings))}
+              disabled={driver.id !== booking.driver_id && (driver.status === 'off' || isBusy)}
             >
-              {driver.name} ({driverStatusLabels[driver.status] ?? driver.status})
+              {driver.name}{tag}
             </option>
-          ))}
-        </select>
-      ) : (
-        <span className="text-[.68rem] text-muted">Lepas kunci — tidak memerlukan supir</span>
-      )}
-      {assignedDriver && !['cancelled', 'rejected'].includes(booking.status) && (
+          )
+        })}
+      </select>
+      {assignedDriver && (
         <a
           className="inline-flex items-center gap-1 text-[.67rem] font-semibold text-emerald-700 hover:underline"
           href={`https://wa.me/${cleanPhone(assignedDriver.phone)}?text=${encodeURIComponent(
@@ -584,7 +849,7 @@ function DriverAssignControls({ booking, bookings, drivers, onAssign }) {
           rel="noopener noreferrer"
           title="Kirim rincian penugasan ke WhatsApp supir"
         >
-          <MessageSquare size={12} aria-hidden="true" />
+          <MessageSquare size={11} aria-hidden="true" />
           Kirim ke supir
         </a>
       )}
@@ -751,18 +1016,36 @@ function AdminAccountsPanel() {
           <div className="grid gap-2 border-t border-line p-4 sm:p-5">
             {admins.map((admin) => {
               const protectedAccount = admin.is_primary || admin.is_current_user
+              const initial = (admin.email || 'A').charAt(0).toUpperCase()
               return (
-                <article className="flex min-w-0 flex-col justify-between gap-3 rounded-lg border border-line px-4 py-3 sm:flex-row sm:items-center" key={admin.id}>
-                  <div className="min-w-0">
-                    <strong className="block break-all text-[.78rem] text-ink">{admin.email}</strong>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-[.66rem] text-muted">
-                      <span>{admin.is_primary ? 'Akun utama' : admin.is_current_user ? 'Sedang digunakan' : 'Admin'}</span>
-                      <span aria-hidden="true">·</span>
-                      <span>Dibuat {formatJakartaDateTime(admin.created_at, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                <article className="flex min-w-0 flex-col justify-between gap-3 rounded-xl border border-line bg-white p-3.5 transition-shadow hover:shadow-xs sm:flex-row sm:items-center" key={admin.id}>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="grid size-9 shrink-0 place-items-center rounded-xl border border-line bg-slate-ice font-bold text-slate-700 text-[.82rem]">
+                      {initial}
+                    </div>
+                    <div className="min-w-0">
+                      <strong className="block break-all text-[.78rem] font-semibold text-ink">{admin.email}</strong>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[.63rem] font-bold ${
+                          admin.is_primary ? 'border-purple-200 bg-purple-50 text-purple-700' : admin.is_current_user ? 'border-cyan/30 bg-cyan/10 text-cyan' : 'border-slate-200 bg-slate-100 text-slate-600'
+                        }`}>
+                          {admin.is_primary ? 'Super Admin' : admin.is_current_user ? 'Sesi Aktif' : 'Admin'}
+                        </span>
+                        <span className="text-[.67rem] text-muted">
+                          Dibuat {formatJakartaDateTime(admin.created_at, { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <button className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-line px-3 text-[.72rem] font-bold text-muted transition-colors hover:border-red-200 hover:text-crimson disabled:cursor-not-allowed disabled:opacity-45" type="button" disabled={protectedAccount || deletingAdminId === admin.id} onClick={() => handleDeleteAdmin(admin)} aria-label={`Hapus akun ${admin.email}`}>
-                    <Trash2 size={14} aria-hidden="true" />{deletingAdminId === admin.id ? 'Menghapus...' : protectedAccount ? 'Dilindungi' : 'Hapus'}
+                  <button
+                    className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-line px-3 text-[.72rem] font-bold text-muted transition-colors hover:border-red-200 hover:text-crimson disabled:cursor-not-allowed disabled:opacity-45"
+                    type="button"
+                    disabled={protectedAccount || deletingAdminId === admin.id}
+                    onClick={() => handleDeleteAdmin(admin)}
+                    aria-label={`Hapus akun ${admin.email}`}
+                  >
+                    <Trash2 size={13} aria-hidden="true" />
+                    {deletingAdminId === admin.id ? 'Menghapus...' : protectedAccount ? 'Dilindungi' : 'Hapus'}
                   </button>
                 </article>
               )
@@ -770,6 +1053,877 @@ function AdminAccountsPanel() {
           </div>
         )}
       </div>
+    </section>
+  )
+}
+
+function ScheduleCheckerPanel({
+  vehicles,
+  loadingVehicles,
+  bookings,
+  loadingBookings,
+  drivers,
+  loadingDrivers,
+  scheduleDate,
+  setScheduleDate,
+  scheduleTime,
+  setScheduleTime,
+  scheduleDurationHours,
+  setScheduleDurationHours,
+  scheduleWindow,
+  scheduleVehicleAvailability,
+  calculateVehicleRate,
+  onOpenBookingForm,
+}) {
+  const [subTab, setSubTab] = useState('ready') // 'ready' | 'occupied' | 'drivers' | 'wa'
+  const [categoryFilter, setCategoryFilter] = useState('all') // 'all' | 'MPV' | 'Premium' | 'Rombongan'
+  const [transmissionFilter, setTransmissionFilter] = useState('all') // 'all' | 'automatic' | 'manual'
+  const [searchQuery, setSearchQuery] = useState('')
+  const [copiedWA, setCopiedWA] = useState(false)
+  const [copiedSingleId, setCopiedSingleId] = useState(null)
+  const [durMonths, setDurMonths] = useState(() => String(Math.floor((Number(scheduleDurationHours) || 24) / (30 * 24))))
+  const [durDays, setDurDays] = useState(() => String(Math.floor(((Number(scheduleDurationHours) || 24) % (30 * 24)) / 24)))
+  const [durHours, setDurHours] = useState(() => String(((Number(scheduleDurationHours) || 24) % (30 * 24)) % 24))
+
+  useEffect(() => {
+    const total = Number(scheduleDurationHours) || 24
+    const m = Math.floor(total / (30 * 24))
+    const remM = total % (30 * 24)
+    const d = Math.floor(remM / 24)
+    const h = remM % 24
+    setDurMonths(String(m))
+    setDurDays(String(d))
+    setDurHours(String(h))
+  }, [scheduleDurationHours])
+
+  const updateDurationParts = (mVal, dVal, hVal) => {
+    setDurMonths(mVal)
+    setDurDays(dVal)
+    setDurHours(hVal)
+    const m = Math.max(0, parseInt(mVal, 10) || 0)
+    const d = Math.max(0, parseInt(dVal, 10) || 0)
+    const h = Math.max(0, parseInt(hVal, 10) || 0)
+    const total = m * 30 * 24 + d * 24 + h
+    setScheduleDurationHours(Math.max(1, total))
+  }
+
+  const todayKey = getJakartaDateKey(new Date()) || toDateKey(new Date())
+  const tomorrowKey = shiftDateKey(todayKey, 1)
+  const dayAfterKey = shiftDateKey(todayKey, 2)
+
+  const durationPresets = [
+    { label: '12 Jam', hours: 12 },
+    { label: '1 Hari', hours: 24 },
+    { label: '2 Hari', hours: 48 },
+    { label: '3 Hari', hours: 72 },
+    { label: '4 Hari', hours: 96 },
+    { label: '1 Minggu', hours: 168 },
+    { label: '1 Bulan', hours: 720 },
+  ]
+
+  const durationLabel = useMemo(() => {
+    const hrs = Number(scheduleDurationHours) || 24
+    const d = Math.floor(hrs / 24)
+    const remH = hrs % 24
+    if (d > 0 && remH === 0) return `${d} Hari (${hrs} Jam)`
+    if (d > 0) return `${d} Hari ${remH} Jam`
+    return `${hrs} Jam`
+  }, [scheduleDurationHours])
+
+  const activeVehicles = useMemo(() => {
+    return vehicles.filter((v) => v.is_active !== false)
+  }, [vehicles])
+
+  const evaluatedVehicles = useMemo(() => {
+    if (!scheduleWindow) return []
+    return activeVehicles.map((vehicle) => {
+      const overallCheck = checkVehicleAvailableInWindow(
+        vehicle,
+        scheduleWindow,
+        bookings,
+        null,
+        scheduleVehicleAvailability
+      )
+      const hasMatic = (vehicle.transmission_options || []).includes('automatic')
+      const hasManual = (vehicle.transmission_options || []).includes('manual')
+
+      const maticCheck = hasMatic
+        ? checkVehicleAvailableInWindow(vehicle, scheduleWindow, bookings, 'automatic', scheduleVehicleAvailability)
+        : null
+      const manualCheck = hasManual
+        ? checkVehicleAvailableInWindow(vehicle, scheduleWindow, bookings, 'manual', scheduleVehicleAvailability)
+        : null
+
+      const rate = calculateVehicleRate(vehicle, scheduleDurationHours, false)
+
+      let latestEndAt = null
+      let conflicts = []
+      if (!overallCheck.available) {
+        conflicts = bookings.filter((b) => {
+          if (String(b.vehicle_id) !== String(vehicle.id)) return false
+          if (!['pending', 'confirmed'].includes(b.status)) return false
+          const bStart = Date.parse(b.start_at)
+          const bEnd = Date.parse(b.end_at)
+          const winStart = Date.parse(scheduleWindow.start_at)
+          const winEnd = Date.parse(scheduleWindow.end_at)
+          return Number.isFinite(bStart) && Number.isFinite(bEnd) && bStart < winEnd && bEnd > winStart
+        })
+        for (const b of conflicts) {
+          const eMs = Date.parse(b.end_at)
+          if (Number.isFinite(eMs) && (!latestEndAt || eMs > Date.parse(latestEndAt))) {
+            latestEndAt = b.end_at
+          }
+        }
+      }
+
+      return {
+        vehicle,
+        overallCheck,
+        maticCheck,
+        manualCheck,
+        rate,
+        isAvailable: overallCheck.available,
+        conflicts,
+        latestEndAt,
+      }
+    })
+  }, [activeVehicles, scheduleWindow, bookings, scheduleVehicleAvailability, scheduleDurationHours, calculateVehicleRate])
+
+  const readyVehicles = useMemo(() => {
+    return evaluatedVehicles
+      .filter((item) => item.isAvailable)
+      .filter((item) => {
+        const v = item.vehicle
+        if (categoryFilter !== 'all' && v.category !== categoryFilter) return false
+        if (transmissionFilter === 'automatic' && (!item.maticCheck || !item.maticCheck.available)) return false
+        if (transmissionFilter === 'manual' && (!item.manualCheck || !item.manualCheck.available)) return false
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase()
+          const matchName = String(v.name || '').toLowerCase().includes(q)
+          const matchCat = String(v.category || '').toLowerCase().includes(q)
+          if (!matchName && !matchCat) return false
+        }
+        return true
+      })
+  }, [evaluatedVehicles, categoryFilter, transmissionFilter, searchQuery])
+
+  const occupiedVehicles = useMemo(() => {
+    return evaluatedVehicles
+      .filter((item) => !item.isAvailable)
+      .filter((item) => {
+        const v = item.vehicle
+        if (categoryFilter !== 'all' && v.category !== categoryFilter) return false
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase()
+          const matchName = String(v.name || '').toLowerCase().includes(q)
+          const matchCat = String(v.category || '').toLowerCase().includes(q)
+          if (!matchName && !matchCat) return false
+        }
+        return true
+      })
+  }, [evaluatedVehicles, categoryFilter, searchQuery])
+
+  const evaluatedDrivers = useMemo(() => {
+    if (!scheduleWindow) return []
+    return drivers.map((driver) => {
+      const isOff = driver.status === 'off'
+      const isBusy = isDriverBookedForWindow(driver.id, scheduleWindow, bookings)
+      const assignedBooking = isBusy
+        ? bookings.find((b) => {
+            if (String(b.driver_id) !== String(driver.id)) return false
+            if (!['pending', 'confirmed'].includes(b.status)) return false
+            const bStart = Date.parse(b.start_at)
+            const bEnd = Date.parse(b.end_at)
+            const winStart = Date.parse(scheduleWindow.start_at)
+            const winEnd = Date.parse(scheduleWindow.end_at)
+            return Number.isFinite(bStart) && Number.isFinite(bEnd) && bStart < winEnd && bEnd > winStart
+          })
+        : null
+      return {
+        driver,
+        isOff,
+        isBusy,
+        assignedBooking,
+      }
+    })
+  }, [drivers, scheduleWindow, bookings])
+
+  const availableDriversCount = evaluatedDrivers.filter((d) => !d.isBusy && !d.isOff).length
+
+  // Generate WhatsApp reply text
+  const waReplyText = useMemo(() => {
+    if (!scheduleWindow) return ''
+    const startFormatted = formatJakartaDateTime(scheduleWindow.start_at, {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+    const endFormatted = formatJakartaDateTime(scheduleWindow.end_at, {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+
+    const lines = []
+    lines.push('Halo Kak! Terima kasih sudah menghubungi PT Khalisa Rent Car Padang 🙏')
+    lines.push('')
+    lines.push('Berikut ketersediaan unit untuk jadwal sewa:')
+    lines.push(`📅 Mulai: ${startFormatted} WIB`)
+    lines.push(`🏁 Selesai: ${endFormatted} WIB`)
+    lines.push(`⏱️ Durasi: ${durationLabel}`)
+    lines.push('')
+
+    const readyAllForWA = evaluatedVehicles.filter((it) => it.isAvailable)
+    if (readyAllForWA.length === 0) {
+      lines.push('Mohon maaf Kak, untuk rentang jadwal tersebut seluruh armada kami sedang penuh / terisi jadwal sewa.')
+      lines.push('Boleh diinfokan jika ada tanggal atau jam alternatif agar kami bantu cek ulang ya Kak. 🙏')
+    } else {
+      lines.push(`Daftar armada yang READY & siap jalan (${readyAllForWA.length} unit):`)
+      readyAllForWA.forEach((item, idx) => {
+        const v = item.vehicle
+        const { price } = item.rate
+        const transLabels = []
+        if (item.maticCheck?.available) transLabels.push('Matic')
+        if (item.manualCheck?.available) transLabels.push('Manual')
+        const transStr = transLabels.length > 0 ? transLabels.join('/') : (v.transmission_options || []).map((t) => (t === 'automatic' ? 'Matic' : 'Manual')).join('/')
+        const priceStr = isNegoPrice(v.price) || price === 0
+          ? 'Hubungi CS / Nego'
+          : `Rp ${formatPrice(price)}`
+        const seatClean = v.seats ? ` · ${String(v.seats).replace(/\s*(kursi|seat)s?/gi, '')} seat` : ''
+        lines.push(`${idx + 1}. ${v.name} (${v.category || 'Armada'}${seatClean}) - ${transStr}: ${priceStr}`)
+      })
+      lines.push('')
+      lines.push('Semua unit bersih, wangi, AC dingin & prima terawat (bisa lepas kunci / dengan supir).')
+      lines.push('')
+      lines.push('Mau kami pesankan unit yang mana untuk tanggal tersebut, Kak? Biar langsung kami amankan slotnya 😊')
+    }
+
+    return lines.join('\n')
+  }, [scheduleWindow, durationLabel, evaluatedVehicles])
+
+  const copyAllWhatsApp = async () => {
+    if (!waReplyText) return
+    try {
+      await navigator.clipboard.writeText(waReplyText)
+      setCopiedWA(true)
+      setTimeout(() => setCopiedWA(false), 2500)
+    } catch {
+      // ignore
+    }
+  }
+
+  const copySingleVehicle = async (item) => {
+    const v = item.vehicle
+    const { price } = item.rate
+    const transLabels = []
+    if (item.maticCheck?.available) transLabels.push('Matic')
+    if (item.manualCheck?.available) transLabels.push('Manual')
+    const transStr = transLabels.join('/') || 'Matic/Manual'
+    const priceStr = isNegoPrice(v.price) || price === 0 ? 'Hubungi CS / Nego' : `Rp ${formatPrice(price)}`
+    const seatClean = v.seats ? ` · ${String(v.seats).replace(/\s*(kursi|seat)s?/gi, '')} seat` : ''
+    const text = `Unit Ready: ${v.name} (${v.category || 'Armada'}${seatClean})\n• Transmisi: ${transStr}\n• Tarif (${durationLabel}): ${priceStr}\n• Fasilitas: Bersih, wangi, AC dingin & siap pakai!\n\nUntuk booking unit ini silakan balas chat kami ya Kak! 😊`
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedSingleId(v.id)
+      setTimeout(() => setCopiedSingleId(null), 2000)
+    } catch {}
+  }
+
+  return (
+    <section className={panelClass} aria-label="Cek jadwal dan ketersediaan armada">
+      {/* Top Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4 max-[600px]:px-4">
+        <div className="flex items-center gap-2.5">
+          <CalendarCheck className="text-cyan" size={20} aria-hidden="true" />
+          <div>
+            <h2 className="m-0 font-display text-[.98rem] font-bold">Cek Jadwal & Ketersediaan Armada</h2>
+            <p className="m-0 text-[.7rem] text-muted">Cek instan unit & supir yang ready untuk merespons pertanyaan calon penyewa via WhatsApp.</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={copyAllWhatsApp}
+            className={`inline-flex h-9 items-center gap-1.5 rounded-xl px-3.5 text-[.74rem] font-bold text-white shadow-sm transition-all ${
+              copiedWA ? 'bg-emerald-700 ring-2 ring-emerald-300' : 'bg-emerald-600 hover:bg-emerald-700'
+            }`}
+            title="Salin seluruh format balasan WA dengan daftar mobil ready & estimasi tarif"
+          >
+            {copiedWA ? <CheckCircle2 size={14} className="text-emerald-200" /> : <Copy size={14} />}
+            <span>{copiedWA ? 'Tersalin ke Clipboard! ✓' : 'Salin Format Balasan WA'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Interactive Controls Bar */}
+      <div className="border-b border-line bg-slate-ice/40 p-4 md:p-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* 1. Tanggal Mulai */}
+          <div className="grid gap-1.5">
+            <span className="text-[.74rem] font-bold text-ink">1. Tanggal Mulai Sewa</span>
+            <input
+              type="date"
+              className={fieldClass}
+              value={scheduleDate}
+              onChange={(e) => setScheduleDate(e.target.value)}
+              aria-label="Tanggal mulai sewa"
+            />
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              <button
+                type="button"
+                onClick={() => setScheduleDate(todayKey)}
+                className={`rounded-lg border px-2 py-0.5 text-[.66rem] font-semibold transition-colors ${
+                  scheduleDate === todayKey ? 'border-cyan bg-cyan/10 text-cyan font-bold' : 'border-line bg-white text-muted hover:text-ink'
+                }`}
+              >
+                Hari Ini
+              </button>
+              <button
+                type="button"
+                onClick={() => setScheduleDate(tomorrowKey)}
+                className={`rounded-lg border px-2 py-0.5 text-[.66rem] font-semibold transition-colors ${
+                  scheduleDate === tomorrowKey ? 'border-cyan bg-cyan/10 text-cyan font-bold' : 'border-line bg-white text-muted hover:text-ink'
+                }`}
+              >
+                Besok
+              </button>
+              <button
+                type="button"
+                onClick={() => setScheduleDate(dayAfterKey)}
+                className={`rounded-lg border px-2 py-0.5 text-[.66rem] font-semibold transition-colors ${
+                  scheduleDate === dayAfterKey ? 'border-cyan bg-cyan/10 text-cyan font-bold' : 'border-line bg-white text-muted hover:text-ink'
+                }`}
+              >
+                Lusa
+              </button>
+            </div>
+          </div>
+
+          {/* 2. Jam Mulai */}
+          <div className="grid gap-1.5">
+            <span className="text-[.74rem] font-bold text-ink">2. Jam Mulai Sewa</span>
+            <input
+              type="time"
+              className={fieldClass}
+              value={scheduleTime}
+              onChange={(e) => setScheduleTime(e.target.value)}
+              aria-label="Jam mulai sewa"
+            />
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              {['06:00', '08:00', '10:00', '14:00', '19:00'].map((time) => (
+                <button
+                  key={time}
+                  type="button"
+                  onClick={() => setScheduleTime(time)}
+                  className={`rounded-lg border px-2 py-0.5 text-[.66rem] font-semibold transition-colors ${
+                    scheduleTime === time ? 'border-cyan bg-cyan/10 text-cyan font-bold' : 'border-line bg-white text-muted hover:text-ink'
+                  }`}
+                >
+                  {time}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 3. Durasi Sewa */}
+          <div className="grid gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[.74rem] font-bold text-ink">3. Durasi Sewa</span>
+              <span className="text-[.72rem] font-bold text-crimson">
+                {formatDuration(scheduleDurationHours, 'jam')} {Number(scheduleDurationHours) > 0 ? `(${scheduleDurationHours} jam)` : ''}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <label className="flex flex-col gap-0.5 rounded-xl border border-line bg-white p-2 text-center transition-colors focus-within:border-cyan">
+                <span className="text-[.64rem] font-bold uppercase tracking-wider text-muted">Bulan</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  className="w-full text-center text-[.92rem] font-extrabold text-ink outline-none"
+                  value={durMonths}
+                  onChange={(e) => updateDurationParts(e.target.value, durDays, durHours)}
+                  placeholder="0"
+                />
+                <span className="text-[.58rem] text-muted">× 30 hari</span>
+              </label>
+
+              <label className="flex flex-col gap-0.5 rounded-xl border border-line bg-white p-2 text-center transition-colors focus-within:border-cyan">
+                <span className="text-[.64rem] font-bold uppercase tracking-wider text-muted">Hari</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  className="w-full text-center text-[.92rem] font-extrabold text-ink outline-none"
+                  value={durDays}
+                  onChange={(e) => updateDurationParts(durMonths, e.target.value, durHours)}
+                  placeholder="0"
+                />
+                <span className="text-[.58rem] text-muted">× 24 jam</span>
+              </label>
+
+              <label className="flex flex-col gap-0.5 rounded-xl border border-line bg-white p-2 text-center transition-colors focus-within:border-cyan">
+                <span className="text-[.64rem] font-bold uppercase tracking-wider text-muted">Jam</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="23"
+                  step="1"
+                  className="w-full text-center text-[.92rem] font-extrabold text-ink outline-none"
+                  value={durHours}
+                  onChange={(e) => updateDurationParts(durMonths, durDays, e.target.value)}
+                  placeholder="0"
+                />
+                <span className="text-[.58rem] text-muted">Tambahan</span>
+              </label>
+            </div>
+
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              {durationPresets.map((preset) => (
+                <button
+                  key={preset.hours}
+                  type="button"
+                  onClick={() => setScheduleDurationHours(preset.hours)}
+                  className={`rounded-lg border px-2 py-0.5 text-[.66rem] font-semibold transition-colors ${
+                    scheduleDurationHours === preset.hours
+                      ? 'border-cyan bg-cyan/10 text-cyan font-bold'
+                      : 'border-line bg-white text-muted hover:border-cyan hover:text-ink'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Selected Window Summary Banner */}
+        {scheduleWindow && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-200/80 bg-sky-50/70 px-4 py-2.5">
+            <div className="flex items-center gap-2 text-[.78rem] text-sky-950">
+              <Clock3 size={15} className="text-cyan shrink-0" />
+              <div>
+                <span className="font-semibold text-sky-800">Jadwal Sewa: </span>
+                <strong className="font-bold">
+                  {formatJakartaDateTime(scheduleWindow.start_at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} WIB
+                </strong>
+                <span className="text-sky-700"> s/d </span>
+                <strong className="font-bold">
+                  {formatJakartaDateTime(scheduleWindow.end_at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} WIB
+                </strong>
+                <span className="ml-1.5 inline-block rounded-full bg-sky-100 px-2 py-0.5 text-[.68rem] font-bold text-sky-800">
+                  {durationLabel}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 text-[.72rem] font-bold">
+              <span className="flex items-center gap-1.5 text-emerald-800 bg-emerald-100/70 border border-emerald-200 px-2.5 py-0.5 rounded-lg">
+                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                {readyVehicles.length} Unit Ready
+              </span>
+              <span className="flex items-center gap-1.5 text-rose-800 bg-rose-100/70 border border-rose-200 px-2.5 py-0.5 rounded-lg">
+                {occupiedVehicles.length} Penuh/Disewa
+              </span>
+              <span className="flex items-center gap-1.5 text-sky-800 bg-sky-100 border border-sky-200 px-2.5 py-0.5 rounded-lg">
+                {availableDriversCount} Supir Siap
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Sub-Tabs Navigation & Filters */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3 max-[600px]:px-4">
+        <div className="scrollbar-none flex gap-2 overflow-x-auto">
+          <FilterChip active={subTab === 'ready'} count={readyVehicles.length} onClick={() => setSubTab('ready')}>
+            Armada Ready
+          </FilterChip>
+          <FilterChip active={subTab === 'occupied'} count={occupiedVehicles.length} onClick={() => setSubTab('occupied')}>
+            Penuh / Tersewa
+          </FilterChip>
+          <FilterChip active={subTab === 'drivers'} count={drivers.length} onClick={() => setSubTab('drivers')}>
+            Status Supir
+          </FilterChip>
+          <FilterChip active={subTab === 'wa'} onClick={() => setSubTab('wa')}>
+            Format Balasan WA
+          </FilterChip>
+        </div>
+
+        {subTab !== 'wa' && subTab !== 'drivers' && (
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              className="h-8 rounded-lg border border-line bg-white px-2.5 text-[.72rem] text-ink outline-none focus:border-cyan"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              aria-label="Filter kategori armada"
+            >
+              <option value="all">Semua Kategori</option>
+              <option value="MPV">MPV</option>
+              <option value="Premium">Premium</option>
+              <option value="Rombongan">Rombongan</option>
+            </select>
+
+            <select
+              className="h-8 rounded-lg border border-line bg-white px-2.5 text-[.72rem] text-ink outline-none focus:border-cyan"
+              value={transmissionFilter}
+              onChange={(e) => setTransmissionFilter(e.target.value)}
+              aria-label="Filter transmisi"
+            >
+              <option value="all">Semua Transmisi</option>
+              <option value="automatic">Matic Ready</option>
+              <option value="manual">Manual Ready</option>
+            </select>
+
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" size={13} />
+              <input
+                type="text"
+                className="h-8 rounded-lg border border-line bg-white pl-7 pr-2.5 text-[.72rem] text-ink outline-none placeholder:text-muted focus:border-cyan w-[140px] sm:w-[170px]"
+                placeholder="Cari armada..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Main Content Area */}
+      {loadingVehicles ? (
+        <PanelMessage>Memeriksa ketersediaan unit armada...</PanelMessage>
+      ) : subTab === 'ready' ? (
+        readyVehicles.length === 0 ? (
+          <EmptyState
+            icon={<AlertCircle size={22} className="text-amber-500" aria-hidden="true" />}
+            title="Tidak Ada Armada Ready pada Jadwal Ini"
+            description="Semua armada aktif sedang memiliki jadwal sewa atau dalam perawatan pada rentang tanggal & jam ini. Buka tab 'Penuh / Tersewa' untuk melihat perkiraan jam unit kembali."
+          />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-5 max-[600px]:p-4">
+            {readyVehicles.map((item) => {
+              const v = item.vehicle
+              const { price } = item.rate
+              const isCopied = copiedSingleId === v.id
+              const defaultTrans = item.maticCheck?.available ? 'automatic' : 'manual'
+              return (
+                <article
+                  key={v.id}
+                  className="flex flex-col justify-between overflow-hidden rounded-2xl border border-line bg-white p-4 shadow-sm hover:border-cyan/50 hover:shadow-md transition-all"
+                >
+                  <div>
+                    {/* Header Image & Badge */}
+                    <div className="relative mb-3 aspect-[16/10] overflow-hidden rounded-xl border border-line bg-slate-100 flex items-center justify-center">
+                      {v.image_url ? (
+                        <img
+                          src={v.image_url}
+                          alt={v.name}
+                          className="size-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="grid place-items-center text-muted">
+                          <CarFront size={32} />
+                        </div>
+                      )}
+                      <div className="absolute left-2 top-2 flex items-center gap-1.5">
+                        <span className="rounded-lg bg-black/75 px-2 py-0.5 text-[.62rem] font-bold text-white backdrop-blur-sm">
+                          {v.category || 'Armada'}
+                        </span>
+                      </div>
+                      <div className="absolute right-2 top-2">
+                        <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-600/90 px-2 py-0.5 text-[.62rem] font-bold text-white backdrop-blur-sm shadow-sm">
+                          <span className="size-1.5 rounded-full bg-white animate-pulse" />
+                          Ready
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Name & Basic Info */}
+                    <div className="mb-2">
+                      <h3 className="m-0 font-display text-[1rem] font-bold text-ink">{v.name}</h3>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[.68rem] text-muted">
+                        <span>{v.seats || '7'} Kursi</span>
+                        <span>•</span>
+                        <span>{v.fuel_type || 'Bensin'}</span>
+                        {item.overallCheck?.remaining != null && (
+                          <>
+                            <span>•</span>
+                            <span className="font-semibold text-emerald-700">
+                              Sisa {item.overallCheck.remaining} unit
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Transmission Status Pills */}
+                    <div className="mb-3 flex flex-wrap gap-1.5">
+                      {item.maticCheck && (
+                        <span
+                          className={`rounded-md border px-2 py-0.5 text-[.66rem] font-semibold ${
+                            item.maticCheck.available
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                              : 'border-slate-200 bg-slate-100 text-slate-400 line-through'
+                          }`}
+                        >
+                          Matic {item.maticCheck.available ? '✓ Ready' : 'Penuh'}
+                        </span>
+                      )}
+                      {item.manualCheck && (
+                        <span
+                          className={`rounded-md border px-2 py-0.5 text-[.66rem] font-semibold ${
+                            item.manualCheck.available
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                              : 'border-slate-200 bg-slate-100 text-slate-400 line-through'
+                          }`}
+                        >
+                          Manual {item.manualCheck.available ? '✓ Ready' : 'Penuh'}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Price Estimate Box */}
+                    <div className="mb-3 rounded-xl border border-slate-100 bg-slate-ice/60 p-2.5 flex items-center justify-between">
+                      <span className="text-[.7rem] font-semibold text-muted">
+                        Tarif ({durationLabel}):
+                      </span>
+                      <strong className="text-[.92rem] font-extrabold text-crimson">
+                        {isNegoPrice(v.price) || price === 0 ? 'Nego / CS' : `Rp ${formatPrice(price)}`}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {/* Actions Footer */}
+                  <div className="mt-2 flex items-center gap-2 border-t border-line/60 pt-3">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onOpenBookingForm({
+                          vehicle_id: v.id,
+                          start_date: scheduleDate,
+                          start_time: scheduleTime,
+                          duration_hours: scheduleDurationHours,
+                          transmission_type: defaultTrans,
+                        })
+                      }
+                      className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-crimson px-3 text-[.74rem] font-bold text-white shadow-sm transition-colors hover:bg-crimson-deep"
+                    >
+                      <Plus size={14} />
+                      <span>Buat Booking Unit Ini</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => copySingleVehicle(item)}
+                      className={`inline-flex size-9 shrink-0 items-center justify-center rounded-xl border transition-colors ${
+                        isCopied
+                          ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                          : 'border-line bg-white text-muted hover:bg-slate-ice hover:text-ink'
+                      }`}
+                      title="Salin info spesifikasi & tarif unit ini untuk WA"
+                    >
+                      {isCopied ? <Check size={14} /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        )
+      ) : subTab === 'occupied' ? (
+        occupiedVehicles.length === 0 ? (
+          <EmptyState
+            icon={<CheckCircle2 size={24} className="text-emerald-600" aria-hidden="true" />}
+            title="Seluruh Armada Ready!"
+            description="Tidak ada armada yang sedang disewa atau dalam perawatan pada jadwal ini. Semua unit siap dipesan."
+          />
+        ) : (
+          <div className="p-5 max-[600px]:p-4 grid gap-3">
+            {occupiedVehicles.map((item) => {
+              const v = item.vehicle
+              const isMaintenance = v.status === 'maintenance' || String(v.status || '').toLowerCase().includes('perawatan')
+              return (
+                <div
+                  key={v.id}
+                  className="rounded-2xl border border-line bg-white p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4"
+                >
+                  <div className="flex items-start gap-3.5">
+                    {v.image_url ? (
+                      <img
+                        src={v.image_url}
+                        alt={v.name}
+                        className="size-16 rounded-xl border border-line object-cover shrink-0"
+                      />
+                    ) : (
+                      <span className="grid size-16 shrink-0 place-items-center rounded-xl bg-slate-ice text-muted">
+                        <CarFront size={22} />
+                      </span>
+                    )}
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <strong className="text-[.94rem] font-bold text-ink">{v.name}</strong>
+                        <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[.66rem] font-semibold text-slate-700">
+                          {v.category || 'Armada'}
+                        </span>
+                        {isMaintenance ? (
+                          <span className="rounded-md bg-amber-50 border border-amber-200 px-2 py-0.5 text-[.66rem] font-bold text-amber-800">
+                            Perawatan / Bengkel
+                          </span>
+                        ) : (
+                          <span className="rounded-md bg-rose-50 border border-rose-200 px-2 py-0.5 text-[.66rem] font-bold text-rose-800">
+                            Sedang Disewa
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Conflict details */}
+                      {item.conflicts.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {item.conflicts.map((b) => (
+                            <div key={b.id} className="text-[.72rem] text-muted flex flex-wrap items-center gap-1.5">
+                              <span className="font-semibold text-ink">#{b.booking_code || 'BK'}</span>
+                              <span>•</span>
+                              <span>Penyewa: <strong className="text-ink">{b.customer_name || 'Pelanggan'}</strong></span>
+                              <span>•</span>
+                              <span>
+                                {formatJakartaDateTime(b.start_at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} s/d{' '}
+                                {formatJakartaDateTime(b.end_at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} WIB
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Ready Estimation */}
+                  <div className="shrink-0 rounded-xl bg-slate-ice/70 border border-line p-3 text-right md:min-w-[210px] max-[768px]:text-left">
+                    <span className="block text-[.68rem] font-semibold text-muted">Perkiraan Siap Kembali:</span>
+                    <strong className="block text-[.82rem] font-bold text-ink mt-0.5">
+                      {isMaintenance
+                        ? 'Menunggu selesai servis'
+                        : item.latestEndAt
+                        ? `${formatJakartaDateTime(item.latestEndAt, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} WIB`
+                        : 'Hubungi CS'}
+                    </strong>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
+      ) : subTab === 'drivers' ? (
+        loadingDrivers ? (
+          <PanelMessage>Memeriksa status supir...</PanelMessage>
+        ) : drivers.length === 0 ? (
+          <EmptyState
+            icon={<UserRound size={22} className="text-muted" />}
+            title="Belum Ada Data Supir"
+            description="Tambah supir pada tab Kelola Supir untuk memantau ketersediaan."
+          />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-5 max-[600px]:p-4">
+            {evaluatedDrivers.map((item) => {
+              const d = item.driver
+              return (
+                <div
+                  key={d.id}
+                  className="rounded-2xl border border-line bg-white p-4 shadow-sm flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="grid size-8 place-items-center rounded-full bg-slate-ice text-muted">
+                          <UserRound size={16} />
+                        </span>
+                        <div>
+                          <strong className="block text-[.86rem] text-ink">{d.name}</strong>
+                          <span className="text-[.66rem] font-semibold text-muted">{d.sim_type || 'SIM A'}</span>
+                        </div>
+                      </div>
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-[.66rem] font-bold ${
+                          item.isOff
+                            ? 'bg-slate-100 text-slate-500'
+                            : item.isBusy
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-emerald-100 text-emerald-800'
+                        }`}
+                      >
+                        {item.isOff ? 'Libur' : item.isBusy ? 'Bertugas' : 'Tersedia'}
+                      </span>
+                    </div>
+
+                    {item.isBusy && item.assignedBooking && (
+                      <div className="mt-2 rounded-lg bg-amber-50/70 border border-amber-200/80 p-2 text-[.7rem] text-amber-900">
+                        <span>Bertugas untuk booking <strong>#{item.assignedBooking.booking_code || 'BK'}</strong> ({item.assignedBooking.customer_name})</span>
+                        <div className="text-[.66rem] text-amber-700 mt-0.5">
+                          Selesai: {formatJakartaDateTime(item.assignedBooking.end_at, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} WIB
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between border-t border-line/60 pt-2.5">
+                    <span className="text-[.72rem] text-muted">{d.phone}</span>
+                    <a
+                      href={`https://wa.me/${cleanPhone(d.phone)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded-lg bg-emerald-50 px-2.5 py-1 text-[.7rem] font-bold text-emerald-700 hover:bg-emerald-100 transition-colors"
+                    >
+                      <MessageSquare size={12} />
+                      <span>Chat WA</span>
+                    </a>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
+      ) : (
+        /* Preview Format Pesan WA */
+        <div className="p-5 max-[600px]:p-4 max-w-3xl mx-auto">
+          <div className="rounded-2xl border border-emerald-300/80 bg-white overflow-hidden shadow-sm">
+            {/* WhatsApp Header bar */}
+            <div className="bg-emerald-700 px-4 py-3 flex items-center justify-between text-white">
+              <div className="flex items-center gap-2">
+                <MessageSquare size={16} />
+                <span className="text-[.82rem] font-bold">Template Balasan WhatsApp Customer</span>
+              </div>
+              <button
+                type="button"
+                onClick={copyAllWhatsApp}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-[.72rem] font-bold shadow-sm transition-colors ${
+                  copiedWA ? 'bg-white text-emerald-800' : 'bg-emerald-800 text-white hover:bg-emerald-900'
+                }`}
+              >
+                {copiedWA ? <CheckCircle2 size={13} /> : <Copy size={13} />}
+                <span>{copiedWA ? 'Tersalin ke Clipboard! ✓' : 'Salin Teks'}</span>
+              </button>
+            </div>
+
+            {/* Simulated WhatsApp Chat Body */}
+            <div className="bg-[#EFEAE2] p-4 md:p-6">
+              <div className="rounded-2xl bg-white p-4 shadow-sm border border-slate-200/60 max-w-xl text-[.82rem] leading-relaxed text-slate-800 whitespace-pre-wrap font-sans">
+                {waReplyText}
+              </div>
+            </div>
+
+            {/* Footer Notice */}
+            <div className="border-t border-line bg-slate-ice/50 px-4 py-3 text-[.74rem] text-muted flex items-center justify-between">
+              <span>💡 Tinggal klik tombol salin di atas, lalu paste (Ctrl+V) langsung ke chat WhatsApp calon penyewa.</span>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
@@ -790,8 +1944,8 @@ function AdminDashboard() {
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = window.sessionStorage.getItem('khalisa_admin_active_tab')
-      if (['finance', 'bookings', 'vehicles', 'drivers', 'admin'].includes(saved)) {
-        return saved
+      if (['finance', 'bookings', 'schedule', 'vehicles', 'fleet', 'drivers', 'admin', 'admins'].includes(saved)) {
+        return saved === 'vehicles' ? 'fleet' : saved === 'admin' ? 'admins' : saved
       }
     }
     return 'finance'
@@ -834,6 +1988,134 @@ function AdminDashboard() {
   const [dealPriceInput, setDealPriceInput] = useState('')
   const [savingPrice, setSavingPrice] = useState(false)
   const [priceActionError, setPriceActionError] = useState('')
+  const [bookingFormOpen, setBookingFormOpen] = useState(false)
+  const [bookingDraft, setBookingDraft] = useState(emptyBookingDraft)
+  const [savingBooking, setSavingBooking] = useState(false)
+  const [bookingFormError, setBookingFormError] = useState('')
+  const [manualVehicleAvailability, setManualVehicleAvailability] = useState({})
+
+  const manualBookingWindow = (() => {
+    if (!bookingFormOpen || !bookingDraft.start_date || !bookingDraft.start_time) return null
+    try {
+      const s = toJakartaISOString(bookingDraft.start_date, bookingDraft.start_time)
+      const totalH = Number(bookingDraft.duration_hours) || 24
+      const e = new Date(new Date(s).getTime() + totalH * 60 * 60 * 1000).toISOString()
+      return { start_at: s, end_at: e }
+    } catch {
+      return null
+    }
+  })()
+
+  useEffect(() => {
+    if (!bookingFormOpen || !manualBookingWindow) return
+    let active = true
+    supabase
+      .rpc('vehicle_availability', {
+        start_ts: manualBookingWindow.start_at,
+        end_ts: manualBookingWindow.end_at,
+      })
+      .then(({ data, error }) => {
+        if (!active || error || !Array.isArray(data)) return
+        const map = {}
+        for (const row of data) {
+          map[row.vehicle_id] = row
+        }
+        setManualVehicleAvailability(map)
+      })
+      .catch(() => {})
+    return () => { active = false }
+  }, [bookingFormOpen, manualBookingWindow?.start_at, manualBookingWindow?.end_at])
+
+  const [scheduleCheckDate, setScheduleCheckDate] = useState(() => getJakartaDateKey(new Date()) || toDateKey(new Date()))
+  const [scheduleCheckTime, setScheduleCheckTime] = useState('08:00')
+  const [scheduleCheckDurationHours, setScheduleCheckDurationHours] = useState(24)
+  const [scheduleVehicleAvailability, setScheduleVehicleAvailability] = useState({})
+
+  const scheduleCheckWindow = useMemo(() => {
+    if (!scheduleCheckDate || !scheduleCheckTime) return null
+    try {
+      const s = toJakartaISOString(scheduleCheckDate, scheduleCheckTime)
+      const totalH = Math.max(1, Number(scheduleCheckDurationHours) || 24)
+      const e = new Date(new Date(s).getTime() + totalH * 60 * 60 * 1000).toISOString()
+      return { start_at: s, end_at: e, hours: totalH }
+    } catch {
+      return null
+    }
+  }, [scheduleCheckDate, scheduleCheckTime, scheduleCheckDurationHours])
+
+  useEffect(() => {
+    if (activeTab !== 'schedule' || !scheduleCheckWindow) return
+    let active = true
+    supabase
+      .rpc('vehicle_availability', {
+        start_ts: scheduleCheckWindow.start_at,
+        end_ts: scheduleCheckWindow.end_at,
+      })
+      .then(({ data, error }) => {
+        if (!active || error || !Array.isArray(data)) return
+        const map = {}
+        for (const row of data) {
+          map[row.vehicle_id] = row
+        }
+        setScheduleVehicleAvailability(map)
+      })
+      .catch(() => {})
+    return () => { active = false }
+  }, [activeTab, scheduleCheckWindow?.start_at, scheduleCheckWindow?.end_at])
+
+  const scheduleOverview = useMemo(() => {
+    if (!scheduleCheckWindow) {
+      return { readyCount: 0, occupiedCount: 0, availableDriversCount: 0, busyDriversCount: 0 }
+    }
+    const activeVehicles = vehicles.filter((v) => v.is_active !== false)
+    let ready = 0
+    let occupied = 0
+    for (const v of activeVehicles) {
+      const chk = checkVehicleAvailableInWindow(v, scheduleCheckWindow, bookings, null, scheduleVehicleAvailability)
+      if (chk.available) ready++
+      else occupied++
+    }
+    let availDrivers = 0
+    let busyDrivers = 0
+    for (const d of drivers) {
+      if (d.status === 'off') continue
+      const isBusy = isDriverBookedForWindow(d.id, scheduleCheckWindow, bookings)
+      if (isBusy) busyDrivers++
+      else availDrivers++
+    }
+    return {
+      readyCount: ready,
+      occupiedCount: occupied,
+      availableDriversCount: availDrivers,
+      busyDriversCount: busyDrivers,
+    }
+  }, [scheduleCheckWindow, vehicles, bookings, scheduleVehicleAvailability, drivers])
+  const [paymentConfirmModalOpen, setPaymentConfirmModalOpen] = useState(false)
+  const [paymentConfirmBooking, setPaymentConfirmBooking] = useState(null)
+  const [paymentConfirmDraft, setPaymentConfirmDraft] = useState({
+    pay_type: 'dp', // 'dp' | 'full'
+    method: 'Transfer BCA',
+    sender_name: '',
+    amount: '',
+    file: null,
+    file_preview: null,
+    notes: '',
+  })
+  const [paymentConfirmSubmitting, setPaymentConfirmSubmitting] = useState(false)
+  const [paymentConfirmError, setPaymentConfirmError] = useState('')
+  const [settlementModalOpen, setSettlementModalOpen] = useState(false)
+  const [settlementBooking, setSettlementBooking] = useState(null)
+  const [settlementDraft, setSettlementDraft] = useState({
+    method: 'Transfer BCA',
+    sender_name: '',
+    amount: '',
+    file: null,
+    file_preview: null,
+    notes: '',
+  })
+  const [settlementSubmitting, setSettlementSubmitting] = useState(false)
+  const [settlementError, setSettlementError] = useState('')
+  const [lightboxUrl, setLightboxUrl] = useState(null)
   const [exportModalOpen, setExportModalOpen] = useState(false)
   const [exportMode, setExportMode] = useState('month') // 'month' | 'range'
   const [exportMonth, setExportMonth] = useState(() => {
@@ -925,10 +2207,42 @@ function AdminDashboard() {
     if (vehicleImage?.previewUrl) URL.revokeObjectURL(vehicleImage.previewUrl)
   }, [vehicleImage])
 
+  useEffect(() => () => {
+    if (paymentConfirmDraft.file_preview?.startsWith('blob:')) {
+      URL.revokeObjectURL(paymentConfirmDraft.file_preview)
+    }
+  }, [paymentConfirmDraft.file_preview])
+
+  useEffect(() => () => {
+    if (settlementDraft.file_preview?.startsWith('blob:')) {
+      URL.revokeObjectURL(settlementDraft.file_preview)
+    }
+  }, [settlementDraft.file_preview])
+
+  useEffect(() => () => {
+    if (bookingDraft.payment_proof_preview?.startsWith('blob:')) {
+      URL.revokeObjectURL(bookingDraft.payment_proof_preview)
+    }
+  }, [bookingDraft.payment_proof_preview])
+
   useEffect(() => {
-    const overlayOpen = mobileNavOpen || vehicleFormOpen || driverFormOpen || !!selectedBooking || exportModalOpen
+    const overlayOpen = mobileNavOpen || vehicleFormOpen || driverFormOpen || !!selectedBooking || exportModalOpen || paymentConfirmModalOpen || settlementModalOpen || !!lightboxUrl
     const closeOnEscape = (event) => {
       if (event.key !== 'Escape') return
+      if (lightboxUrl) {
+        setLightboxUrl(null)
+        return
+      }
+      if (settlementModalOpen && !settlementSubmitting) {
+        setSettlementModalOpen(false)
+        setSettlementBooking(null)
+        return
+      }
+      if (paymentConfirmModalOpen && !paymentConfirmSubmitting) {
+        setPaymentConfirmModalOpen(false)
+        setPaymentConfirmBooking(null)
+        return
+      }
       setMobileNavOpen(false)
       setVehicleFormOpen(false)
       setDriverFormOpen(false)
@@ -941,7 +2255,7 @@ function AdminDashboard() {
       document.body.style.overflow = ''
       window.removeEventListener('keydown', closeOnEscape)
     }
-  }, [mobileNavOpen, vehicleFormOpen, driverFormOpen, selectedBooking, exportModalOpen])
+  }, [mobileNavOpen, vehicleFormOpen, driverFormOpen, selectedBooking, exportModalOpen, paymentConfirmModalOpen, settlementModalOpen, lightboxUrl, paymentConfirmSubmitting, settlementSubmitting])
 
   useEffect(() => {
     if (mobileNavOpen) return
@@ -1329,6 +2643,550 @@ function AdminDashboard() {
     }
   }
 
+  function calculateVehicleRate(vehicle, durationHours, includeToll = false) {
+    if (!vehicle) return { price: 0, toll: 0, priceWithToll: 0, priceWithoutToll: 0 }
+    const hrs = Math.max(12, Number(durationHours) || 24)
+    const multiplier = hrs / 12 // Base tarif acuan per 12 jam
+
+    const promo = getActivePromo(vehicle)
+    const rawWithToll = parsePrice(promo ? promo.price : vehicle.price)
+    const rawWithoutToll = parsePrice(vehicle.price_without_toll || vehicle.price)
+
+    const totalWithToll = Math.round(rawWithToll * multiplier)
+    const totalWithoutToll = Math.round(rawWithoutToll * multiplier)
+    const tollDiff = Math.max(0, totalWithToll - totalWithoutToll)
+
+    const chosenPrice = includeToll ? totalWithToll : totalWithoutToll
+    return {
+      price: chosenPrice,
+      toll: tollDiff,
+      priceWithToll: totalWithToll,
+      priceWithoutToll: totalWithoutToll,
+    }
+  }
+
+  function openBookingForm(prefill = {}) {
+    const todayStr = getJakartaDateKey(new Date()) || toDateKey(new Date())
+    const initialDate = prefill.start_date || todayStr
+    const initialTime = prefill.start_time || '08:00'
+    const initialDurationHours = Number(prefill.duration_hours) || 24
+
+    const initialWindow = {
+      start_at: toJakartaISOString(initialDate, initialTime),
+      end_at: new Date(new Date(toJakartaISOString(initialDate, initialTime)).getTime() + initialDurationHours * 60 * 60 * 1000).toISOString(),
+    }
+    const activeVehicles = vehicles.filter((v) => v.is_active !== false)
+    const prefilledVehicle = prefill.vehicle_id ? vehicles.find((v) => String(v.id) === String(prefill.vehicle_id)) : null
+    const firstAvailable = prefilledVehicle || activeVehicles.find((v) => checkVehicleAvailableInWindow(v, initialWindow, bookings).available) || activeVehicles[0] || vehicles[0] || null
+    const firstVehicle = firstAvailable
+    const defaultTransmission = prefill.transmission_type || firstVehicle?.transmission_options?.[0] || 'automatic'
+
+    const { price: defaultPriceNum, toll: defaultTollNum } = calculateVehicleRate(firstVehicle, initialDurationHours, false)
+
+    const durM = Math.floor(initialDurationHours / (30 * 24))
+    const remM = initialDurationHours % (30 * 24)
+    const durD = Math.floor(remM / 24)
+    const durH = remM % 24
+    const initialPayType = prefill.payment_type || 'dp'
+    const defaultDpNum = defaultPriceNum > 0 ? Math.round(defaultPriceNum * 0.5 / 1000) * 1000 || 500000 : 0
+
+    setBookingDraft({
+      customer_name: prefill.customer_name || '',
+      customer_phone: prefill.customer_phone || '',
+      vehicle_id: firstVehicle ? firstVehicle.id : '',
+      transmission_type: defaultTransmission,
+      booking_mode: prefill.booking_mode || 'Sewa mobil lepas kunci',
+      event_type: prefill.event_type || 'Pernikahan',
+      event_type_other: '',
+      event_addons: [],
+      event_addon_custom: '',
+      driver_id: prefill.driver_id || '',
+      start_date: initialDate,
+      start_time: initialTime,
+      duration_months: String(durM),
+      duration_days: String(durD),
+      duration_hours_part: String(durH),
+      duration_hours: initialDurationHours,
+      pickup_address: prefill.pickup_address || 'Pool Khalisa Rent Car',
+      deal_price: defaultPriceNum > 0 ? formatPrice(defaultPriceNum) : '',
+      toll_included: false,
+      toll_amount: defaultTollNum > 0 ? formatPrice(defaultTollNum) : '',
+      status: prefill.status || 'confirmed',
+      payment_type: initialPayType,
+      payment_method: 'Transfer BCA',
+      payment_sender_name: '',
+      payment_amount: initialPayType === 'full'
+        ? (defaultPriceNum > 0 ? formatPrice(defaultPriceNum) : '')
+        : (defaultDpNum > 0 ? formatPrice(defaultDpNum) : ''),
+      payment_proof_file: null,
+      payment_proof_preview: null,
+      payment_notes: '',
+      notes: prefill.notes || '[ORDER VIA WA]',
+    })
+    setBookingFormError('')
+    setBookingFormOpen(true)
+  }
+
+  async function uploadPaymentProofFile(file) {
+    if (!file) throw new Error('File bukti pembayaran tidak ditemukan.')
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const res = await fetch('/api/upload-payment-proof', {
+      method: 'POST',
+      body: formData,
+    })
+    const json = await res.json()
+    if (!res.ok || !json.publicUrl) {
+      throw new Error(json.error || 'Gagal mengunggah file bukti pembayaran.')
+    }
+    return json.publicUrl
+  }
+
+  function handleManualVehicleChange(vehicleId) {
+    const chosen = vehicles.find((v) => String(v.id) === String(vehicleId))
+    const resolvedVehicleId = chosen ? chosen.id : vehicleId
+    const newTransmission = chosen?.transmission_options?.[0] || 'automatic'
+    const durationHrs = Number(bookingDraft.duration_hours) || 24
+    const { price: newPrice, toll: newToll } = calculateVehicleRate(chosen, durationHrs, bookingDraft.toll_included)
+    const formattedPrice = newPrice > 0 ? formatPrice(newPrice) : ''
+
+    setBookingDraft((prev) => ({
+      ...prev,
+      vehicle_id: resolvedVehicleId,
+      transmission_type: newTransmission,
+      deal_price: formattedPrice || prev.deal_price,
+      payment_amount: prev.payment_type === 'full'
+        ? (formattedPrice || prev.payment_amount)
+        : prev.payment_amount,
+      toll_amount: prev.toll_included ? (newToll > 0 ? formatPrice(newToll) : prev.toll_amount) : prev.toll_amount,
+    }))
+  }
+
+  function updateManualDurationParts(monthsVal, daysVal, hoursVal) {
+    const rawM = monthsVal === '' ? '' : Math.max(0, parseInt(monthsVal, 10) || 0)
+    const rawD = daysVal === '' ? '' : Math.max(0, parseInt(daysVal, 10) || 0)
+    const rawH = hoursVal === '' ? '' : Math.max(0, parseInt(hoursVal, 10) || 0)
+
+    const m = typeof rawM === 'number' ? rawM : 0
+    const d = typeof rawD === 'number' ? rawD : 0
+    const h = typeof rawH === 'number' ? rawH : 0
+
+    const totalHours = m * 30 * 24 + d * 24 + h
+    const chosen = vehicles.find((v) => String(v.id) === String(bookingDraft.vehicle_id))
+    const { price: newPrice, toll: newToll } = calculateVehicleRate(chosen, Math.max(1, totalHours), bookingDraft.toll_included)
+    const formattedPrice = newPrice > 0 ? formatPrice(newPrice) : ''
+
+    setBookingDraft((prev) => ({
+      ...prev,
+      duration_months: monthsVal,
+      duration_days: daysVal,
+      duration_hours_part: hoursVal,
+      duration_hours: totalHours,
+      deal_price: formattedPrice || prev.deal_price,
+      payment_amount: prev.payment_type === 'full'
+        ? (formattedPrice || prev.payment_amount)
+        : prev.payment_amount,
+      toll_amount: prev.toll_included ? (newToll > 0 ? formatPrice(newToll) : prev.toll_amount) : prev.toll_amount,
+    }))
+  }
+
+  function handleManualDurationPreset(totalHours) {
+    const hrs = Math.max(1, Number(totalHours) || 24)
+    const months = Math.floor(hrs / (30 * 24))
+    const rem = hrs % (30 * 24)
+    const days = Math.floor(rem / 24)
+    const hours = rem % 24
+
+    const chosen = vehicles.find((v) => String(v.id) === String(bookingDraft.vehicle_id))
+    const { price: newPrice, toll: newToll } = calculateVehicleRate(chosen, hrs, bookingDraft.toll_included)
+    const formattedPrice = newPrice > 0 ? formatPrice(newPrice) : ''
+
+    setBookingDraft((prev) => ({
+      ...prev,
+      duration_months: String(months),
+      duration_days: String(days),
+      duration_hours_part: String(hours),
+      duration_hours: hrs,
+      deal_price: formattedPrice || prev.deal_price,
+      payment_amount: prev.payment_type === 'full'
+        ? (formattedPrice || prev.payment_amount)
+        : prev.payment_amount,
+      toll_amount: prev.toll_included ? (newToll > 0 ? formatPrice(newToll) : prev.toll_amount) : prev.toll_amount,
+    }))
+  }
+
+  function handleTollToggle(included) {
+    const chosen = vehicles.find((v) => String(v.id) === String(bookingDraft.vehicle_id))
+    const durationHrs = Number(bookingDraft.duration_hours) || 24
+    const { price: newPrice, toll: newToll } = calculateVehicleRate(chosen, durationHrs, included)
+    const formattedPrice = newPrice > 0 ? formatPrice(newPrice) : ''
+
+    setBookingDraft((prev) => ({
+      ...prev,
+      toll_included: included,
+      deal_price: formattedPrice || prev.deal_price,
+      payment_amount: prev.payment_type === 'full'
+        ? (formattedPrice || prev.payment_amount)
+        : prev.payment_amount,
+      toll_amount: included ? (newToll > 0 ? formatPrice(newToll) : (prev.toll_amount || '50.000')) : '',
+    }))
+  }
+
+  async function handleSaveManualBooking(event) {
+    event.preventDefault()
+    setBookingFormError('')
+
+    const customerName = bookingDraft.customer_name.trim()
+    if (!customerName || customerName.length < 2) {
+      setBookingFormError('Nama pemesan wajib diisi (minimal 2 karakter).')
+      return
+    }
+
+    let cleanPhoneNum = String(bookingDraft.customer_phone || '').trim().replace(/[^\d+]/g, '')
+    if (cleanPhoneNum.startsWith('0')) {
+      cleanPhoneNum = '+62' + cleanPhoneNum.slice(1)
+    } else if (cleanPhoneNum.startsWith('62')) {
+      cleanPhoneNum = '+' + cleanPhoneNum
+    } else if (!cleanPhoneNum.startsWith('+') && cleanPhoneNum.length > 0) {
+      cleanPhoneNum = '+62' + cleanPhoneNum
+    }
+    if (!cleanPhoneNum || cleanPhoneNum.length < 9) {
+      setBookingFormError('Nomor WhatsApp / telepon tidak valid (minimal 9 digit).')
+      return
+    }
+
+    if (!bookingDraft.vehicle_id) {
+      setBookingFormError('Pilih kendaraan yang akan disewa.')
+      return
+    }
+
+    if (!bookingDraft.start_date || !bookingDraft.start_time) {
+      setBookingFormError('Tentukan tanggal dan jam mulai sewa.')
+      return
+    }
+
+    const totalDurationHrs = Number(bookingDraft.duration_hours) || (
+      (parseInt(bookingDraft.duration_months, 10) || 0) * 30 * 24 +
+      (parseInt(bookingDraft.duration_days, 10) || 0) * 24 +
+      (parseInt(bookingDraft.duration_hours_part, 10) || 0)
+    )
+
+    if (!Number.isFinite(totalDurationHrs) || totalDurationHrs <= 0) {
+      setBookingFormError('Durasi sewa harus lebih dari 0 jam (masukkan jumlah bulan, hari, atau jam).')
+      return
+    }
+
+    const selectedVehicle = vehicles.find((v) => String(v.id) === String(bookingDraft.vehicle_id))
+    if (!selectedVehicle) {
+      setBookingFormError('Kendaraan yang dipilih tidak valid.')
+      return
+    }
+
+    const dealPriceNum = parseInt(String(bookingDraft.deal_price || '0').replace(/\D/g, ''), 10) || 0
+    if (dealPriceNum <= 0) {
+      setBookingFormError('Harga sewa harus lebih dari Rp 0.')
+      return
+    }
+    const tollAmountNum = bookingDraft.toll_included ? (parseInt(String(bookingDraft.toll_amount || '0').replace(/\D/g, ''), 10) || 0) : 0
+
+    let startAt
+    let endAt
+    try {
+      startAt = toJakartaISOString(bookingDraft.start_date, bookingDraft.start_time)
+      endAt = new Date(new Date(startAt).getTime() + totalDurationHrs * 60 * 60 * 1000).toISOString()
+    } catch {
+      setBookingFormError('Format tanggal atau jam sewa tidak valid.')
+      return
+    }
+
+    const vehicleCheck = checkVehicleAvailableInWindow(
+      selectedVehicle,
+      { start_at: startAt, end_at: endAt },
+      bookings,
+      bookingDraft.transmission_type,
+      manualVehicleAvailability
+    )
+    if (!vehicleCheck.available) {
+      setBookingFormError(`Unit armada (${selectedVehicle.name}) sudah terisi jadwal sewa lain atau berstatus ${vehicleCheck.reason} pada rentang tanggal & jam tersebut. Silakan pilih armada yang bertanda ✓ Tersedia.`)
+      return
+    }
+
+    const requiresDriver = bookingDraft.booking_mode === 'Sewa mobil + Supir' || bookingDraft.booking_mode === 'Rental Acara'
+
+    if (requiresDriver) {
+      if (bookingDraft.status === 'confirmed' && !bookingDraft.driver_id) {
+        setBookingFormError('Untuk pesanan dengan supir / paket acara berstatus Dikonfirmasi, Anda wajib menugaskan supir yang tersedia.')
+        return
+      }
+      if (bookingDraft.driver_id) {
+        const isBusy = isDriverBookedForWindow(bookingDraft.driver_id, { start_at: startAt, end_at: endAt }, bookings)
+        if (isBusy) {
+          setBookingFormError('Supir yang dipilih sedang memiliki jadwal bentrok pada rentang tanggal/jam sewa tersebut. Silakan pilih supir lain atau ubah jadwal.')
+          return
+        }
+      }
+    }
+
+    const isExactDays = totalDurationHrs >= 24 && totalDurationHrs % 24 === 0
+    const durationVal = isExactDays ? (totalDurationHrs / 24) : totalDurationHrs
+    const durationUnitVal = isExactDays ? 'hari' : 'jam'
+
+    let modeText = bookingDraft.booking_mode
+    if (bookingDraft.booking_mode === 'Sewa mobil lepas kunci') {
+      if (totalDurationHrs >= 720) modeText = 'Sewa mobil bulanan'
+      else if (totalDurationHrs >= 168) modeText = 'Sewa mobil mingguan'
+      else modeText = 'Sewa mobil harian'
+    } else if (bookingDraft.booking_mode === 'Rental Acara') {
+      // Di Supabase PostgreSQL, trigger database mewajibkan booking_mode = 'Sewa mobil + Supir'
+      // agar kolom driver_id diizinkan tersimpan (tidak memicu error BOOKING_DOES_NOT_REQUIRE_DRIVER).
+      // Detail paket acara dan add-on dekorasi tersimpan lengkap di catatan notes [PAKET ACARA – ...],
+      // dan dashboard tetap menampilkannya sebagai badge ungu 'Paket Rental Acara'.
+      modeText = 'Sewa mobil + Supir'
+    }
+
+    const vehicleSnapshot = [{
+      id: selectedVehicle.id,
+      name: selectedVehicle.name,
+      transmission_type: bookingDraft.transmission_type || selectedVehicle.transmission_options?.[0] || 'automatic',
+      powertrain_type: selectedVehicle.powertrain_type || 'gasoline',
+      price: dealPriceNum,
+      quantity: 1,
+    }]
+
+    let bookingCode = generateBookingCode()
+
+    let eventNotesParts = []
+    if (bookingDraft.booking_mode === 'Rental Acara') {
+      const chosenEventType = bookingDraft.event_type === 'Lainnya'
+        ? (bookingDraft.event_type_other.trim() || 'Lainnya')
+        : (bookingDraft.event_type || 'Pernikahan')
+      eventNotesParts.push(`[PAKET ACARA – ${chosenEventType.toUpperCase()}]`)
+
+      if (Array.isArray(bookingDraft.event_addons) && bookingDraft.event_addons.length > 0) {
+        const addonLabels = bookingDraft.event_addons.map((id) => {
+          if (id === 'kustom') return bookingDraft.event_addon_custom.trim() || 'Kustom / lainnya'
+          return eventAddonOptions.find((opt) => opt.id === id)?.label
+        }).filter(Boolean)
+        if (addonLabels.length > 0) {
+          eventNotesParts.push(`Add-on: ${addonLabels.join(', ')}`)
+        }
+      }
+    }
+
+    const isConfirmed = bookingDraft.status === 'confirmed'
+    const manualPaymentMethod = (bookingDraft.payment_method || '').trim()
+    const manualSenderName = (bookingDraft.payment_sender_name || bookingDraft.customer_name || '').trim()
+    const manualPayAmount = parseInt(String(bookingDraft.payment_amount || bookingDraft.deal_price || '0').replace(/\D/g, ''), 10) || dealPriceNum
+
+    if (isConfirmed) {
+      if (!manualPaymentMethod) {
+        setBookingFormError('Untuk booking berstatus Dikonfirmasi, metode pembayaran wajib dipilih.')
+        return
+      }
+      if (!manualSenderName || manualSenderName.length < 2) {
+        setBookingFormError('Untuk booking berstatus Dikonfirmasi, nama pemilik rekening / pengirim wajib diisi (minimal 2 karakter).')
+        return
+      }
+      if (manualPayAmount <= 0) {
+        setBookingFormError('Untuk booking berstatus Dikonfirmasi, nominal pembayaran / DP harus lebih dari Rp 0.')
+        return
+      }
+      if (!bookingDraft.payment_proof_file && !bookingDraft.payment_proof_preview) {
+        setBookingFormError('Untuk booking berstatus Dikonfirmasi, bukti pembayaran / transfer wajib diunggah.')
+        return
+      }
+    }
+
+    const cleanUserNotes = bookingDraft.notes.trim() || '[ORDER VIA WA]'
+    let fullNotes = eventNotesParts.length > 0
+      ? `${eventNotesParts.join('\n')}\n${cleanUserNotes}`
+      : cleanUserNotes
+
+    const finalDriverId = requiresDriver && bookingDraft.driver_id ? bookingDraft.driver_id : null
+
+    setSavingBooking(true)
+    try {
+      let manualProofUrl = bookingDraft.payment_proof_preview || ''
+      if (isConfirmed && bookingDraft.payment_proof_file) {
+        manualProofUrl = await uploadPaymentProofFile(bookingDraft.payment_proof_file)
+      }
+
+      let manualAdminNote = ''
+      if (isConfirmed) {
+        const isFull = bookingDraft.payment_type === 'full'
+        const dpAmount = isFull ? dealPriceNum : manualPayAmount
+        const remainingAmount = isFull ? 0 : Math.max(0, dealPriceNum - dpAmount)
+        const paymentStatus = isFull || remainingAmount <= 0 ? 'paid' : 'partial'
+
+        const manualPaymentPayload = {
+          type: isFull ? 'full' : 'dp',
+          status: paymentStatus,
+          total_amount: dealPriceNum,
+          dp_amount: dpAmount,
+          remaining_amount: remainingAmount,
+          dp_method: manualPaymentMethod,
+          dp_sender_name: manualSenderName,
+          dp_proof_url: manualProofUrl,
+          dp_notes: (bookingDraft.payment_notes || '').trim(),
+          dp_at: new Date().toISOString(),
+          settlement: null,
+          // Aliases
+          method: manualPaymentMethod,
+          sender_name: manualSenderName,
+          amount: dpAmount,
+          proof_url: manualProofUrl,
+          notes: (bookingDraft.payment_notes || '').trim(),
+          confirmed_at: new Date().toISOString(),
+        }
+        manualAdminNote = JSON.stringify({ payment: manualPaymentPayload })
+        const paySummary = isFull
+          ? `[PEMBAYARAN LUNAS: ${manualPaymentPayload.method} - a.n ${manualPaymentPayload.sender_name} (Rp ${formatPrice(dpAmount)})]`
+          : `[PEMBAYARAN DP: ${manualPaymentPayload.method} - a.n ${manualPaymentPayload.sender_name} (DP Rp ${formatPrice(dpAmount)} · Sisa Rp ${formatPrice(remainingAmount)})]`
+        fullNotes = `${fullNotes}\n${paySummary}`
+      }
+
+      // Catatan: Di Supabase, policy RLS public.booking_requests hanya mengizinkan INSERT
+      // dengan status 'pending'. Jadi kita insert sebagai 'pending' terlebih dahulu (tanpa .select()),
+      // lalu jika admin memilih status 'confirmed', kita update statusnya melalui RPC / update.
+      const bookingPayload = {
+        customer_name: customerName,
+        customer_phone: cleanPhoneNum,
+        pickup_address: bookingDraft.pickup_address.trim() || 'Pool Khalisa Rent Car',
+        pickup_lat: null,
+        pickup_lon: null,
+        start_at: startAt,
+        end_at: endAt,
+        booking_mode: modeText,
+        duration: durationVal,
+        duration_unit: durationUnitVal,
+        vehicle_ids: [selectedVehicle.id],
+        vehicle_snapshot: vehicleSnapshot,
+        estimated_price: dealPriceNum,
+        toll_amount: tollAmountNum,
+        toll_included: Boolean(bookingDraft.toll_included),
+        toll_type: bookingDraft.toll_included ? 'standard' : null,
+        privacy_consent: true,
+        booking_code: bookingCode,
+        notes: fullNotes,
+        admin_note: manualAdminNote,
+        status: 'pending',
+        driver_id: finalDriverId,
+      }
+      let { error: insertError } = await supabase
+        .from('booking_requests')
+        .insert(bookingPayload)
+
+      if (insertError?.code === '23505' && insertError.message?.includes('booking_code')) {
+        bookingCode = generateBookingCode()
+        ;({ error: insertError } = await supabase
+          .from('booking_requests')
+          .insert({ ...bookingPayload, booking_code: bookingCode }))
+      }
+
+      if (insertError && 'notes' in bookingPayload) {
+        const { notes: _omit, ...withoutNotes } = bookingPayload
+        ;({ error: insertError } = await supabase
+          .from('booking_requests')
+          .insert(withoutNotes))
+      }
+
+      if (insertError) {
+        if (insertError.code === 'P0001' && insertError.message?.includes('VEHICLE_UNAVAILABLE')) {
+          setBookingFormError(`Unit armada (${selectedVehicle.name}) sudah terisi jadwal sewa lain pada tanggal & jam tersebut. Silakan pilih armada lain atau sesuaikan jadwal sewa.`)
+        } else if (insertError.message?.includes('DRIVER_NOT_AVAILABLE') || insertError.message?.includes('DRIVER_TIME_CONFLICT')) {
+          setBookingFormError('Supir yang dipilih sedang tidak tersedia atau memiliki jadwal bentrok pada jam tersebut.')
+        } else if (insertError.message?.includes('BOOKING_DOES_NOT_REQUIRE_DRIVER')) {
+          setBookingFormError('Layanan ini tidak memerlukan supir. Kosongkan pilihan supir atau pilih mode layanan Dengan Supir.')
+        } else {
+          setBookingFormError(`Gagal menyimpan booking: ${insertError.message || 'Terjadi kesalahan sistem'}`)
+        }
+        setSavingBooking(false)
+        return
+      }
+
+      // Ambil data row yang baru saja disimpan berdasarkan booking_code
+      let savedBooking = null
+      const { data: newRow } = await supabase
+        .from('booking_requests')
+        .select('*')
+        .eq('booking_code', bookingCode)
+        .maybeSingle()
+
+      if (newRow && newRow.id) {
+        savedBooking = newRow
+      } else {
+        savedBooking = {
+          ...bookingPayload,
+          id: `booking-${Date.now()}`,
+          created_at: new Date().toISOString(),
+        }
+      }
+
+      // Jika admin memilih status Dikonfirmasi, update statusnya sekarang
+      let finalStatus = 'pending'
+      if (bookingDraft.status === 'confirmed' && savedBooking.id) {
+        const bookingId = extractBookingId(savedBooking.id)
+        if (requiresDriver && finalDriverId) {
+          // Konfirmasi dengan supir
+          const rpcRes = await supabase.rpc('confirm_booking_with_driver', { p_booking_id: bookingId })
+          if (rpcRes.error) {
+            await supabase
+              .from('booking_requests')
+              .update({ status: 'confirmed', driver_id: finalDriverId, admin_note: manualAdminNote })
+              .eq('id', bookingId)
+          } else if (manualAdminNote) {
+            await supabase
+              .from('booking_requests')
+              .update({ admin_note: manualAdminNote })
+              .eq('id', bookingId)
+          }
+          await supabase.from('drivers').update({ status: 'on_duty' }).eq('id', finalDriverId)
+          setDrivers((prev) => prev.map((d) => d.id === finalDriverId ? { ...d, status: 'on_duty' } : d))
+        } else {
+          // Konfirmasi tanpa supir
+          const rpcRes = await supabase.rpc('update_booking_status', { p_booking_id: bookingId, p_status: 'confirmed' })
+          if (rpcRes.error) {
+            await supabase
+              .from('booking_requests')
+              .update({ status: 'confirmed', admin_note: manualAdminNote })
+              .eq('id', bookingId)
+          } else if (manualAdminNote) {
+            await supabase
+              .from('booking_requests')
+              .update({ admin_note: manualAdminNote })
+              .eq('id', bookingId)
+          }
+        }
+        finalStatus = 'confirmed'
+      }
+
+      const finalizedBooking = {
+        ...savedBooking,
+        status: finalStatus,
+        driver_id: finalDriverId,
+        estimated_price: dealPriceNum,
+        admin_note: manualAdminNote || savedBooking.admin_note || '',
+        notes: fullNotes,
+      }
+
+      // Perbarui list booking di dashboard
+      setBookings((prev) => [finalizedBooking, ...prev.filter((b) => b.id !== finalizedBooking.id)])
+      setSelectedBooking(finalizedBooking)
+
+      sendDesktopNotification(
+        'Booking Manual Berhasil!',
+        `${customerName} (${selectedVehicle.name}) - Status: ${finalStatus === 'confirmed' ? 'Dikonfirmasi (Kunci Unit)' : 'Menunggu'}`
+      )
+
+      setSavingBooking(false)
+      setBookingFormOpen(false)
+    } catch (err) {
+      setBookingFormError(`Terjadi kesalahan: ${err.message || 'Gagal menyimpan booking'}`)
+      setSavingBooking(false)
+    }
+  }
+
   async function handleSaveDealPrice(bookingId) {
     const currentBooking = bookings.find((b) => b.id === bookingId)
     if (currentBooking?.status !== 'pending') {
@@ -1388,9 +3246,33 @@ function AdminDashboard() {
       return
     }
 
-    const requiresDriver = String(currentBooking.booking_mode ?? '').toLowerCase().includes('supir')
+    const requiresDriver = String(currentBooking.booking_mode ?? '').toLowerCase().includes('supir') || (isEventBooking(currentBooking) && Boolean(currentBooking.driver_id))
     if (status === 'confirmed' && requiresDriver && !currentBooking.driver_id) {
       setBookingActionError('Tentukan supir terlebih dahulu pada kolom supir sebelum mengonfirmasi booking.')
+      return
+    }
+
+    // Intercept: Jika transisi ke Dikonfirmasi, buka modal verifikasi pembayaran & upload bukti
+    if (status === 'confirmed') {
+      const existingPayment = getBookingPaymentInfo(currentBooking)
+      const estPrice = Number(currentBooking.estimated_price) || 0
+      const existingType = existingPayment?.type || (existingPayment && existingPayment.remaining_amount === 0 && existingPayment.amount >= estPrice ? 'full' : 'dp')
+      const defaultDp = estPrice > 0 ? Math.round(estPrice * 0.5 / 1000) * 1000 : 500000
+
+      setPaymentConfirmBooking(currentBooking)
+      setPaymentConfirmDraft({
+        pay_type: existingType,
+        method: existingPayment?.dp_method || existingPayment?.method || 'Transfer BCA',
+        sender_name: existingPayment?.dp_sender_name || existingPayment?.sender_name || currentBooking.customer_name || '',
+        amount: existingPayment?.dp_amount || existingPayment?.amount
+          ? formatPrice(existingPayment.dp_amount || existingPayment.amount)
+          : (existingType === 'full' ? formatPrice(estPrice) : formatPrice(defaultDp)),
+        file: null,
+        file_preview: existingPayment?.dp_proof_url || existingPayment?.proof_url || null,
+        notes: existingPayment?.dp_notes || existingPayment?.notes || '',
+      })
+      setPaymentConfirmError('')
+      setPaymentConfirmModalOpen(true)
       return
     }
 
@@ -1402,7 +3284,7 @@ function AdminDashboard() {
       })
 
     // Fallback: Jika RPC bentrok overload / ambiguous candidate di PostgreSQL, update langsung tabel booking_requests
-    if (error && (error.message?.includes('best candidate') || error.message?.includes('invalid input syntax') || error.message?.includes('confirm_booking_with_driver') || error.message?.includes('function'))) {
+    if (error && (error.message?.includes('best candidate') || error.message?.includes('invalid input syntax') || error.message?.includes('confirm_booking_with_driver') || error.message?.includes('function') || error.message?.includes('BOOKING_DOES_NOT_REQUIRE_DRIVER'))) {
       const res = await supabase
         .from('booking_requests')
         .update({ status })
@@ -1459,6 +3341,270 @@ function AdminDashboard() {
     const { data: driverList, error: driversError } = await supabase.from('drivers').select('*').order('name', { ascending: true })
     if (driversError) setBookingActionError('Status booking tersimpan, tetapi daftar supir gagal diperbarui. Muat ulang dashboard.')
     else setDrivers(await releaseExpiredDrivers(driverList ?? [], updatedBookings))
+  }
+
+  async function handleConfirmPaymentAndBooking(event) {
+    if (event?.preventDefault) event.preventDefault()
+    if (!paymentConfirmBooking) return
+    setPaymentConfirmError('')
+
+    const bookingId = extractBookingId(paymentConfirmBooking.id)
+    const isFull = paymentConfirmDraft.pay_type === 'full'
+    const method = (paymentConfirmDraft.method || '').trim()
+    const senderName = (paymentConfirmDraft.sender_name || '').trim()
+    const estPrice = Number(paymentConfirmBooking.estimated_price) || 0
+    const cleanAmount = isFull
+      ? estPrice
+      : (parseInt(String(paymentConfirmDraft.amount || '0').replace(/\D/g, ''), 10) || 0)
+    const hasProofFile = Boolean(paymentConfirmDraft.file)
+    const hasExistingProof = Boolean(paymentConfirmDraft.file_preview)
+
+    if (!method) {
+      setPaymentConfirmError('Pilih metode pembayaran yang digunakan.')
+      return
+    }
+    if (!senderName || senderName.length < 2) {
+      setPaymentConfirmError('Nama pemilik rekening / pengirim wajib diisi (minimal 2 karakter).')
+      return
+    }
+    if (cleanAmount <= 0) {
+      setPaymentConfirmError('Nominal pembayaran / DP harus lebih dari Rp 0.')
+      return
+    }
+    if (!hasProofFile && !hasExistingProof) {
+      setPaymentConfirmError('Bukti transfer / struk pembayaran wajib diunggah.')
+      return
+    }
+
+    setPaymentConfirmSubmitting(true)
+    try {
+      let proofUrl = paymentConfirmDraft.file_preview || ''
+      if (hasProofFile) {
+        proofUrl = await uploadPaymentProofFile(paymentConfirmDraft.file)
+      }
+
+      const dpAmount = cleanAmount
+      const remainingAmount = isFull ? 0 : Math.max(0, estPrice - dpAmount)
+      const paymentStatus = isFull || remainingAmount <= 0 ? 'paid' : 'partial'
+
+      const paymentData = {
+        type: isFull ? 'full' : 'dp',
+        status: paymentStatus,
+        total_amount: estPrice,
+        dp_amount: dpAmount,
+        remaining_amount: remainingAmount,
+        dp_method: method,
+        dp_sender_name: senderName,
+        dp_proof_url: proofUrl,
+        dp_notes: (paymentConfirmDraft.notes || '').trim(),
+        dp_at: new Date().toISOString(),
+        settlement: null,
+        // Legacy aliases
+        method,
+        sender_name: senderName,
+        amount: dpAmount,
+        proof_url: proofUrl,
+        notes: (paymentConfirmDraft.notes || '').trim(),
+        confirmed_at: new Date().toISOString(),
+      }
+      const adminNotePayload = JSON.stringify({ payment: paymentData })
+      const paymentSummaryNote = isFull
+        ? `[PEMBAYARAN LUNAS: ${method} - a.n ${senderName} (Rp ${formatPrice(dpAmount)})]`
+        : `[PEMBAYARAN DP: ${method} - a.n ${senderName} (DP Rp ${formatPrice(dpAmount)} · Sisa Rp ${formatPrice(remainingAmount)})]`
+      const originalNotes = paymentConfirmBooking.notes || ''
+      const updatedNotes = originalNotes.includes('[PEMBAYARAN')
+        ? originalNotes.replace(/\[PEMBAYARAN[^\]]*\]/g, paymentSummaryNote)
+        : (originalNotes ? `${originalNotes}\n${paymentSummaryNote}` : paymentSummaryNote)
+
+      const requiresDriver = String(paymentConfirmBooking.booking_mode ?? '').toLowerCase().includes('supir') || (isEventBooking(paymentConfirmBooking) && Boolean(paymentConfirmBooking.driver_id))
+
+      let finalStatus = paymentConfirmBooking.status
+      let resolvedData = null
+
+      if (paymentConfirmBooking.status === 'pending') {
+        let { data, error } = requiresDriver
+          ? await supabase.rpc('confirm_booking_with_driver', { p_booking_id: bookingId })
+          : await supabase.rpc('update_booking_status', {
+              p_booking_id: bookingId,
+              p_status: 'confirmed',
+            })
+
+        if (error && (error.message?.includes('best candidate') || error.message?.includes('invalid input syntax') || error.message?.includes('confirm_booking_with_driver') || error.message?.includes('function') || error.message?.includes('BOOKING_DOES_NOT_REQUIRE_DRIVER'))) {
+          const res = await supabase
+            .from('booking_requests')
+            .update({ status: 'confirmed' })
+            .eq('id', bookingId)
+            .select()
+          if (!res.error) {
+            data = res.data?.[0] || { ...paymentConfirmBooking, status: 'confirmed' }
+            error = null
+            if (paymentConfirmBooking.driver_id) {
+              await supabase.from('drivers').update({ status: 'on_duty' }).eq('id', paymentConfirmBooking.driver_id)
+            }
+          }
+        }
+
+        if (error) {
+          if (error.code === 'P0001' && error.message?.includes('VEHICLE_UNAVAILABLE')) {
+            setPaymentConfirmError('Unit pada booking ini sudah dipakai booking confirmed lain di jadwal yang sama. Booking tetap menunggu; hubungi pemesan untuk memilih varian atau jadwal lain.')
+          } else if (error.message?.includes('DRIVER_NOT_AVAILABLE')) {
+            setPaymentConfirmError('Supir yang cocok tidak tersedia pada jadwal ini. Booking tetap menunggu; ubah jadwal atau cek penugasan supir.')
+          } else {
+            setPaymentConfirmError(`Gagal konfirmasi status: ${error.message || 'Terjadi kesalahan'}`)
+          }
+          setPaymentConfirmSubmitting(false)
+          return
+        }
+        resolvedData = Array.isArray(data) ? data[0] : (typeof data === 'string' && data.startsWith('{') ? JSON.parse(data) : data)
+        finalStatus = 'confirmed'
+      }
+
+      // Update admin_note & notes dengan data pembayaran
+      const { error: updateNoteErr } = await supabase
+        .from('booking_requests')
+        .update({
+          admin_note: adminNotePayload,
+          notes: updatedNotes,
+        })
+        .eq('id', bookingId)
+
+      if (updateNoteErr) {
+        console.warn('Gagal update admin_note:', updateNoteErr)
+      }
+
+      const finalUpdatedBooking = {
+        ...(resolvedData && typeof resolvedData === 'object' && resolvedData.id ? resolvedData : paymentConfirmBooking),
+        status: finalStatus,
+        admin_note: adminNotePayload,
+        notes: updatedNotes,
+      }
+
+      const updatedBookings = bookings.map((b) => {
+        if (extractBookingId(b?.id || b) === bookingId) {
+          return finalUpdatedBooking
+        }
+        return b
+      })
+
+      setBookings(updatedBookings)
+      if (selectedBooking && extractBookingId(selectedBooking.id) === bookingId) {
+        setSelectedBooking(finalUpdatedBooking)
+      }
+
+      const { data: driverList } = await supabase.from('drivers').select('*').order('name', { ascending: true })
+      if (driverList) setDrivers(await releaseExpiredDrivers(driverList, updatedBookings))
+
+      sendDesktopNotification(
+        'Booking Dikonfirmasi!',
+        `${paymentConfirmBooking.customer_name} - Pembayaran ${method} (Rp ${formatPrice(cleanAmount)}) tercatat.`
+      )
+
+      setPaymentConfirmModalOpen(false)
+      setPaymentConfirmBooking(null)
+    } catch (err) {
+      setPaymentConfirmError(`Terjadi kesalahan: ${err.message || 'Gagal menyimpan konfirmasi pembayaran'}`)
+    } finally {
+      setPaymentConfirmSubmitting(false)
+    }
+  }
+
+  async function handleSaveSettlement(event) {
+    if (event?.preventDefault) event.preventDefault()
+    if (!settlementBooking) return
+    setSettlementError('')
+
+    const bookingId = extractBookingId(settlementBooking.id)
+    const method = (settlementDraft.method || '').trim()
+    const senderName = (settlementDraft.sender_name || '').trim()
+    const cleanAmount = parseInt(String(settlementDraft.amount || '0').replace(/\D/g, ''), 10) || 0
+    const hasProofFile = Boolean(settlementDraft.file)
+    const hasExistingProof = Boolean(settlementDraft.file_preview)
+
+    if (!method) {
+      setSettlementError('Pilih metode pembayaran pelunasan.')
+      return
+    }
+    if (!senderName || senderName.length < 2) {
+      setSettlementError('Nama pemilik rekening / pembayar wajib diisi (minimal 2 karakter).')
+      return
+    }
+    if (cleanAmount <= 0) {
+      setSettlementError('Nominal pelunasan harus lebih dari Rp 0.')
+      return
+    }
+    if (!hasProofFile && !hasExistingProof) {
+      setSettlementError('Bukti transfer / struk pelunasan wajib diunggah.')
+      return
+    }
+
+    setSettlementSubmitting(true)
+    try {
+      let proofUrl = settlementDraft.file_preview || ''
+      if (hasProofFile) {
+        proofUrl = await uploadPaymentProofFile(settlementDraft.file)
+      }
+
+      const currentPayment = getBookingPaymentInfo(settlementBooking) || {}
+      const updatedPaymentData = {
+        ...currentPayment,
+        type: 'dp',
+        status: 'paid',
+        remaining_amount: 0,
+        settlement: {
+          method,
+          sender_name: senderName,
+          amount: cleanAmount,
+          proof_url: proofUrl,
+          notes: (settlementDraft.notes || '').trim(),
+          settled_at: new Date().toISOString(),
+        },
+      }
+
+      const adminNotePayload = JSON.stringify({ payment: updatedPaymentData })
+      const settlementSummaryNote = `[PELUNASAN: ${method} - a.n ${senderName} (Rp ${formatPrice(cleanAmount)}) | LUNAS]`
+      const originalNotes = settlementBooking.notes || ''
+      const updatedNotes = originalNotes.includes('[PELUNASAN:')
+        ? originalNotes.replace(/\[PELUNASAN:[^\]]*\]/g, settlementSummaryNote)
+        : (originalNotes ? `${originalNotes}\n${settlementSummaryNote}` : settlementSummaryNote)
+
+      const { error: updateErr } = await supabase
+        .from('booking_requests')
+        .update({
+          admin_note: adminNotePayload,
+          notes: updatedNotes,
+        })
+        .eq('id', bookingId)
+
+      if (updateErr) {
+        throw new Error(`Gagal menyimpan ke database: ${updateErr.message}`)
+      }
+
+      const finalUpdated = {
+        ...settlementBooking,
+        admin_note: adminNotePayload,
+        notes: updatedNotes,
+      }
+
+      const updatedBookings = bookings.map((b) =>
+        extractBookingId(b?.id || b) === bookingId ? finalUpdated : b
+      )
+      setBookings(updatedBookings)
+      if (selectedBooking && extractBookingId(selectedBooking?.id || selectedBooking) === bookingId) {
+        setSelectedBooking(finalUpdated)
+      }
+
+      sendDesktopNotification(
+        'Pelunasan Berhasil!',
+        `${settlementBooking.customer_name} - Sisa tagihan Rp ${formatPrice(cleanAmount)} telah lunas.`
+      )
+
+      setSettlementModalOpen(false)
+      setSettlementBooking(null)
+    } catch (err) {
+      setSettlementError(`Terjadi kesalahan: ${err.message || 'Gagal menyimpan bukti pelunasan'}`)
+    } finally {
+      setSettlementSubmitting(false)
+    }
   }
 
   function openDriverForm(driver = null) {
@@ -1572,7 +3718,7 @@ function AdminDashboard() {
       setBookingActionError('Supir hanya dapat ditugaskan pada booking yang menunggu atau dikonfirmasi.')
       return
     }
-    if (!String(currentBooking.booking_mode ?? '').toLowerCase().includes('supir')) {
+    if (!String(currentBooking.booking_mode ?? '').toLowerCase().includes('supir') && !isEventBooking(currentBooking)) {
       setBookingActionError('Booking lepas kunci tidak dapat diubah menjadi booking dengan supir.')
       return
     }
@@ -1583,10 +3729,14 @@ function AdminDashboard() {
     })
 
     // Fallback: Jika RPC bentrok overload / ambiguous candidate di PostgreSQL, update langsung tabel booking_requests
-    if (error && (error.message?.includes('best candidate') || error.message?.includes('function') || error.message?.includes('invalid input syntax'))) {
+    if (error && (error.message?.includes('best candidate') || error.message?.includes('function') || error.message?.includes('invalid input syntax') || error.message?.includes('BOOKING_DOES_NOT_REQUIRE_DRIVER'))) {
+      const updatePayload = {
+        driver_id: targetDriverId,
+        ...(isEventBooking(currentBooking) && targetDriverId ? { booking_mode: 'Sewa mobil + Supir' } : {})
+      }
       const res = await supabase
         .from('booking_requests')
-        .update({ driver_id: targetDriverId })
+        .update(updatePayload)
         .eq('id', bookingId)
         .select()
 
@@ -1641,19 +3791,26 @@ function AdminDashboard() {
     const sheet = workbook.addWorksheet('Booking', { views: [{ state: 'frozen', ySplit: 1 }] })
 
     sheet.columns = [
-      { header: 'No.',           key: 'no',       width: 5  },
-      { header: 'Kode Booking',  key: 'code',     width: 14 },
-      { header: 'Dibuat',        key: 'created',  width: 20 },
-      { header: 'Pemesan',       key: 'name',     width: 22 },
-      { header: 'Telepon',       key: 'phone',    width: 18 },
-      { header: 'Mulai Sewa',    key: 'start',    width: 20 },
-      { header: 'Selesai Sewa',  key: 'end',      width: 20 },
-      { header: 'Kendaraan',     key: 'vehicle',  width: 36 },
-      { header: 'Layanan',       key: 'mode',     width: 22 },
-      { header: 'Durasi',        key: 'duration', width: 12 },
-      { header: 'Status',        key: 'status',   width: 14 },
-      { header: 'Supir',         key: 'driver',   width: 22 },
-      { header: 'Estimasi (Rp)', key: 'price',    width: 16 },
+      { header: 'No.',                  key: 'no',               width: 5  },
+      { header: 'Kode Booking',         key: 'code',             width: 14 },
+      { header: 'Dibuat',               key: 'created',          width: 18 },
+      { header: 'Pemesan',              key: 'name',             width: 22 },
+      { header: 'Telepon',              key: 'phone',            width: 16 },
+      { header: 'Mulai Sewa',           key: 'start',            width: 18 },
+      { header: 'Selesai Sewa',         key: 'end',              width: 18 },
+      { header: 'Kendaraan',            key: 'vehicle',          width: 32 },
+      { header: 'Layanan',              key: 'mode',             width: 20 },
+      { header: 'Durasi',               key: 'duration',         width: 12 },
+      { header: 'Supir',                key: 'driver',           width: 18 },
+      { header: 'Status Booking',       key: 'status',           width: 16 },
+      { header: 'Status Bayar',         key: 'payment_status',   width: 18 },
+      { header: 'Tipe Bayar',           key: 'payment_type',     width: 16 },
+      { header: 'Metode Bayar',         key: 'payment_method',   width: 20 },
+      { header: 'Nama Pengirim',        key: 'payment_sender',   width: 22 },
+      { header: 'Total Sewa (Rp)',      key: 'price',            width: 16 },
+      { header: 'Dibayar (Rp)',         key: 'paid_amount',      width: 16 },
+      { header: 'Sisa Tagihan (Rp)',    key: 'remaining_amount', width: 16 },
+      { header: 'Catatan',              key: 'notes',            width: 30 },
     ]
 
     const headerRow = sheet.getRow(1)
@@ -1678,29 +3835,99 @@ function AdminDashboard() {
       cancelled: { bg: 'FFE2E3E5', fg: 'FF383D41' },
     }
 
+    const centerColumns = new Set(['no', 'code', 'created', 'start', 'end', 'duration', 'status', 'payment_status', 'payment_type'])
+
     bookingsToExport.forEach((booking, index) => {
+      const pInfo = getBookingPaymentInfo(booking)
+      const estPrice = Number(booking.estimated_price) || 0
+
+      let payStatus = 'Menunggu'
+      let payType = '-'
+      let payMethod = '-'
+      let paySender = '-'
+      let paidAmt = 0
+      let remAmt = estPrice
+
+      if (pInfo) {
+        if (pInfo.status === 'paid') {
+          payStatus = 'Lunas (100%)'
+          if (pInfo.settlement) {
+            payType = 'DP + Pelunasan'
+            payMethod = pInfo.dp_method === pInfo.settlement.method
+              ? (pInfo.dp_method || '-')
+              : `${pInfo.dp_method || '-'} + ${pInfo.settlement.method || '-'}`
+            paySender = pInfo.dp_sender_name === pInfo.settlement.sender_name
+              ? (pInfo.dp_sender_name || '-')
+              : `${pInfo.dp_sender_name || '-'} / ${pInfo.settlement.sender_name || '-'}`
+            paidAmt = Number(pInfo.total_amount) || estPrice
+          } else {
+            payType = pInfo.type === 'dp' ? 'Lunas' : 'Lunas 100%'
+            payMethod = pInfo.dp_method || pInfo.method || '-'
+            paySender = pInfo.dp_sender_name || pInfo.sender_name || '-'
+            paidAmt = Number(pInfo.total_amount || pInfo.amount || pInfo.dp_amount) || estPrice
+          }
+          remAmt = 0
+        } else if (pInfo.remaining_amount > 0 || pInfo.type === 'dp') {
+          payStatus = 'DP (Uang Muka)'
+          payType = 'DP'
+          payMethod = pInfo.dp_method || pInfo.method || '-'
+          paySender = pInfo.dp_sender_name || pInfo.sender_name || '-'
+          paidAmt = Number(pInfo.dp_amount || pInfo.amount) || 0
+          remAmt = Number(pInfo.remaining_amount) || Math.max(0, estPrice - paidAmt)
+        }
+      } else if (booking.status === 'confirmed') {
+        payStatus = 'Dikonfirmasi'
+        payType = 'Lunas'
+        paidAmt = estPrice
+        remAmt = 0
+      } else if (booking.status === 'cancelled' || booking.status === 'rejected') {
+        payStatus = booking.status === 'cancelled' ? 'Dibatalkan' : 'Ditolak'
+        payType = '-'
+        paidAmt = 0
+        remAmt = 0
+      } else {
+        payStatus = 'Menunggu Bayar'
+        payType = 'Belum Bayar'
+        paidAmt = 0
+        remAmt = estPrice
+      }
+
       const row = sheet.addRow({
-        no:       index + 1,
-        code:     booking.booking_code ?? '-',
-        created:  formatJakartaDateTime(booking.created_at),
-        name:     booking.customer_name,
-        phone:    booking.customer_phone,
-        start:    formatJakartaDateTime(booking.start_at),
-        end:      formatJakartaDateTime(booking.end_at),
-        vehicle:  (booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(' + '),
-        mode:     booking.booking_mode,
-        duration: formatDuration(booking.duration, booking.duration_unit),
-        status:   bookingStatusLabels[booking.status] ?? booking.status,
-        driver:   drivers.find((d) => d.id === booking.driver_id)?.name ?? '-',
-        price:    Number(booking.estimated_price) || 0,
+        no:               index + 1,
+        code:             booking.booking_code ?? '-',
+        created:          formatJakartaDateTime(booking.created_at),
+        name:             booking.customer_name,
+        phone:            booking.customer_phone,
+        start:            formatJakartaDateTime(booking.start_at),
+        end:              formatJakartaDateTime(booking.end_at),
+        vehicle:          (booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(' + '),
+        mode:             booking.booking_mode,
+        duration:         formatDuration(booking.duration, booking.duration_unit),
+        driver:           drivers.find((d) => d.id === booking.driver_id)?.name ?? '-',
+        status:           bookingStatusLabels[booking.status] ?? booking.status,
+        payment_status:   payStatus,
+        payment_type:     payType,
+        payment_method:   payMethod,
+        payment_sender:   paySender,
+        price:            estPrice,
+        paid_amount:      paidAmt,
+        remaining_amount: remAmt,
+        notes:            (booking.notes || '').replace(/[\r\n]+/g, ' ').trim(),
       })
 
       const isEven = index % 2 === 1
       const rowBg  = isEven ? 'FFF5F7FA' : 'FFFFFFFF'
 
       row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        const colKey = sheet.columns[colNumber - 1]?.key
+        const isCentered = centerColumns.has(colKey)
+        const isRightAligned = colKey === 'price' || colKey === 'paid_amount' || colKey === 'remaining_amount'
+
         cell.font      = { size: 10, name: 'Calibri' }
-        cell.alignment = { vertical: 'middle', horizontal: colNumber === 1 || colNumber === 13 ? 'center' : 'left' }
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: isCentered ? 'center' : (isRightAligned ? 'right' : 'left'),
+        }
         cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } }
         cell.border    = {
           top:    { style: 'hair', color: { argb: 'FFD0D7E0' } },
@@ -1718,23 +3945,80 @@ function AdminDashboard() {
         statusCell.alignment = { vertical: 'middle', horizontal: 'center' }
       }
 
+      const payStatusCell = row.getCell('payment_status')
+      if (payStatus.includes('Lunas')) {
+        payStatusCell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD4EDDA' } }
+        payStatusCell.font      = { size: 10, name: 'Calibri', bold: true, color: { argb: 'FF155724' } }
+        payStatusCell.alignment = { vertical: 'middle', horizontal: 'center' }
+      } else if (payStatus.includes('DP')) {
+        payStatusCell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3CD' } }
+        payStatusCell.font      = { size: 10, name: 'Calibri', bold: true, color: { argb: 'FF856404' } }
+        payStatusCell.alignment = { vertical: 'middle', horizontal: 'center' }
+      } else if (payStatus.includes('Menunggu')) {
+        payStatusCell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8D7DA' } }
+        payStatusCell.font      = { size: 10, name: 'Calibri', color: { argb: 'FF721C24' } }
+        payStatusCell.alignment = { vertical: 'middle', horizontal: 'center' }
+      }
+
       const priceCell = row.getCell('price')
       priceCell.numFmt    = '#,##0'
       priceCell.font      = { size: 10, name: 'Calibri', bold: true }
       priceCell.alignment = { vertical: 'middle', horizontal: 'right' }
 
+      const paidCell = row.getCell('paid_amount')
+      paidCell.numFmt    = '#,##0'
+      paidCell.font      = { size: 10, name: 'Calibri', bold: true, color: { argb: 'FF155724' } }
+      paidCell.alignment = { vertical: 'middle', horizontal: 'right' }
+
+      const remCell = row.getCell('remaining_amount')
+      remCell.numFmt    = '#,##0'
+      remCell.font      = { size: 10, name: 'Calibri', bold: remAmt > 0, color: { argb: remAmt > 0 ? 'FF721C24' : 'FF6C757D' } }
+      remCell.alignment = { vertical: 'middle', horizontal: 'right' }
+
       row.height = 22
     })
 
-    const totalRow = sheet.addRow({ no: '', price: bookingsToExport.reduce((sum, b) => sum + (Number(b.estimated_price) || 0), 0) })
-    totalRow.getCell('driver').value     = 'TOTAL ESTIMASI'
-    totalRow.getCell('driver').font      = { bold: true, size: 10, name: 'Calibri' }
-    totalRow.getCell('driver').alignment = { horizontal: 'right', vertical: 'middle' }
-    const totalPriceCell = totalRow.getCell('price')
-    totalPriceCell.numFmt    = '#,##0'
-    totalPriceCell.font      = { bold: true, size: 10, name: 'Calibri', color: { argb: 'FF1E3A5F' } }
-    totalPriceCell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF5' } }
-    totalPriceCell.alignment = { horizontal: 'right', vertical: 'middle' }
+    const totalEstPrice = bookingsToExport.reduce((sum, b) => sum + (Number(b.estimated_price) || 0), 0)
+    const totalPaidAmount = bookingsToExport.reduce((sum, b) => {
+      const p = getBookingPaymentInfo(b)
+      if (p?.status === 'paid') return sum + (Number(p.total_amount || p.amount || b.estimated_price) || 0)
+      if (p) return sum + (Number(p.dp_amount || p.amount) || 0)
+      if (b.status === 'confirmed') return sum + (Number(b.estimated_price) || 0)
+      return sum
+    }, 0)
+    const totalRemaining = bookingsToExport.reduce((sum, b) => {
+      const p = getBookingPaymentInfo(b)
+      if (p?.status === 'paid') return sum
+      if (p) return sum + (Number(p.remaining_amount) || 0)
+      if (['completed', 'confirmed', 'cancelled', 'rejected'].includes(b.status)) return sum
+      return sum + (Number(b.estimated_price) || 0)
+    }, 0)
+
+    const totalRow = sheet.addRow({
+      no: '',
+      payment_sender: 'TOTAL',
+      price: totalEstPrice,
+      paid_amount: totalPaidAmount,
+      remaining_amount: totalRemaining,
+    })
+
+    const senderCell = totalRow.getCell('payment_sender')
+    senderCell.value     = 'TOTAL'
+    senderCell.font      = { bold: true, size: 10, name: 'Calibri', color: { argb: 'FF1E3A5F' } }
+    senderCell.alignment = { horizontal: 'right', vertical: 'middle' }
+
+    const formatTotalNumCell = (cellKey, color) => {
+      const c = totalRow.getCell(cellKey)
+      c.numFmt    = '#,##0'
+      c.font      = { bold: true, size: 10, name: 'Calibri', color: { argb: color } }
+      c.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8EEF5' } }
+      c.alignment = { horizontal: 'right', vertical: 'middle' }
+    }
+
+    formatTotalNumCell('price', 'FF1E3A5F')
+    formatTotalNumCell('paid_amount', 'FF155724')
+    formatTotalNumCell('remaining_amount', totalRemaining > 0 ? 'FF721C24' : 'FF1E3A5F')
+
     totalRow.height = 24
     totalRow.eachCell({ includeEmpty: true }, (cell) => {
       cell.border = {
@@ -1918,6 +4202,7 @@ function AdminDashboard() {
             <span className="mb-2 px-3 text-[.62rem] font-extrabold tracking-[.16em] text-white/35">MENU</span>
             <AdminNavButton active={activeTab === 'finance'} icon={<LayoutDashboard size={16} aria-hidden="true" />} label="Ikhtisar" onClick={() => { setActiveTab('finance'); setMobileNavOpen(false) }} />
             <AdminNavButton active={activeTab === 'bookings'} icon={<CalendarDays size={16} aria-hidden="true" />} label="Booking" count={bookings.length} alert={pendingBookings} onClick={() => { setActiveTab('bookings'); setMobileNavOpen(false) }} />
+            <AdminNavButton active={activeTab === 'schedule'} icon={<CalendarCheck size={16} aria-hidden="true" />} label="Cek Jadwal" onClick={() => { setActiveTab('schedule'); setMobileNavOpen(false) }} />
             <AdminNavButton active={activeTab === 'fleet'} icon={<CarFront size={17} aria-hidden="true" />} label="Armada" count={vehicles.length} onClick={() => { setActiveTab('fleet'); setMobileNavOpen(false) }} />
             <AdminNavButton active={activeTab === 'drivers'} icon={<UserCheck size={16} aria-hidden="true" />} label="Supir" count={drivers.length} onClick={() => { setActiveTab('drivers'); setMobileNavOpen(false) }} />
             {canManageAdmins && <AdminNavButton active={activeTab === 'admins'} icon={<ShieldCheck size={16} aria-hidden="true" />} label="Akun admin" onClick={() => { setActiveTab('admins'); setMobileNavOpen(false) }} />}
@@ -1978,7 +4263,7 @@ function AdminDashboard() {
         {activeTab === 'finance' && (
             <>
             {/* Baris 1: 5 stat cards sejajar */}
-            <section className="mb-3 grid grid-cols-5 gap-3 max-[900px]:grid-cols-3 max-[560px]:grid-cols-2" aria-label="Ringkasan keuangan">
+            <section className="mb-3 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 max-[480px]:grid-cols-1" aria-label="Ringkasan keuangan">
               <StatCard label="Total estimasi aktif" value={loadingBookings ? '—' : `Rp ${formatPrice(financeSummary.total)}`} tone="accent" />
               <StatCard label="Total biaya tol" value={loadingBookings ? '—' : `Rp ${formatPrice(financeSummary.totalToll)}`} tone="warn" />
               <StatCard label="Booking selesai" value={loadingBookings ? '—' : `Rp ${formatPrice(financeSummary.completed)}`} tone="success" />
@@ -2023,7 +4308,7 @@ function AdminDashboard() {
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex min-w-0 items-center gap-2">
                                   <span className="shrink-0 text-[.72rem] font-bold text-slate-400">{i + 1}.</span>
-                                  {vehicle?.image_url && <img className="size-7 shrink-0 rounded object-cover" src={vehicle.image_url} alt="" />}
+                                  {vehicle?.image_url && <img className="size-8 shrink-0 rounded-lg border border-line object-cover" src={vehicle.image_url} alt="" />}
                                   <span className="truncate text-[.76rem] font-semibold text-ink">{name}</span>
                                 </div>
                                 <span className="shrink-0 text-[.72rem] font-bold text-cyan">{count}x</span>
@@ -2040,8 +4325,11 @@ function AdminDashboard() {
 
                   {/* Promo & Harga Spesial */}
                   <div className="grid content-start gap-4">
-                    <section className="rounded-2xl border border-yellow-200 bg-yellow-50 p-5 shadow-sm" aria-label="Kendaraan promo aktif">
-                      <h3 className="m-0 mb-3 font-display text-[.9rem] font-bold text-yellow-800">Promo aktif</h3>
+                    <section className="rounded-2xl border border-yellow-200 bg-yellow-50/70 p-5 shadow-sm" aria-label="Kendaraan promo aktif">
+                      <div className="mb-3 flex items-center gap-1.5 font-display text-[.9rem] font-bold text-yellow-800">
+                        <Sparkles size={14} className="shrink-0 text-yellow-600" aria-hidden="true" />
+                        <span>Promo aktif</span>
+                      </div>
                       {promoVehicles.length === 0 ? (
                         <p className="text-[.76rem] text-yellow-700">Tidak ada promo aktif saat ini.</p>
                       ) : (
@@ -2050,17 +4338,17 @@ function AdminDashboard() {
                             const promo = getActivePromo(v)
                             const endLabel = promo?.end ? new Date(promo.end).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : null
                             return (
-                              <div key={v.id} className="flex items-center justify-between gap-3 rounded-lg border border-yellow-100 bg-white px-3 py-2.5">
-                                <div className="flex min-w-0 items-center gap-2">
-                                  {v.image_url && <img className="size-7 shrink-0 rounded object-cover" src={v.image_url} alt="" />}
+                              <div key={v.id} className="flex items-center justify-between gap-3 rounded-xl border border-yellow-100 bg-white px-3 py-2.5 transition-shadow hover:shadow-xs">
+                                <div className="flex min-w-0 items-center gap-2.5">
+                                  {v.image_url && <img className="size-9 shrink-0 rounded-lg border border-line object-cover" src={v.image_url} alt="" />}
                                   <div className="min-w-0">
-                                    <span className="block truncate text-[.75rem] font-semibold text-ink">{v.name}</span>
-                                    {endLabel && <span className="text-[.62rem] text-yellow-700">s/d {endLabel}</span>}
+                                    <span className="block truncate text-[.76rem] font-semibold text-ink">{v.name}</span>
+                                    {endLabel && <span className="text-[.63rem] text-yellow-700">s/d {endLabel}</span>}
                                   </div>
                                 </div>
                                 <div className="shrink-0 text-right">
                                   <span className="block text-[.62rem] text-slate-400 line-through">Rp {formatPrice(parsePrice(v.price))}</span>
-                                  <span className="text-[.74rem] font-bold text-yellow-700">Rp {formatPrice(parsePrice(promo.price))}</span>
+                                  <span className="text-[.76rem] font-bold text-yellow-700">Rp {formatPrice(parsePrice(promo.price))}</span>
                                 </div>
                               </div>
                             )
@@ -2069,8 +4357,11 @@ function AdminDashboard() {
                       )}
                     </section>
 
-                    <section className="rounded-2xl border border-blue-200 bg-blue-50 p-5 shadow-sm" aria-label="Kendaraan harga spesial">
-                      <h3 className="m-0 mb-3 font-display text-[.9rem] font-bold text-blue-800">⭐ Harga spesial</h3>
+                    <section className="rounded-2xl border border-blue-200 bg-blue-50/70 p-5 shadow-sm" aria-label="Kendaraan harga spesial">
+                      <div className="mb-3 flex items-center gap-1.5 font-display text-[.9rem] font-bold text-blue-800">
+                        <Sparkles size={14} className="shrink-0 text-blue-600" aria-hidden="true" />
+                        <span>Harga spesial</span>
+                      </div>
                       {specialVehicles.length === 0 ? (
                         <p className="text-[.76rem] text-blue-700">Tidak ada harga spesial aktif.</p>
                       ) : (
@@ -2078,17 +4369,17 @@ function AdminDashboard() {
                           {specialVehicles.map((v) => {
                             const minDays = Number(v.special_min_days) || 3
                             return (
-                              <div key={v.id} className="flex items-center justify-between gap-3 rounded-lg border border-blue-100 bg-white px-3 py-2.5">
-                                <div className="flex min-w-0 items-center gap-2">
-                                  {v.image_url && <img className="size-7 shrink-0 rounded object-cover" src={v.image_url} alt="" />}
+                              <div key={v.id} className="flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-white px-3 py-2.5 transition-shadow hover:shadow-xs">
+                                <div className="flex min-w-0 items-center gap-2.5">
+                                  {v.image_url && <img className="size-9 shrink-0 rounded-lg border border-line object-cover" src={v.image_url} alt="" />}
                                   <div className="min-w-0">
-                                    <span className="block truncate text-[.75rem] font-semibold text-ink">{v.name}</span>
-                                    <span className="text-[.62rem] text-blue-700">Min. {minDays} hari · {v.special_label || 'Harga Spesial'}</span>
+                                    <span className="block truncate text-[.76rem] font-semibold text-ink">{v.name}</span>
+                                    <span className="text-[.63rem] text-blue-700">Min. {minDays} hari · {v.special_label || 'Harga Spesial'}</span>
                                   </div>
                                 </div>
                                 <div className="shrink-0 text-right">
                                   <span className="block text-[.62rem] text-slate-400 line-through">Rp {formatPrice(parsePrice(v.price))}</span>
-                                  <span className="text-[.74rem] font-bold text-blue-700">Rp {formatPrice(parsePrice(v.special_price))}</span>
+                                  <span className="text-[.76rem] font-bold text-blue-700">Rp {formatPrice(parsePrice(v.special_price))}</span>
                                 </div>
                               </div>
                             )
@@ -2115,6 +4406,15 @@ function AdminDashboard() {
             <StatCard label="Menunggu" value={loadingBookings ? '—' : bookingFilterCounts.pending} tone="warn" active={bookingStatusFilter === 'pending'} onClick={() => showBookingDetails('pending')} />
             <StatCard label="Dikonfirmasi" value={loadingBookings ? '—' : bookingFilterCounts.confirmed} tone="info" active={bookingStatusFilter === 'confirmed'} onClick={() => showBookingDetails('confirmed')} />
             <StatCard label="Selesai" value={loadingBookings ? '—' : bookingFilterCounts.completed} tone="success" active={bookingStatusFilter === 'completed'} onClick={() => showBookingDetails('completed')} />
+          </section>
+        )}
+
+        {activeTab === 'schedule' && (
+          <section className="mb-6 grid grid-cols-4 gap-3 max-[900px]:grid-cols-2 max-[500px]:grid-cols-1" aria-label="Ringkasan ketersediaan jadwal">
+            <StatCard label="Unit Ready (Siap Jalan)" value={loadingVehicles ? '—' : `${scheduleOverview.readyCount} unit`} tone="success" />
+            <StatCard label="Unit Tersewa / Penuh" value={loadingVehicles ? '—' : `${scheduleOverview.occupiedCount} unit`} tone={scheduleOverview.occupiedCount > 0 ? 'warn' : 'neutral'} />
+            <StatCard label="Supir Siap / Tersedia" value={loadingDrivers ? '—' : `${scheduleOverview.availableDriversCount} orang`} tone="info" />
+            <StatCard label="Supir Bertugas" value={loadingDrivers ? '—' : `${scheduleOverview.busyDriversCount} orang`} />
           </section>
         )}
 
@@ -2160,34 +4460,34 @@ function AdminDashboard() {
                                 <strong className="font-semibold text-ink">{vehicle.name}</strong>
                                 {formatVehicleTransmissionStock(vehicle) && <small className="text-[.64rem] text-muted">{formatVehicleTransmissionStock(vehicle)}</small>}
                                 <span className="mt-1 flex flex-wrap gap-1">
-                                  {fleetTop3Names.includes(vehicle.name) && <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[.58rem] font-bold text-amber-700">Terlaris</span>}
-                                  {getActivePromo(vehicle) && <span className="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-[.58rem] font-bold text-yellow-700">Promo aktif</span>}
-                                  {vehicle.special_price && !vehicle.promo_price && <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-[.58rem] font-bold text-blue-700">Harga spesial</span>}
+                                  {fleetTop3Names.includes(vehicle.name) && <span className="inline-flex items-center rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[.63rem] font-bold text-amber-800">Terlaris</span>}
+                                  {getActivePromo(vehicle) && <span className="inline-flex items-center rounded-md border border-yellow-200 bg-yellow-50 px-1.5 py-0.5 text-[.63rem] font-bold text-yellow-800">Promo aktif</span>}
+                                  {vehicle.special_price && !vehicle.promo_price && <span className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[.63rem] font-bold text-blue-800">Harga spesial</span>}
                                 </span>
                               </span>
                             </div>
                           </td>
                           <td className="px-5 py-3.5 text-muted">{vehicle.category}</td>
-                          <td className="px-5 py-3.5 text-muted">{getAvailableVehicleStock(vehicle)} / {getVehicleStock(vehicle)} unit</td>
+                          <td className="px-5 py-3.5 text-muted"><strong className="text-ink">{getAvailableVehicleStock(vehicle)}</strong> / {getVehicleStock(vehicle)} unit</td>
                           <td className="px-5 py-3.5 text-muted">
                             {(() => {
                               const { completedCount, totalHours } = getVehicleCompletedUsage(vehicle, bookings)
                               return (
-                                <span className="inline-flex items-center gap-1.5 whitespace-nowrap" title="Jam unit dijumlahkan dari durasi jadwal dikali jumlah unit">
+                                <span className="inline-flex items-center gap-1.5 whitespace-nowrap" title="Total durasi jadwal dari semua pesanan selesai">
                                   <CalendarDays size={13} aria-hidden="true" />
                                   <strong className="text-ink">{completedCount}</strong>
                                   <span>·</span>
                                   <Clock3 size={13} aria-hidden="true" />
-                                  <strong className="text-ink">{formatDriverHours(totalHours)} jam-unit</strong>
+                                  <strong className="text-ink">{formatDriverHours(totalHours)} jam sewa</strong>
                                 </span>
                               )
                             })()}
                           </td>
-                          <td className="px-5 py-3.5"><span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[.65rem] font-bold ${vehicle.status === 'maintenance' ? 'bg-slate-100 text-slate-600' : isVehicleReady(vehicle) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}><span className={`size-1.5 rounded-full ${vehicle.status === 'maintenance' ? 'bg-slate-400' : isVehicleReady(vehicle) ? 'bg-emerald-500' : 'bg-amber-500'}`} />{vehicle.status === 'maintenance' ? 'Perawatan' : isVehicleReady(vehicle) ? 'Ready' : 'Booking'}</span></td>
-                          <td className="px-5 py-3.5"><span className={`inline-flex rounded-full px-2.5 py-0.5 text-[.65rem] font-bold ${vehicle.is_active ? 'bg-cyan/10 text-[#0369a1]' : 'bg-slate-100 text-slate-500'}`}>{vehicle.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
+                          <td className="px-5 py-3.5"><span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[.65rem] font-bold ${vehicle.status === 'maintenance' ? 'border-slate-200 bg-slate-100 text-slate-600' : isVehicleReady(vehicle) ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-amber-200 bg-amber-50 text-amber-800'}`}><span className={`size-1.5 rounded-full ${vehicle.status === 'maintenance' ? 'bg-slate-400' : isVehicleReady(vehicle) ? 'bg-emerald-500' : 'bg-amber-500'}`} />{vehicle.status === 'maintenance' ? 'Perawatan' : isVehicleReady(vehicle) ? 'Ready' : 'Booking'}</span></td>
+                          <td className="px-5 py-3.5"><span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[.65rem] font-bold ${vehicle.is_active ? 'border-cyan/30 bg-cyan/10 text-cyan-800' : 'border-slate-200 bg-slate-100 text-slate-500'}`}>{vehicle.is_active ? 'Aktif' : 'Nonaktif'}</span></td>
                           <td className="px-5 py-3.5 text-right font-semibold text-ink">
                             {isNegoPrice(vehicle.price) ? (
-                              <span className="inline-flex rounded-full bg-cyan/10 px-2.5 py-1 text-[.72rem] font-bold text-cyan">Nego</span>
+                              <span className="inline-flex rounded-full border border-cyan/30 bg-cyan/10 px-2.5 py-0.5 text-[.72rem] font-bold text-cyan">Nego</span>
                             ) : (
                               `Rp ${formatPrice(parsePrice(vehicle.price))}`
                             )}
@@ -2257,6 +4557,14 @@ function AdminDashboard() {
                 </div>
                 <div className={toolbarClass}>
                   <SearchField value={bookingSearch} onChange={(event) => setBookingSearch(event.target.value)} placeholder="Cari pemesan/lokasi" label="Cari booking" />
+                  <button
+                    className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl bg-crimson px-3.5 text-[.76rem] font-bold text-white transition-colors hover:bg-crimson-deep"
+                    type="button"
+                    onClick={openBookingForm}
+                  >
+                    <Plus size={16} aria-hidden="true" />
+                    Input Booking Manual
+                  </button>
                   <button
                     className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-line bg-white px-3.5 text-[.76rem] font-bold text-muted transition-colors hover:border-cyan/40 hover:text-cyan disabled:cursor-not-allowed disabled:opacity-50"
                     type="button"
@@ -2396,36 +4704,118 @@ function AdminDashboard() {
             ) : (
               <>
               <div className="scrollbar-none hidden overflow-x-auto lg:block">
-                <table className="w-full min-w-[1100px] border-collapse text-left">
-                  <thead><tr className="bg-slate-ice text-[.65rem] font-bold uppercase tracking-[.07em] text-muted"><th className="px-5 py-3">Pemesan</th><th className="px-5 py-3">Jadwal</th><th className="px-5 py-3">Kendaraan</th><th className="px-5 py-3">Penjemputan</th><th className="px-5 py-3">Supir</th><th className="px-5 py-3 text-right">Estimasi</th><th className="px-5 py-3">Status</th></tr></thead>
+                <table className="w-full min-w-[1160px] border-collapse text-left">
+                  <thead>
+                    <tr className="bg-slate-ice text-[.65rem] font-bold uppercase tracking-[.07em] text-muted">
+                      <th className="px-5 py-3 w-[180px]">Pemesan</th>
+                      <th className="px-5 py-3 w-[190px]">Jadwal</th>
+                      <th className="px-5 py-3 w-[230px]">Kendaraan & Layanan</th>
+                      <th className="px-5 py-3 min-w-[160px]">Penjemputan</th>
+                      <th className="px-5 py-3 w-[170px]">Supir</th>
+                      <th className="px-5 py-3 w-[130px] text-right">Estimasi</th>
+                      <th className="px-5 py-3 w-[150px]">Status</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {filteredBookings.map((booking) => (
                       <tr className={`cursor-pointer border-t border-line align-top text-[.76rem] transition-colors hover:bg-slate-ice/80 ${booking.status === 'pending' ? 'bg-amber-50/50' : ''}`} key={booking.id} onClick={(event) => { if (!event.target.closest('button, a, select, input')) setSelectedBooking(booking) }}>
-                        <td className="px-5 py-4">
-                          <strong className="block text-ink">{booking.customer_name}</strong>
+                        <td className="px-5 py-4 w-[180px]">
+                          <strong className="block text-[.82rem] font-bold text-ink">{booking.customer_name}</strong>
                           <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                             {booking.booking_code && <span className="font-display text-[.66rem] font-bold tracking-wide text-cyan">{booking.booking_code}</span>}
                             {booking.notes?.includes('NEGO') && <span className="inline-flex rounded-full bg-emerald-50 px-1.5 py-0.5 text-[.6rem] font-bold text-emerald-700">Nego WA</span>}
                           </div>
-                          <div className="mt-1"><CustomerContact booking={booking} /></div>
+                          <div className="mt-1.5"><CustomerContact booking={booking} /></div>
                         </td>
-                        <td className="px-5 py-4 text-muted"><span className="flex items-center gap-1.5"><CalendarDays size={13} aria-hidden="true" />{formatJakartaDateTime(booking.start_at, { day: 'numeric', month: 'numeric', year: 'numeric' })}</span><span className="mt-1 flex items-center gap-1.5"><Clock3 size={13} aria-hidden="true" />{formatJakartaDateTime(booking.start_at, { hour: '2-digit', minute: '2-digit', hour12: false })}–{formatJakartaDateTime(booking.end_at, { day: 'numeric', month: 'numeric', year: 'numeric' })} {formatJakartaDateTime(booking.end_at, { hour: '2-digit', minute: '2-digit', hour12: false })}</span></td>
-                        <td className="max-w-[180px] px-5 py-4 text-muted">{isEventBooking(booking) ? (() => { const { eventType, addons } = parseEventNotes(booking.notes); return <><span className="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-[.65rem] font-bold text-purple-700">{booking.booking_mode}</span><span className="mt-1 block text-[.67rem]">{formatDuration(booking.duration, booking.duration_unit)}</span>{eventType && <span className="mt-1 block text-[.67rem] font-semibold text-purple-600">{eventType}</span>}{addons && <span className="mt-0.5 block text-[.65rem] text-purple-400 line-clamp-1" title={addons}>{addons}</span>}</> })() : <>{(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ')}<span className="mt-1 block text-[.67rem]">{booking.booking_mode} · {formatDuration(booking.duration, booking.duration_unit)}</span></>}</td>
-                        <td className="max-w-[200px] px-5 py-4 text-muted">
+                        <td className="px-5 py-4 text-muted w-[190px]">
+                          <div className="grid gap-1">
+                            <div className="flex items-center gap-1.5 text-[.74rem] font-medium text-ink whitespace-nowrap">
+                              <CalendarDays size={13} className="shrink-0 text-cyan" aria-hidden="true" />
+                              <span>{formatJakartaDateTime(booking.start_at, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                              <span className="text-[.68rem] font-normal text-muted">({formatJakartaDateTime(booking.start_at, { hour: '2-digit', minute: '2-digit', hour12: false })})</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[.71rem] text-muted whitespace-nowrap">
+                              <span className="inline-block w-3 text-center text-[.68rem] font-bold text-slate-400">↳</span>
+                              <span>{formatJakartaDateTime(booking.end_at, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                              <span className="text-[.68rem]">({formatJakartaDateTime(booking.end_at, { hour: '2-digit', minute: '2-digit', hour12: false })})</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-4 text-muted w-[230px] min-w-[200px]">
+                          {isEventBooking(booking) ? (() => {
+                            const { eventType, addons } = parseEventNotes(booking.notes)
+                            return (
+                              <div className="grid gap-1">
+                                <div className="font-semibold text-ink leading-snug">
+                                  {(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ') || 'Unit Armada'}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1">
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-1.5 py-0.5 text-[.65rem] font-bold text-purple-700 whitespace-nowrap">
+                                    <Sparkles size={10} className="text-purple-600 shrink-0" />
+                                    Acara{eventType ? `: ${eventType}` : ''}
+                                  </span>
+                                  <span className="text-[.67rem] font-medium text-slate-500 whitespace-nowrap">
+                                    · {formatDuration(booking.duration, booking.duration_unit)}
+                                  </span>
+                                </div>
+                                {addons && (
+                                  <div className="text-[.64rem] text-purple-600 line-clamp-1" title={addons}>
+                                    <span className="font-medium text-purple-400">Add-on:</span> {addons}
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })() : (
+                            <div className="grid gap-1">
+                              <div className="font-semibold text-ink leading-snug">
+                                {(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ')}
+                              </div>
+                              <div className="text-[.68rem] text-muted">
+                                {booking.booking_mode} · {formatDuration(booking.duration, booking.duration_unit)}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-5 py-4 text-muted min-w-[160px] max-w-[220px]">
                           <span className="flex items-start gap-1.5">
-                            <MapPin className="mt-0.5 shrink-0" size={13} aria-hidden="true" />
-                            <span className="line-clamp-2" title={booking.pickup_address}>{booking.pickup_address}</span>
+                            <MapPin className="mt-0.5 shrink-0 text-slate-400" size={13} aria-hidden="true" />
+                            <span className="line-clamp-2 leading-relaxed" title={booking.pickup_address}>{booking.pickup_address}</span>
                           </span>
                         </td>
-                        <td className="min-w-[210px] px-5 py-4">
+                        <td className="px-5 py-4 w-[170px]">
                           <DriverAssignControls booking={booking} bookings={bookings} drivers={drivers} onAssign={handleAssignDriver} />
                         </td>
-                        <td className="whitespace-nowrap px-5 py-4 text-right font-semibold text-ink">Rp {formatPrice(Number(booking.estimated_price))}</td>
-                        <td className="px-5 py-4">
-                          <div className="grid gap-2">
-                            <span className={`inline-flex w-fit rounded-full border px-2.5 py-0.5 text-[.65rem] font-bold ${bookingStatusTone(booking.status)}`}>{bookingStatusLabels[booking.status] ?? booking.status}</span>
+                        <td className="whitespace-nowrap px-5 py-4 text-right font-bold text-ink w-[140px]">
+                          <div>Rp {formatPrice(Number(booking.estimated_price))}</div>
+                          {(() => {
+                            if (booking.status !== 'confirmed') return null
+                            const pInfo = getBookingPaymentInfo(booking)
+                            if (!pInfo) return null
+                            if (pInfo.status === 'paid') {
+                              return (
+                                <span className="mt-1 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[.6rem] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200">
+                                  <Check size={9} /> Lunas
+                                </span>
+                              )
+                            }
+                            if (pInfo.remaining_amount > 0) {
+                              return (
+                                <span className="mt-1 inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[.6rem] font-bold text-amber-700 bg-amber-50 border border-amber-200" title={`DP: Rp ${formatPrice(pInfo.dp_amount)} · Sisa: Rp ${formatPrice(pInfo.remaining_amount)}`}>
+                                  DP · Sisa Rp {formatPrice(pInfo.remaining_amount)}
+                                </span>
+                              )
+                            }
+                            return null
+                          })()}
+                        </td>
+                        <td className="px-5 py-4 w-[150px]">
+                          {['completed', 'rejected', 'cancelled'].includes(booking.status) ? (
+                            <span className={`inline-flex rounded-full border px-2.5 py-1 text-[.68rem] font-bold ${bookingStatusTone(booking.status)}`}>
+                              {bookingStatusLabels[booking.status] ?? booking.status}
+                            </span>
+                          ) : (
                             <BookingStatusSelect booking={booking} onChange={handleBookingStatusChange} />
-                          </div>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -2442,23 +4832,51 @@ function AdminDashboard() {
                           {booking.booking_code && <span className="font-display text-[.66rem] font-bold tracking-wide text-cyan">{booking.booking_code}</span>}
                           {booking.notes?.includes('NEGO') && <span className="inline-flex rounded-full bg-emerald-50 px-1.5 py-0.5 text-[.6rem] font-bold text-emerald-700">Nego WA</span>}
                         </div>
-                        <div className="mt-1"><CustomerContact booking={booking} /></div>
+                        <div className="mt-1.5"><CustomerContact booking={booking} /></div>
                       </div>
                       <span className={`inline-flex shrink-0 rounded-full border px-2.5 py-0.5 text-[.65rem] font-bold ${bookingStatusTone(booking.status)}`}>{bookingStatusLabels[booking.status] ?? booking.status}</span>
                     </div>
-                    <p className="mb-0 mt-3 text-[.73rem] leading-5 text-muted">
-                      {formatJakartaDateTime(booking.start_at, { day: 'numeric', month: 'numeric', year: 'numeric' })} {formatJakartaDateTime(booking.start_at, { hour: '2-digit', minute: '2-digit', hour12: false })}
-                      {' – '}
-                      {formatJakartaDateTime(booking.end_at, { day: 'numeric', month: 'numeric', year: 'numeric' })} {formatJakartaDateTime(booking.end_at, { hour: '2-digit', minute: '2-digit', hour12: false })}
+                    <div className="mt-3 grid gap-1 border-t border-line/60 pt-2.5 text-[.74rem] text-muted">
+                      <div className="flex items-center gap-1.5 font-medium text-ink">
+                        <CalendarDays size={13} className="shrink-0 text-cyan" />
+                        <span>{formatJakartaDateTime(booking.start_at, { day: 'numeric', month: 'short', year: 'numeric' })} ({formatJakartaDateTime(booking.start_at, { hour: '2-digit', minute: '2-digit', hour12: false })})</span>
+                        <span className="text-slate-400">s/d</span>
+                        <span>{formatJakartaDateTime(booking.end_at, { day: 'numeric', month: 'short', year: 'numeric' })} ({formatJakartaDateTime(booking.end_at, { hour: '2-digit', minute: '2-digit', hour12: false })})</span>
+                      </div>
+                      {isEventBooking(booking) ? (() => {
+                        const { eventType, addons } = parseEventNotes(booking.notes)
+                        return (
+                          <div className="mt-1 grid gap-0.5">
+                            <div className="font-semibold text-ink">{(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ') || 'Unit Armada'}</div>
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span className="inline-flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-1.5 py-0.5 text-[.65rem] font-bold text-purple-700">
+                                <Sparkles size={10} className="text-purple-600" />
+                                Acara{eventType ? `: ${eventType}` : ''}
+                              </span>
+                              <span className="text-[.67rem] font-medium text-slate-500">· {formatDuration(booking.duration, booking.duration_unit)}</span>
+                            </div>
+                            {addons && <div className="text-[.64rem] text-purple-600 line-clamp-1"><span className="font-medium text-purple-400">Add-on:</span> {addons}</div>}
+                          </div>
+                        )
+                      })() : (
+                        <div className="mt-1">
+                          <span className="font-semibold text-ink">{(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ')}</span> · {booking.booking_mode} · {formatDuration(booking.duration, booking.duration_unit)}
+                        </div>
+                      )}
+                    </div>
+                    <p className="mb-0 mt-1.5 line-clamp-2 text-[.73rem] text-muted flex items-start gap-1.5">
+                      <MapPin size={12} className="shrink-0 text-slate-400 mt-0.5" />
+                      <span>{booking.pickup_address}</span>
                     </p>
-                    <p className="mb-0 mt-1 text-[.73rem] text-muted">{isEventBooking(booking) ? (() => { const { eventType, addons } = parseEventNotes(booking.notes); return <><span className="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-[.65rem] font-bold text-purple-700">{booking.booking_mode}</span>{eventType && <span className="ml-1 text-[.7rem] font-semibold text-purple-600">{eventType}</span>}</> })() : `${(booking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(', ')} · ${booking.booking_mode}`}</p>
-                    <p className="mb-0 mt-1 line-clamp-2 text-[.73rem] text-muted">{booking.pickup_address}</p>
                     <div className="mt-3 grid gap-3 border-t border-line pt-3">
                       <DriverAssignControls booking={booking} bookings={bookings} drivers={drivers} onAssign={handleAssignDriver} />
                       <div className="flex items-center justify-between gap-3">
-                        <strong className="text-[.82rem]">Rp {formatPrice(Number(booking.estimated_price))}</strong>
+                        <span className="text-[.7rem] text-muted">Estimasi Biaya:</span>
+                        <strong className="text-[.85rem] font-bold text-ink">Rp {formatPrice(Number(booking.estimated_price))}</strong>
                       </div>
-                      <BookingStatusSelect booking={booking} onChange={handleBookingStatusChange} />
+                      {['completed', 'rejected', 'cancelled'].includes(booking.status) ? null : (
+                        <BookingStatusSelect booking={booking} onChange={handleBookingStatusChange} />
+                      )}
                     </div>
                   </article>
                 ))}
@@ -2524,9 +4942,9 @@ function AdminDashboard() {
                           </span>
                         </td>
                         <td className="px-5 py-3.5 text-muted">
-                          <a className="inline-flex items-center gap-1.5 font-medium hover:text-cyan" href={`https://wa.me/${cleanPhone(driver.phone)}`} target="_blank" rel="noopener noreferrer">
-                            <Phone size={13} className="text-emerald-600" aria-hidden="true" />
-                            {driver.phone}
+                          <a className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-1 text-[.72rem] font-semibold text-emerald-700 hover:bg-emerald-100 hover:underline transition-colors whitespace-nowrap" href={`https://wa.me/${cleanPhone(driver.phone)}`} target="_blank" rel="noopener noreferrer" title="Chat WhatsApp supir">
+                            <MessageSquare size={12} className="text-emerald-600" aria-hidden="true" />
+                            <span>{driver.phone}</span>
                           </a>
                         </td>
                         <td className="px-5 py-3.5 text-muted">
@@ -2580,7 +4998,10 @@ function AdminDashboard() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <strong className="block text-[.86rem] text-ink">{driver.name}</strong>
-                        <a className="mt-1 inline-flex items-center gap-1.5 text-[.72rem] text-muted" href={`https://wa.me/${cleanPhone(driver.phone)}`} target="_blank" rel="noopener noreferrer">{driver.phone}</a>
+                        <a className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-0.5 text-[.72rem] font-medium text-emerald-700 hover:underline" href={`https://wa.me/${cleanPhone(driver.phone)}`} target="_blank" rel="noopener noreferrer">
+                          <MessageSquare size={11} className="text-emerald-600" aria-hidden="true" />
+                          <span>{driver.phone}</span>
+                        </a>
                       </div>
                       <span className="rounded-full bg-slate-ice px-2.5 py-0.5 text-[.65rem] font-bold text-slate-700">{driver.sim_type || 'SIM A'}</span>
                     </div>
@@ -2616,6 +5037,25 @@ function AdminDashboard() {
               </>
             )}
           </section>
+        ) : activeTab === 'schedule' ? (
+          <ScheduleCheckerPanel
+            vehicles={vehicles}
+            loadingVehicles={loadingVehicles}
+            bookings={bookings}
+            loadingBookings={loadingBookings}
+            drivers={drivers}
+            loadingDrivers={loadingDrivers}
+            scheduleDate={scheduleCheckDate}
+            setScheduleDate={setScheduleCheckDate}
+            scheduleTime={scheduleCheckTime}
+            setScheduleTime={setScheduleCheckTime}
+            scheduleDurationHours={scheduleCheckDurationHours}
+            setScheduleDurationHours={setScheduleCheckDurationHours}
+            scheduleWindow={scheduleCheckWindow}
+            scheduleVehicleAvailability={scheduleVehicleAvailability}
+            calculateVehicleRate={calculateVehicleRate}
+            onOpenBookingForm={openBookingForm}
+          />
         ) : (
           <section className={panelClass} aria-label="Ringkasan keuangan">
             {/* Header: judul + filter periode */}
@@ -3029,7 +5469,7 @@ function AdminDashboard() {
                     </span>
                   </span>
                   <span className="mt-0.5 text-[.76rem] text-muted">
-                    {formatDuration(selectedBooking.duration, selectedBooking.duration_unit)} · {selectedBooking.booking_mode}
+                    {formatDuration(selectedBooking.duration, selectedBooking.duration_unit)} · {isEventBooking(selectedBooking) ? 'Paket Rental Acara' : selectedBooking.booking_mode}
                   </span>
                 </div>
               </div>
@@ -3039,7 +5479,7 @@ function AdminDashboard() {
                 <p className="mb-2 text-[.7rem] font-bold uppercase tracking-wide text-muted">Kendaraan</p>
                 {isEventBooking(selectedBooking) ? (
                   <div className="grid gap-1.5">
-                    <span className="inline-flex w-fit items-center rounded-full bg-purple-100 px-3 py-1 text-[.75rem] font-bold text-purple-700">{selectedBooking.booking_mode}</span>
+                    <span className="inline-flex w-fit items-center rounded-full bg-purple-100 px-3 py-1 text-[.75rem] font-bold text-purple-700">Paket Rental Acara</span>
                     {(selectedBooking.vehicle_snapshot ?? []).length > 0 ? (
                       (selectedBooking.vehicle_snapshot ?? []).map((v, i) => (
                         <span key={i} className="flex items-center gap-2 text-[.82rem] text-ink">
@@ -3211,6 +5651,361 @@ function AdminDashboard() {
                   <strong className="text-[.82rem] text-amber-700">Rp {formatPrice(Number(selectedBooking.toll_amount) || 0)}</strong>
                 </div>
               )}
+
+              {/* Informasi Pembayaran & Bukti Transfer */}
+              {(() => {
+                const paymentInfo = getBookingPaymentInfo(selectedBooking)
+                if (!paymentInfo && selectedBooking.status !== 'confirmed') return null
+                return (
+                  <div className="px-5 py-4 max-[520px]:px-4">
+                    <div className="flex items-center justify-between gap-2 mb-2.5">
+                      <p className="mb-0 text-[.7rem] font-bold uppercase tracking-wide text-muted flex items-center gap-1.5">
+                        <Receipt size={14} className="text-cyan" />
+                        <span>Informasi Pembayaran & Bukti Transfer</span>
+                      </p>
+                      {paymentInfo && (
+                        paymentInfo.status === 'paid' ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 text-[.66rem] font-black text-emerald-800">
+                            <Check size={11} className="text-emerald-700" /> LUNAS (100%)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-300 px-2.5 py-0.5 text-[.66rem] font-black text-amber-800">
+                            <Clock3 size={11} className="text-amber-700" /> DP DITERIMA · SISA RP {formatPrice(paymentInfo.remaining_amount)}
+                          </span>
+                        )
+                      )}
+                    </div>
+
+                    {paymentInfo ? (
+                      <div className="rounded-xl border border-line bg-slate-ice/40 p-3.5 text-[.78rem] grid gap-3">
+                        {/* 1. Rincian Tagihan */}
+                        <div className="grid grid-cols-3 gap-2 max-[520px]:grid-cols-1">
+                          <div className="rounded-lg bg-white p-2.5 border border-line/60">
+                            <span className="block text-[.64rem] font-bold uppercase tracking-wider text-muted">Total Biaya Sewa</span>
+                            <strong className="text-[.88rem] text-ink font-black">
+                              Rp {formatPrice(paymentInfo.total_amount || selectedBooking.estimated_price)}
+                            </strong>
+                          </div>
+                          <div className="rounded-lg bg-white p-2.5 border border-line/60">
+                            {paymentInfo.status === 'paid' ? (
+                              <>
+                                <span className="block text-[.64rem] font-bold uppercase tracking-wider text-emerald-700">
+                                  {paymentInfo.type === 'full' ? 'Dibayar Lunas' : 'Total Dibayarkan'}
+                                </span>
+                                <strong className="text-[.88rem] text-emerald-800 font-black">
+                                  Rp {formatPrice(paymentInfo.total_amount || paymentInfo.amount || paymentInfo.dp_amount)}
+                                </strong>
+                                <div className="mt-0.5 text-[.64rem] text-muted truncate">
+                                  {paymentInfo.settlement
+                                    ? 'DP + Pelunasan (Lunas)'
+                                    : `via ${paymentInfo.dp_method || paymentInfo.method} (100%)`}
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <span className="block text-[.64rem] font-bold uppercase tracking-wider text-amber-700">DP Dibayarkan</span>
+                                <strong className="text-[.88rem] text-amber-800 font-black">
+                                  Rp {formatPrice(paymentInfo.dp_amount || paymentInfo.amount)}
+                                </strong>
+                                <div className="mt-0.5 text-[.64rem] text-muted truncate">
+                                  via {paymentInfo.dp_method || paymentInfo.method}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                          <div className="rounded-lg bg-white p-2.5 border border-line/60">
+                            <span className="block text-[.64rem] font-bold uppercase tracking-wider text-muted">Sisa Tagihan</span>
+                            {paymentInfo.status === 'paid' ? (
+                              <strong className="text-[.88rem] text-emerald-700 font-black flex items-center gap-1">
+                                <Check size={12} /> Rp 0 (Lunas)
+                              </strong>
+                            ) : (
+                              <strong className="text-[.88rem] text-rose-600 font-black">
+                                Rp {formatPrice(paymentInfo.remaining_amount)}
+                              </strong>
+                            )}
+                            <div className="mt-0.5 text-[.64rem] text-muted truncate">
+                              {paymentInfo.status === 'paid' ? 'Sudah diselesaikan' : 'Wajib dilunasi'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Nama Pengirim */}
+                        <div className="border-t border-line/60 pt-2 flex flex-wrap items-center justify-between gap-2 text-[.72rem]">
+                          <div>
+                            <span className="text-muted">
+                              {paymentInfo.status === 'paid' && paymentInfo.type === 'full'
+                                ? 'Pengirim Pembayaran (Lunas):'
+                                : paymentInfo.settlement
+                                ? 'Pengirim Pembayaran:'
+                                : 'Pengirim DP / Awal:'}
+                            </span>{' '}
+                            <strong className="text-ink">{paymentInfo.dp_sender_name || paymentInfo.sender_name}</strong>
+                            {paymentInfo.settlement?.sender_name && paymentInfo.settlement.sender_name !== (paymentInfo.dp_sender_name || paymentInfo.sender_name) && (
+                              <span className="text-muted"> · Pelunasan a.n <strong className="text-ink">{paymentInfo.settlement.sender_name}</strong></span>
+                            )}
+                          </div>
+                          {paymentInfo.confirmed_at && (
+                            <div className="text-muted text-[.68rem]">
+                              Dikonfirmasi {formatJakartaDateTime(paymentInfo.confirmed_at, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })} WIB
+                            </div>
+                          )}
+                        </div>
+
+                        {paymentInfo.notes && (
+                          <div className="text-[.73rem] text-muted">
+                            <span className="font-semibold text-ink">Catatan:</span> {paymentInfo.notes}
+                          </div>
+                        )}
+
+                        {/* Banner Input Pelunasan jika masih ada sisa */}
+                        {paymentInfo.status === 'partial' && (
+                          <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+                            <div className="min-w-0">
+                              <span className="text-[.76rem] font-black text-amber-900 flex items-center gap-1.5">
+                                <AlertCircle size={15} className="text-amber-600 shrink-0" />
+                                <span>Kewajiban Pelunasan: Rp {formatPrice(paymentInfo.remaining_amount)}</span>
+                              </span>
+                              <p className="m-0 mt-0.5 text-[.7rem] text-amber-800 leading-snug">
+                                Booking telah dikonfirmasi dengan DP. Klik tombol di samping saat pelanggan melakukan pelunasan sisa sewa.
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSettlementBooking(selectedBooking)
+                                setSettlementDraft({
+                                  method: 'Transfer BCA',
+                                  sender_name: paymentInfo.dp_sender_name || selectedBooking.customer_name || '',
+                                  amount: formatPrice(paymentInfo.remaining_amount),
+                                  file: null,
+                                  file_preview: null,
+                                  notes: 'Pelunasan sisa biaya sewa',
+                                })
+                                setSettlementError('')
+                                setSettlementModalOpen(true)
+                              }}
+                              className="shrink-0 inline-flex items-center justify-center gap-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 active:bg-amber-800 px-3.5 py-2 text-[.74rem] font-bold text-white shadow transition-all cursor-pointer w-full sm:w-auto"
+                            >
+                              <Receipt size={14} />
+                              <span>+ Input Bukti Pelunasan</span>
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Lampiran Struk Bukti Pembayaran */}
+                        <div className="border-t border-line/60 pt-2.5 space-y-2">
+                          <span className="block text-[.66rem] font-bold uppercase tracking-wider text-muted">
+                            Lampiran Struk Bukti Transfer / Pembayaran:
+                          </span>
+
+                          {/* Jika jenis DP atau memiliki data settlement */}
+                          {(paymentInfo.type === 'dp' || paymentInfo.settlement) ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              {/* Card 1: Bukti DP */}
+                              <div className="rounded-xl border border-line bg-white p-3 flex flex-col justify-between gap-2.5">
+                                <div>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-[.68rem] font-extrabold uppercase tracking-wide text-amber-700">
+                                      1. Bukti Pembayaran DP
+                                    </span>
+                                    <strong className="text-[.76rem] font-bold text-ink">
+                                      Rp {formatPrice(paymentInfo.dp_amount || paymentInfo.amount)}
+                                    </strong>
+                                  </div>
+                                  <div className="mt-1 text-[.68rem] text-muted space-y-0.5">
+                                    <div><span className="font-semibold text-ink">Metode:</span> {paymentInfo.dp_method || paymentInfo.method}</div>
+                                    <div><span className="font-semibold text-ink">Pengirim:</span> {paymentInfo.dp_sender_name || paymentInfo.sender_name}</div>
+                                  </div>
+                                </div>
+                                {paymentInfo.dp_proof_url ? (
+                                  paymentInfo.dp_proof_url.toLowerCase().endsWith('.pdf') ? (
+                                    <a
+                                      href={paymentInfo.dp_proof_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-line bg-slate-ice/60 px-3 py-1.5 text-[.7rem] font-bold text-ink hover:text-cyan"
+                                    >
+                                      <FileText size={14} className="text-red-500" /> Lihat Dokumen (PDF)
+                                    </a>
+                                  ) : (
+                                    <div
+                                      className="relative group cursor-pointer overflow-hidden rounded-lg border border-line bg-slate-100"
+                                      onClick={() => setLightboxUrl(paymentInfo.dp_proof_url)}
+                                    >
+                                      <img
+                                        src={paymentInfo.dp_proof_url}
+                                        alt="Bukti DP"
+                                        className="h-28 w-full object-cover group-hover:scale-105 transition-transform"
+                                      />
+                                      <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <span className="inline-flex items-center gap-1 rounded bg-white/90 px-2 py-0.5 text-[.65rem] font-bold text-ink shadow">
+                                          <ZoomIn size={12} /> Perbesar
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )
+                                ) : (
+                                  <div className="text-[.68rem] text-muted italic">Tidak ada foto struk DP</div>
+                                )}
+                              </div>
+
+                              {/* Card 2: Bukti Pelunasan */}
+                              {paymentInfo.settlement ? (
+                                <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-3 flex flex-col justify-between gap-2.5">
+                                  <div>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-[.68rem] font-extrabold uppercase tracking-wide text-emerald-800">
+                                        2. Bukti Pelunasan (Lunas)
+                                      </span>
+                                      <strong className="text-[.76rem] font-black text-emerald-700">
+                                        Rp {formatPrice(paymentInfo.settlement.amount)}
+                                      </strong>
+                                    </div>
+                                    <div className="mt-1 text-[.68rem] text-muted space-y-0.5">
+                                      <div><span className="font-semibold text-ink">Metode:</span> {paymentInfo.settlement.method}</div>
+                                      <div><span className="font-semibold text-ink">Pembayar:</span> {paymentInfo.settlement.sender_name}</div>
+                                      {paymentInfo.settlement.notes && (
+                                        <div className="text-slate-600 line-clamp-1" title={paymentInfo.settlement.notes}>
+                                          <span className="font-semibold text-ink">Catatan:</span> {paymentInfo.settlement.notes}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {paymentInfo.settlement.proof_url ? (
+                                    paymentInfo.settlement.proof_url.toLowerCase().endsWith('.pdf') ? (
+                                      <a
+                                        href={paymentInfo.settlement.proof_url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-[.7rem] font-bold text-ink hover:text-cyan"
+                                      >
+                                        <FileText size={14} className="text-red-500" /> Lihat Dokumen (PDF)
+                                      </a>
+                                    ) : (
+                                      <div
+                                        className="relative group cursor-pointer overflow-hidden rounded-lg border border-line bg-slate-100"
+                                        onClick={() => setLightboxUrl(paymentInfo.settlement.proof_url)}
+                                      >
+                                        <img
+                                          src={paymentInfo.settlement.proof_url}
+                                          alt="Bukti Pelunasan"
+                                          className="h-28 w-full object-cover group-hover:scale-105 transition-transform"
+                                        />
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <span className="inline-flex items-center gap-1 rounded bg-white/90 px-2 py-0.5 text-[.65rem] font-bold text-ink shadow">
+                                            <ZoomIn size={12} /> Perbesar
+                                          </span>
+                                        </div>
+                                      </div>
+                                    )
+                                  ) : (
+                                    <div className="text-[.68rem] text-muted italic">Tidak ada foto struk pelunasan</div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50/40 p-3 flex flex-col justify-center items-center text-center gap-2">
+                                  <Receipt size={22} className="text-amber-500 mt-1" />
+                                  <div>
+                                    <span className="block text-[.72rem] font-bold text-amber-900">Menunggu Bukti Pelunasan</span>
+                                    <span className="block text-[.65rem] text-amber-800">Sisa tagihan: Rp {formatPrice(paymentInfo.remaining_amount)}</span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSettlementBooking(selectedBooking)
+                                      setSettlementDraft({
+                                        method: 'Transfer BCA',
+                                        sender_name: paymentInfo.dp_sender_name || selectedBooking.customer_name || '',
+                                        amount: formatPrice(paymentInfo.remaining_amount),
+                                        file: null,
+                                        file_preview: null,
+                                        notes: 'Pelunasan sisa biaya sewa',
+                                      })
+                                      setSettlementError('')
+                                      setSettlementModalOpen(true)
+                                    }}
+                                    className="rounded-lg bg-amber-600 hover:bg-amber-700 px-3 py-1.5 text-[.68rem] font-bold text-white shadow-xs"
+                                  >
+                                    + Input Pelunasan
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            /* Bukti Lunas Penuh (100%) */
+                            <div className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-0.5 text-[.66rem] font-bold text-emerald-800">
+                                    <Check size={11} /> Lunas Penuh (100%)
+                                  </span>
+                                  <span className="text-[.72rem] text-muted">{paymentInfo.method}</span>
+                                </div>
+                                <div className="mt-1 text-[.72rem] text-ink font-semibold">
+                                  a.n {paymentInfo.sender_name} · Rp {formatPrice(paymentInfo.amount || paymentInfo.total_amount)}
+                                </div>
+                              </div>
+                              {paymentInfo.proof_url && (
+                                paymentInfo.proof_url.toLowerCase().endsWith('.pdf') ? (
+                                  <a
+                                    href={paymentInfo.proof_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-1.5 text-[.7rem] font-bold text-ink hover:text-cyan"
+                                  >
+                                    <FileText size={14} className="text-red-500" /> Lihat PDF
+                                  </a>
+                                ) : (
+                                  <div
+                                    className="relative group cursor-pointer overflow-hidden rounded-lg border border-line bg-white shrink-0"
+                                    onClick={() => setLightboxUrl(paymentInfo.proof_url)}
+                                  >
+                                    <img
+                                      src={paymentInfo.proof_url}
+                                      alt="Bukti Transfer"
+                                      className="h-16 w-24 object-cover group-hover:scale-105 transition-transform"
+                                    />
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <ZoomIn size={14} className="text-white" />
+                                    </div>
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-line bg-slate-ice/30 p-3 text-center">
+                        <p className="m-0 text-[.74rem] text-muted">Belum ada data bukti pembayaran tercatat.</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const estPrice = Number(selectedBooking.estimated_price) || 0
+                            const defaultDp = estPrice > 0 ? Math.round(estPrice * 0.5 / 1000) * 1000 : 500000
+                            setPaymentConfirmBooking(selectedBooking)
+                            setPaymentConfirmDraft({
+                              pay_type: 'dp',
+                              method: 'Transfer BCA',
+                              sender_name: selectedBooking.customer_name || '',
+                              amount: formatPrice(defaultDp),
+                              file: null,
+                              file_preview: null,
+                              notes: '',
+                            })
+                            setPaymentConfirmError('')
+                            setPaymentConfirmModalOpen(true)
+                          }}
+                          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-cyan/40 bg-cyan/10 px-3 py-1.5 text-[.72rem] font-bold text-cyan hover:bg-cyan/20 transition-colors"
+                        >
+                          <Plus size={13} /> Tambah Bukti Pembayaran
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* Ubah status */}
               <div className="flex items-center justify-between gap-3 px-5 py-4 max-[520px]:px-4">
@@ -3444,6 +6239,1713 @@ function AdminDashboard() {
               </div>
             </form>
           </section>
+        </div>
+      )}
+
+      {bookingFormOpen && (
+        <div
+          className="admin-modal-overlay fixed inset-0 z-50 flex items-end justify-center bg-ink/55 p-0 backdrop-blur-[3px] sm:items-center sm:p-4"
+          role="presentation"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) setBookingFormOpen(false) }}
+        >
+          <form
+            onSubmit={handleSaveManualBooking}
+            className="admin-modal-panel flex max-h-[90vh] w-full max-w-[640px] flex-col rounded-t-2xl bg-white shadow-2xl sm:max-h-[min(820px,90vh)] sm:rounded-2xl overflow-hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="manual-booking-title"
+          >
+            <style>{`
+              .manual-booking-scroll::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
+              .manual-booking-scroll { -ms-overflow-style: none !important; scrollbar-width: none !important; }
+            `}</style>
+
+            {/* Header: Fixed top */}
+            <header className="flex shrink-0 items-center justify-between border-b border-line bg-white px-5 py-4">
+              <div>
+                <h2 className="m-0 font-display text-[1.05rem] font-bold" id="manual-booking-title">Input Booking Manual (Order WA)</h2>
+                <p className="mb-0 mt-0.5 text-[.72rem] text-muted">Catat pesanan dari WhatsApp atau offline ke dalam sistem reservasi.</p>
+              </div>
+              <button
+                className="grid size-9 place-items-center rounded-xl text-muted hover:bg-slate-ice hover:text-ink"
+                type="button"
+                aria-label="Tutup form"
+                onClick={() => setBookingFormOpen(false)}
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </header>
+
+            {/* Error Notification Banner if any (Always visible right under header) */}
+            {bookingFormError && (
+              <div className="shrink-0 bg-red-50 border-b border-red-200 px-5 py-2.5 flex items-start gap-2.5 text-[.74rem] text-red-700 animate-fadeIn" role="alert">
+                <AlertCircle size={16} className="shrink-0 text-red-600 mt-0.5" />
+                <span className="flex-1 font-medium">{bookingFormError}</span>
+                <button
+                  type="button"
+                  onClick={() => setBookingFormError('')}
+                  className="shrink-0 text-red-500 hover:text-red-800"
+                  aria-label="Tutup error"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
+            {/* Scrollable Content Body with hidden scrollbar */}
+            <div
+              data-scrollbar="none"
+              className="manual-booking-scroll scrollbar-none flex-1 overflow-y-auto px-5 py-4"
+              style={{
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none',
+              }}
+            >
+              <div className="grid gap-3.5">
+                {/* 1. Pelanggan & Lokasi Jemput */}
+                <div className="rounded-xl border border-line bg-slate-ice/40 p-3.5">
+                  <span className="mb-2 block text-[.68rem] font-extrabold uppercase tracking-wider text-muted">1. Data Pelanggan & Lokasi Jemput</span>
+                  <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
+                    <label className="grid gap-1">
+                      <span className="text-[.72rem] font-bold text-ink">Nama Pemesan *</span>
+                      <input
+                        className={fieldClass}
+                        required
+                        maxLength={80}
+                        value={bookingDraft.customer_name}
+                        onChange={(e) => setBookingDraft((d) => ({ ...d, customer_name: e.target.value }))}
+                        placeholder="Contoh: Bpk. ******"
+                      />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-[.72rem] font-bold text-ink">No. WhatsApp / HP *</span>
+                      <input
+                        className={fieldClass}
+                        required
+                        maxLength={30}
+                        value={bookingDraft.customer_phone}
+                        onChange={(e) => setBookingDraft((d) => ({ ...d, customer_phone: e.target.value }))}
+                        placeholder="Contoh: 0812-****-****"
+                      />
+                    </label>
+                  </div>
+                  <label className="mt-2.5 grid gap-1">
+                    <span className="text-[.72rem] font-bold text-ink">Alamat Jemput / Titik Temu *</span>
+                    <input
+                      className={fieldClass}
+                      required
+                      maxLength={200}
+                      value={bookingDraft.pickup_address}
+                      onChange={(e) => setBookingDraft((d) => ({ ...d, pickup_address: e.target.value }))}
+                      placeholder="Contoh: Pool Khalisa / Bandara Soetta T3 / Jl. *******"
+                    />
+                  </label>
+                </div>
+
+                {/* 2. Armada & Layanan */}
+                {(() => {
+                  const currentVehicle = vehicles.find((v) => String(v.id) === String(bookingDraft.vehicle_id))
+                  const vehicleCheck = checkVehicleAvailableInWindow(
+                    currentVehicle,
+                    manualBookingWindow,
+                    bookings,
+                    null,
+                    manualVehicleAvailability
+                  )
+                  const transmissionCheck = checkVehicleAvailableInWindow(
+                    currentVehicle,
+                    manualBookingWindow,
+                    bookings,
+                    bookingDraft.transmission_type,
+                    manualVehicleAvailability
+                  )
+                  const isCurrentVehicleBlocked = !vehicleCheck.available || !transmissionCheck.available
+                  const availableFleetList = vehicles.filter((v) =>
+                    checkVehicleAvailableInWindow(v, manualBookingWindow, bookings, null, manualVehicleAvailability).available
+                  )
+
+                  return (
+                    <div className="rounded-xl border border-line bg-slate-ice/40 p-3.5">
+                      <span className="mb-2 block text-[.68rem] font-extrabold uppercase tracking-wider text-muted">2. Armada & Layanan</span>
+
+                      <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
+                        <label className="grid gap-1">
+                          <span className="text-[.72rem] font-bold text-ink">Model Kendaraan *</span>
+                          <select
+                            className={`${fieldClass} ${!vehicleCheck.available ? 'border-rose-400 bg-rose-50/60 text-rose-900 focus:border-rose-500 ring-1 ring-rose-300' : ''}`}
+                            value={bookingDraft.vehicle_id}
+                            onChange={(e) => handleManualVehicleChange(e.target.value)}
+                          >
+                            {vehicles.map((v) => {
+                              const check = checkVehicleAvailableInWindow(v, manualBookingWindow, bookings, null, manualVehicleAvailability)
+                              const isCurrent = String(v.id) === String(bookingDraft.vehicle_id)
+                              const statusTag = !check.available ? (check.reason.includes('Perawatan') ? ' (Perawatan)' : ' (Penuh)') : ''
+                              return (
+                                <option
+                                  key={v.id}
+                                  value={v.id}
+                                  disabled={!check.available && !isCurrent}
+                                  className={!check.available ? 'text-gray-400 bg-gray-50' : 'text-ink'}
+                                >
+                                  {v.name} ({v.category || 'Armada'}){statusTag}
+                                </option>
+                              )
+                            })}
+                          </select>
+                        </label>
+
+                        <label className="grid gap-1">
+                          <span className="text-[.72rem] font-bold text-ink">Transmisi *</span>
+                          <select
+                            className={`${fieldClass} ${!transmissionCheck.available ? 'border-rose-400 bg-rose-50/60 text-rose-900 ring-1 ring-rose-300' : ''}`}
+                            value={bookingDraft.transmission_type}
+                            onChange={(e) => setBookingDraft((d) => ({ ...d, transmission_type: e.target.value }))}
+                          >
+                            {(() => {
+                              const v = currentVehicle
+                              const opts = v?.transmission_options && v.transmission_options.length > 0
+                                ? v.transmission_options
+                                : ['automatic', 'manual']
+                              return opts.map((opt) => {
+                                const tCheck = checkVehicleAvailableInWindow(v, manualBookingWindow, bookings, opt, manualVehicleAvailability)
+                                const label = opt === 'automatic' ? 'Matic' : 'Manual'
+                                const statusTag = !tCheck.available ? ' (Penuh)' : ''
+                                return (
+                                  <option
+                                    key={opt}
+                                    value={opt}
+                                    disabled={!tCheck.available}
+                                    className={!tCheck.available ? 'text-gray-400 bg-gray-50' : 'text-ink'}
+                                  >
+                                    {label}{statusTag}
+                                  </option>
+                                )
+                              })
+                            })()}
+                          </select>
+                        </label>
+                      </div>
+
+                      {/* Notifikasi Ringkas Jika Mobil Terpilih Sedang Penuh */}
+                      {isCurrentVehicleBlocked && (
+                        <div className="mt-2.5 flex items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[.74rem] text-rose-700 animate-fadeIn">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <AlertCircle size={15} className="shrink-0 text-rose-600" />
+                            <span className="truncate"><strong>{currentVehicle?.name}</strong> sedang tidak tersedia pada jam ini.</span>
+                          </div>
+                          {availableFleetList.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => handleManualVehicleChange(availableFleetList[0].id)}
+                              className="text-[.7rem] font-bold text-rose-800 underline hover:text-rose-950 cursor-pointer shrink-0 ml-1"
+                            >
+                              Ganti ke {availableFleetList[0].name}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                  <div className="mt-2.5 grid grid-cols-2 gap-3 max-[580px]:grid-cols-1">
+                    {(() => {
+                      const tempWindow = (() => {
+                        if (!bookingDraft.start_date || !bookingDraft.start_time) return null
+                        try {
+                          const s = toJakartaISOString(bookingDraft.start_date, bookingDraft.start_time)
+                          const totalH = Number(bookingDraft.duration_hours) || 24
+                          const e = new Date(new Date(s).getTime() + totalH * 60 * 60 * 1000).toISOString()
+                          return { start_at: s, end_at: e }
+                        } catch {
+                          return null
+                        }
+                      })()
+
+                      const availableDrivers = tempWindow
+                        ? drivers.filter((d) => d.status !== 'off' && !isDriverBookedForWindow(d.id, tempWindow, bookings))
+                        : drivers.filter((d) => d.status !== 'off')
+
+                      const noDriverAvailable = tempWindow !== null && availableDrivers.length === 0
+
+                      return (
+                        <>
+                          <label className="grid min-w-0 gap-1">
+                            <span className="text-[.72rem] font-bold text-ink flex items-center justify-between">
+                              <span>Mode Layanan *</span>
+                              {noDriverAvailable && (
+                                <span className="text-[.62rem] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded">
+                                  Supir Habis / Penuh
+                                </span>
+                              )}
+                            </span>
+                            <select
+                              className={`${fieldClass} truncate ${noDriverAvailable && bookingDraft.booking_mode !== 'Sewa mobil lepas kunci' ? 'border-rose-400 bg-rose-50/40 text-rose-900' : ''}`}
+                              value={bookingDraft.booking_mode}
+                              onChange={(e) => {
+                                const nextMode = e.target.value
+                                setBookingDraft((d) => ({
+                                  ...d,
+                                  booking_mode: nextMode,
+                                  ...(nextMode === 'Sewa mobil lepas kunci' ? { driver_id: '' } : {})
+                                }))
+                              }}
+                            >
+                              <option value="Sewa mobil lepas kunci">Lepas Kunci (Self Drive)</option>
+                              <option
+                                value="Sewa mobil + Supir"
+                                disabled={noDriverAvailable}
+                              >
+                                {noDriverAvailable ? 'Dengan Supir (❌ Supir Penuh / Bentrok)' : 'Dengan Supir (+ Driver)'}
+                              </option>
+                              <option
+                                value="Rental Acara"
+                                disabled={noDriverAvailable}
+                              >
+                                {noDriverAvailable ? 'Paket Rental Acara (❌ Supir Penuh / Bentrok)' : 'Paket Rental Acara'}
+                              </option>
+                            </select>
+                          </label>
+
+                          {bookingDraft.booking_mode === 'Sewa mobil + Supir' || bookingDraft.booking_mode === 'Rental Acara' ? (() => {
+                            const selectedDriverConflict = (() => {
+                              if (!bookingDraft.driver_id) return null
+                              const d = drivers.find((drv) => String(drv.id) === String(bookingDraft.driver_id))
+                              if (!d) return null
+                              if (d.status === 'off') return `${d.name} sedang berstatus Libur`
+                              if (tempWindow && isDriverBookedForWindow(d.id, tempWindow, bookings)) {
+                                return `${d.name} memiliki jadwal tugas lain yang bentrok`
+                              }
+                              return null
+                            })()
+
+                            return (
+                              <label className="grid min-w-0 gap-1">
+                                <span className="text-[.72rem] font-bold text-ink">
+                                  Supir Bertugas {bookingDraft.status === 'confirmed' ? '*' : '(Opsional)'}
+                                </span>
+                                <select
+                                  className={`${fieldClass} truncate ${selectedDriverConflict || noDriverAvailable ? 'border-rose-400 bg-rose-50/40 text-rose-900 focus:border-rose-500' : ''}`}
+                                  value={bookingDraft.driver_id}
+                                  onChange={(e) => setBookingDraft((d) => ({ ...d, driver_id: e.target.value }))}
+                                >
+                                  <option value="">
+                                    {noDriverAvailable ? '-- Tidak ada supir tersedia --' : '-- Pilih supir / nanti --'}
+                                  </option>
+                                  {drivers.map((d) => {
+                                    const isBusy = tempWindow ? isDriverBookedForWindow(d.id, tempWindow, bookings) : false
+                                    const statusTag = d.status === 'off' ? ' (Libur)' : isBusy ? ' (Jadwal Bentrok)' : d.status === 'on_duty' ? ' (Sedang Tugas)' : ' (Tersedia)'
+                                    return (
+                                      <option
+                                        key={d.id}
+                                        value={d.id}
+                                        disabled={d.status === 'off' || isBusy}
+                                        className={isBusy || d.status === 'off' ? 'text-gray-400 bg-gray-50' : ''}
+                                      >
+                                        {d.name}{statusTag}
+                                      </option>
+                                    )
+                                  })}
+                                </select>
+                                {noDriverAvailable ? (
+                                  <span className="text-[.68rem] font-medium text-rose-600 animate-fadeIn">
+                                    ⚠️ Seluruh supir sedang bertugas atau libur pada rentang waktu ini. Silakan pilih layanan Lepas Kunci atau ubah tanggal sewa.
+                                  </span>
+                                ) : selectedDriverConflict ? (
+                                  <span className="text-[.68rem] font-medium text-rose-600 animate-fadeIn">
+                                    ⚠️ {selectedDriverConflict}. Silakan ganti supir lain.
+                                  </span>
+                                ) : null}
+                              </label>
+                            )
+                          })() : (
+                            <div className="flex min-w-0 items-center rounded-xl border border-dashed border-line bg-white/70 px-3 text-[.74rem] text-muted italic">
+                              Tanpa supir (pelanggan nyetir sendiri)
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </div>
+
+                  {/* Opsi Khusus Paket Acara (Tampil jika Mode Layanan === 'Rental Acara') */}
+                  {bookingDraft.booking_mode === 'Rental Acara' && (
+                    <div className="mt-3 space-y-3 rounded-xl border border-purple-200 bg-purple-50/70 p-3.5 animate-fadeIn">
+                      <div className="flex items-center gap-1.5 text-purple-800">
+                        <Sparkles size={14} className="shrink-0 text-purple-600" />
+                        <span className="text-[.74rem] font-bold">Detail Jenis Acara & Add-on Dekorasi</span>
+                      </div>
+
+                      <div className="grid gap-2.5">
+                        <div className="grid min-w-0 gap-1">
+                          <span className="text-[.68rem] font-bold text-purple-900">Jenis Acara *</span>
+                          <select
+                            className="h-9 w-full min-w-0 rounded-lg border border-purple-200 bg-white px-2.5 text-[.76rem] font-semibold text-ink outline-none focus:border-purple-500"
+                            value={bookingDraft.event_type}
+                            onChange={(e) => setBookingDraft((d) => ({ ...d, event_type: e.target.value }))}
+                          >
+                            {eventTypeOptions.map((type) => (
+                              <option key={type} value={type}>{type}</option>
+                            ))}
+                          </select>
+                          {bookingDraft.event_type === 'Lainnya' && (
+                            <input
+                              type="text"
+                              maxLength={80}
+                              className="mt-1 h-8 w-full min-w-0 rounded-lg border border-purple-200 bg-white px-2.5 text-[.74rem] text-ink outline-none focus:border-purple-500"
+                              placeholder="Sebutkan jenis acara..."
+                              value={bookingDraft.event_type_other}
+                              onChange={(e) => setBookingDraft((d) => ({ ...d, event_type_other: e.target.value }))}
+                            />
+                          )}
+                        </div>
+
+                        <div className="grid min-w-0 gap-1.5 border-t border-purple-200/60 pt-2.5">
+                          <span className="text-[.68rem] font-bold text-purple-900">Add-on Dekorasi (Bisa pilih lebih dari satu):</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {eventAddonOptions.map((opt) => {
+                              const isSelected = Array.isArray(bookingDraft.event_addons) && bookingDraft.event_addons.includes(opt.id)
+                              return (
+                                <button
+                                  key={opt.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setBookingDraft((prev) => {
+                                      const cur = Array.isArray(prev.event_addons) ? prev.event_addons : []
+                                      const next = isSelected ? cur.filter((id) => id !== opt.id) : [...cur, opt.id]
+                                      return { ...prev, event_addons: next }
+                                    })
+                                  }}
+                                  className={`rounded-full border px-2.5 py-1 text-[.66rem] font-semibold transition-all ${
+                                    isSelected
+                                      ? 'border-purple-600 bg-purple-600 text-white shadow-xs'
+                                      : 'border-purple-200 bg-white text-purple-900 hover:border-purple-400'
+                                  }`}
+                                >
+                                  {isSelected ? `✓ ${opt.label}` : opt.label}
+                                </button>
+                              )
+                            })}
+                          </div>
+                          {Array.isArray(bookingDraft.event_addons) && bookingDraft.event_addons.includes('kustom') && (
+                            <input
+                              type="text"
+                              maxLength={100}
+                              className="mt-1 h-8 w-full min-w-0 rounded-lg border border-purple-200 bg-white px-2.5 text-[.74rem] text-ink outline-none focus:border-purple-500"
+                              placeholder="Tulis dekorasi kustom yang diminta..."
+                              value={bookingDraft.event_addon_custom}
+                              onChange={(e) => setBookingDraft((d) => ({ ...d, event_addon_custom: e.target.value }))}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                  )
+                })()}
+
+                {/* 3. Jadwal & Durasi Sewa */}
+                <div className="rounded-xl border border-line bg-slate-ice/40 p-3.5">
+                  <span className="mb-2 block text-[.68rem] font-extrabold uppercase tracking-wider text-muted">3. Jadwal & Durasi Sewa</span>
+                  <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
+                    <label className="grid gap-1">
+                      <span className="text-[.72rem] font-bold text-ink">Tanggal Mulai *</span>
+                      <input
+                        type="date"
+                        className={fieldClass}
+                        required
+                        value={bookingDraft.start_date}
+                        onChange={(e) => setBookingDraft((d) => ({ ...d, start_date: e.target.value }))}
+                      />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-[.72rem] font-bold text-ink">Jam Mulai *</span>
+                      <input
+                        type="time"
+                        className={fieldClass}
+                        required
+                        value={bookingDraft.start_time}
+                        onChange={(e) => setBookingDraft((d) => ({ ...d, start_time: e.target.value }))}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Input Durasi Komposit ala Halaman Utama (Bulan, Hari, Jam) */}
+                  <div className="mt-3 border-t border-line/60 pt-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[.72rem] font-bold text-ink">Durasi Sewa:</span>
+                      <span className="text-[.72rem] font-bold text-crimson">
+                        {formatDuration(bookingDraft.duration_hours, 'jam')} {Number(bookingDraft.duration_hours) > 0 ? `(${bookingDraft.duration_hours} jam total)` : ''}
+                      </span>
+                    </div>
+
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                      <label className="flex flex-col gap-1 rounded-xl border border-line bg-white p-2 text-center transition-colors focus-within:border-cyan">
+                        <span className="text-[.65rem] font-bold uppercase tracking-wider text-muted">Bulan</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          className="w-full text-center text-[.95rem] font-extrabold text-ink outline-none"
+                          value={bookingDraft.duration_months}
+                          onChange={(e) => updateManualDurationParts(e.target.value, bookingDraft.duration_days, bookingDraft.duration_hours_part)}
+                          placeholder="0"
+                        />
+                        <span className="text-[.6rem] text-muted">× 30 hari</span>
+                      </label>
+
+                      <label className="flex flex-col gap-1 rounded-xl border border-line bg-white p-2 text-center transition-colors focus-within:border-cyan">
+                        <span className="text-[.65rem] font-bold uppercase tracking-wider text-muted">Hari</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          className="w-full text-center text-[.95rem] font-extrabold text-ink outline-none"
+                          value={bookingDraft.duration_days}
+                          onChange={(e) => updateManualDurationParts(bookingDraft.duration_months, e.target.value, bookingDraft.duration_hours_part)}
+                          placeholder="0"
+                        />
+                        <span className="text-[.6rem] text-muted">× 24 jam</span>
+                      </label>
+
+                      <label className="flex flex-col gap-1 rounded-xl border border-line bg-white p-2 text-center transition-colors focus-within:border-cyan">
+                        <span className="text-[.65rem] font-bold uppercase tracking-wider text-muted">Jam</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max="23"
+                          step="1"
+                          className="w-full text-center text-[.95rem] font-extrabold text-ink outline-none"
+                          value={bookingDraft.duration_hours_part}
+                          onChange={(e) => updateManualDurationParts(bookingDraft.duration_months, bookingDraft.duration_days, e.target.value)}
+                          placeholder="0"
+                        />
+                        <span className="text-[.6rem] text-muted">Jam tambahan</span>
+                      </label>
+                    </div>
+
+                    {/* Tombol Pilihan Durasi Cepat */}
+                    <div className="mt-2.5">
+                      <span className="mb-1.5 block text-[.66rem] font-semibold text-muted">Pilihan Cepat:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { label: '12 Jam', hours: 12 },
+                          { label: '1 Hari', hours: 24 },
+                          { label: '2 Hari', hours: 48 },
+                          { label: '3 Hari', hours: 72 },
+                          { label: '1 Minggu', hours: 168 },
+                          { label: '1 Bulan (30 Hari)', hours: 720 },
+                          { label: '2 Bulan (60 Hari)', hours: 1440 },
+                          { label: '3 Bulan (90 Hari)', hours: 2160 },
+                        ].map((preset) => {
+                          const isSelected = Number(bookingDraft.duration_hours) === preset.hours
+                          return (
+                            <button
+                              key={preset.hours}
+                              type="button"
+                              onClick={() => handleManualDurationPreset(preset.hours)}
+                              className={`rounded-lg px-2.5 py-1 text-[.68rem] font-semibold transition-colors ${
+                                isSelected
+                                  ? 'bg-ink text-white shadow-sm'
+                                  : 'border border-line bg-white text-muted hover:border-cyan/40 hover:text-ink'
+                              }`}
+                            >
+                              {preset.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Info Realtime Jadwal Kembali */}
+                    {bookingDraft.start_date && bookingDraft.start_time && (
+                      <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-cyan/30 bg-cyan/5 px-3 py-2 text-[.74rem] text-cyan">
+                        <Clock3 size={15} className="shrink-0 text-cyan" />
+                        <span>
+                          Jadwal Kembali: <strong>
+                            {(() => {
+                              try {
+                                const s = toJakartaISOString(bookingDraft.start_date, bookingDraft.start_time)
+                                const totalH = Number(bookingDraft.duration_hours) || 24
+                                const e = new Date(new Date(s).getTime() + totalH * 60 * 60 * 1000).toISOString()
+                                return formatJakartaDateTime(e, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+                              } catch {
+                                return '—'
+                              }
+                            })()} WIB
+                          </strong> ({formatDuration(bookingDraft.duration_hours, 'jam')})
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 4. Biaya Sewa & Status Booking */}
+                <div className="rounded-xl border border-line bg-slate-ice/40 p-3.5">
+                  <span className="mb-2 block text-[.68rem] font-extrabold uppercase tracking-wider text-muted">4. Biaya & Status Booking</span>
+                  <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
+                    <label className="grid gap-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[.72rem] font-bold text-ink">Harga Sewa / Deal *</span>
+                        {(() => {
+                          const v = vehicles.find((item) => String(item.id) === String(bookingDraft.vehicle_id))
+                          const std = calculateVehicleRate(v, bookingDraft.duration_hours, bookingDraft.toll_included)
+                          return std.price > 0 ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const formatted = formatPrice(std.price)
+                                setBookingDraft((d) => ({
+                                  ...d,
+                                  deal_price: formatted,
+                                  ...(d.payment_type === 'full' ? { payment_amount: formatted } : {}),
+                                }))
+                              }}
+                              className="text-[.64rem] font-semibold text-cyan hover:underline"
+                              title="Kembalikan ke tarif standar acuan"
+                            >
+                              Reset Acuan (Rp {formatPrice(std.price)})
+                            </button>
+                          ) : null
+                        })()}
+                      </div>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-3 top-2.5 text-[.78rem] font-bold text-muted">Rp</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          className={`${fieldClass} pl-9 font-bold`}
+                          required
+                          value={bookingDraft.deal_price}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '')
+                            const formattedVal = val ? parseInt(val, 10).toLocaleString('id-ID') : ''
+                            setBookingDraft((d) => ({
+                              ...d,
+                              deal_price: formattedVal,
+                              ...(d.payment_type === 'full' ? { payment_amount: formattedVal } : {}),
+                            }))
+                          }}
+                          placeholder="850.000"
+                        />
+                      </div>
+                      <span className="text-[.63rem] text-muted">Otomatis dihitung dari armada & durasi, bisa langsung diedit sesuai deal.</span>
+                    </label>
+
+                    <label className="grid gap-1">
+                      <span className="text-[.72rem] font-bold text-ink">Status Awal Booking *</span>
+                      <select
+                        className={fieldClass}
+                        value={
+                          bookingDraft.status === 'confirmed'
+                            ? (bookingDraft.payment_type === 'full' ? 'confirmed_full' : 'confirmed_dp')
+                            : 'pending'
+                        }
+                        onChange={(e) => {
+                          const val = e.target.value
+                          const dealNum = parseInt(String(bookingDraft.deal_price || '0').replace(/\D/g, ''), 10) || 0
+                          if (val === 'confirmed_full') {
+                            setBookingDraft((d) => ({
+                              ...d,
+                              status: 'confirmed',
+                              payment_type: 'full',
+                              payment_amount: d.deal_price,
+                            }))
+                          } else if (val === 'confirmed_dp') {
+                            const half = Math.round(dealNum * 0.5 / 1000) * 1000 || 500000
+                            setBookingDraft((d) => ({
+                              ...d,
+                              status: 'confirmed',
+                              payment_type: 'dp',
+                              payment_amount: d.payment_amount && d.payment_amount !== d.deal_price ? d.payment_amount : formatPrice(half),
+                            }))
+                          } else {
+                            setBookingDraft((d) => ({
+                              ...d,
+                              status: 'pending',
+                            }))
+                          }
+                        }}
+                      >
+                        <option value="confirmed_full">✅ Dikonfirmasi (Lunas Penuh 100%)</option>
+                        <option value="confirmed_dp">🟡 Dikonfirmasi (Bayar DP / Uang Muka)</option>
+                        <option value="pending">⏳ Menunggu (Belum Bayar / Menunggu DP)</option>
+                      </select>
+                      <span className="text-[.63rem] text-muted">
+                        {bookingDraft.status === 'confirmed'
+                          ? (bookingDraft.payment_type === 'full'
+                              ? 'Status Lunas 100%: Unit langsung dikunci di web & tidak ada sisa tagihan.'
+                              : 'Status DP: Unit langsung dikunci di web & sisa tagihan dilunasi nanti.')
+                          : 'Status Menunggu: Belum ada pembayaran masuk, unit belum dikunci permanen.'}
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-line/60 pt-2.5">
+                    <label className="flex items-center gap-2 text-[.74rem] text-ink cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="size-4 rounded border-line text-cyan focus:ring-cyan"
+                        checked={bookingDraft.toll_included}
+                        onChange={(e) => handleTollToggle(e.target.checked)}
+                      />
+                      <span className="font-semibold">Termasuk Biaya Tol</span>
+                    </label>
+                    {bookingDraft.toll_included && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[.72rem] text-muted font-bold">Biaya Tol: Rp</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          className={`${fieldClass} !h-8 !w-32 font-bold`}
+                          value={bookingDraft.toll_amount}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '')
+                            setBookingDraft((d) => ({
+                              ...d,
+                              toll_amount: val ? parseInt(val, 10).toLocaleString('id-ID') : '',
+                            }))
+                          }}
+                          placeholder="50.000"
+                        />
+                        <span className="text-[.63rem] text-muted">(Bisa diedit)</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <label className="mt-3 grid gap-1 border-t border-line/60 pt-2.5">
+                    <span className="text-[.72rem] font-bold text-ink">Catatan Order (WhatsApp / Transfer)</span>
+                    <textarea
+                      className="min-h-[60px] rounded-xl border border-line bg-white p-2.5 text-[.78rem] outline-none focus:border-cyan"
+                      maxLength={300}
+                      value={bookingDraft.notes}
+                      onChange={(e) => setBookingDraft((d) => ({ ...d, notes: e.target.value }))}
+                      placeholder="Contoh: [ORDER VIA WA] - DP via transfer BCA"
+                    />
+                  </label>
+                </div>
+
+                {/* 5. Rincian Pembayaran & Bukti Transfer (Khusus jika status Dikonfirmasi) */}
+                {bookingDraft.status === 'confirmed' && (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 space-y-3 animate-fadeIn">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[.68rem] font-extrabold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                        <Receipt size={14} className="text-emerald-600" />
+                        5. Pembayaran & Bukti Transfer ({bookingDraft.payment_type === 'full' ? 'Lunas Penuh 100%' : 'DP / Uang Muka'})
+                      </span>
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[.62rem] font-bold text-emerald-700">
+                        Wajib Diisi
+                      </span>
+                    </div>
+
+                    {/* Pilihan Jenis Pembayaran: DP vs Lunas */}
+                    <div className="grid grid-cols-2 gap-2 p-1 bg-white rounded-xl border border-emerald-200">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const dealNum = parseInt(String(bookingDraft.deal_price || '0').replace(/\D/g, ''), 10) || 0
+                          const half = Math.round(dealNum * 0.5 / 1000) * 1000 || 500000
+                          setBookingDraft((d) => ({
+                            ...d,
+                            payment_type: 'dp',
+                            payment_amount: d.payment_amount && d.payment_amount !== d.deal_price ? d.payment_amount : formatPrice(half),
+                          }))
+                        }}
+                        className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-[.74rem] font-bold transition-all ${
+                          bookingDraft.payment_type === 'dp'
+                            ? 'bg-amber-500 text-white shadow-sm'
+                            : 'text-muted hover:text-ink'
+                        }`}
+                      >
+                        <span>🟡 DP (Uang Muka)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setBookingDraft((d) => ({
+                            ...d,
+                            payment_type: 'full',
+                            payment_amount: d.deal_price,
+                          }))
+                        }}
+                        className={`flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg text-[.74rem] font-bold transition-all ${
+                          bookingDraft.payment_type === 'full'
+                            ? 'bg-emerald-600 text-white shadow-sm'
+                            : 'text-muted hover:text-ink'
+                        }`}
+                      >
+                        <span>✅ Lunas Penuh (100%)</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
+                      <label className="grid gap-1">
+                        <span className="text-[.72rem] font-bold text-ink">Metode Pembayaran *</span>
+                        <select
+                          className={fieldClass}
+                          required
+                          value={bookingDraft.payment_method}
+                          onChange={(e) => setBookingDraft((d) => ({ ...d, payment_method: e.target.value }))}
+                        >
+                          {paymentMethodOptions.map((opt) => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="grid gap-1">
+                        <span className="text-[.72rem] font-bold text-ink">Nama Pemilik Rekening / Pengirim *</span>
+                        <input
+                          type="text"
+                          required
+                          className={fieldClass}
+                          placeholder={bookingDraft.customer_name || 'Contoh: Bpk Handoko'}
+                          value={bookingDraft.payment_sender_name}
+                          onChange={(e) => setBookingDraft((d) => ({ ...d, payment_sender_name: e.target.value }))}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 max-[520px]:grid-cols-1">
+                      <label className="grid gap-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[.72rem] font-bold text-ink">
+                            {bookingDraft.payment_type === 'full' ? 'Nominal Lunas 100% (Rp) *' : 'Nominal DP (Rp) *'}
+                          </span>
+                          {bookingDraft.payment_type === 'dp' && (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const dealNum = parseInt(String(bookingDraft.deal_price || '0').replace(/\D/g, ''), 10) || 0
+                                  const half = Math.round(dealNum * 0.5 / 1000) * 1000
+                                  if (half > 0) setBookingDraft((d) => ({ ...d, payment_amount: formatPrice(half) }))
+                                }}
+                                className="text-[.62rem] font-semibold text-amber-700 hover:underline"
+                              >
+                                DP 50%
+                              </button>
+                              <span className="text-slate-300">·</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const dealNum = parseInt(String(bookingDraft.deal_price || '0').replace(/\D/g, ''), 10) || 0
+                                  const third = Math.round(dealNum * 0.3 / 1000) * 1000
+                                  if (third > 0) setBookingDraft((d) => ({ ...d, payment_amount: formatPrice(third) }))
+                                }}
+                                className="text-[.62rem] font-semibold text-amber-700 hover:underline"
+                              >
+                                DP 30%
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <div className="relative">
+                          <span className="pointer-events-none absolute left-3 top-2.5 text-[.78rem] font-bold text-muted">Rp</span>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            className={`${fieldClass} pl-9 font-bold`}
+                            required
+                            disabled={bookingDraft.payment_type === 'full'}
+                            placeholder="500.000"
+                            value={bookingDraft.payment_type === 'full' ? bookingDraft.deal_price : (bookingDraft.payment_amount || bookingDraft.deal_price)}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/\D/g, '')
+                              setBookingDraft((d) => ({
+                                ...d,
+                                payment_amount: val ? parseInt(val, 10).toLocaleString('id-ID') : '',
+                              }))
+                            }}
+                          />
+                        </div>
+                      </label>
+
+                      <label className="grid gap-1">
+                        <span className="text-[.72rem] font-bold text-ink">Catatan Pembayaran (Opsional)</span>
+                        <input
+                          type="text"
+                          className={fieldClass}
+                          placeholder={bookingDraft.payment_type === 'full' ? 'Contoh: Lunas 100% via transfer' : 'Contoh: DP 50%, sisa dilunasi saat serah terima'}
+                          value={bookingDraft.payment_notes}
+                          onChange={(e) => setBookingDraft((d) => ({ ...d, payment_notes: e.target.value }))}
+                        />
+                      </label>
+                    </div>
+
+                    {/* Banner Realtime Sisa Tagihan */}
+                    {(() => {
+                      const dealNum = parseInt(String(bookingDraft.deal_price || '0').replace(/\D/g, ''), 10) || 0
+                      const payNum = bookingDraft.payment_type === 'full'
+                        ? dealNum
+                        : (parseInt(String(bookingDraft.payment_amount || '0').replace(/\D/g, ''), 10) || 0)
+                      const sisaNum = Math.max(0, dealNum - payNum)
+
+                      if (bookingDraft.payment_type === 'full') {
+                        return (
+                          <div className="rounded-lg bg-emerald-100/70 border border-emerald-300 p-2.5 text-[.72rem] flex items-center justify-between text-emerald-900">
+                            <span>✅ <strong>Lunas Penuh (100%)</strong> · Tidak ada sisa tagihan.</span>
+                            <strong>Rp {formatPrice(dealNum)}</strong>
+                          </div>
+                        )
+                      }
+                      return (
+                        <div className="rounded-lg bg-amber-100/80 border border-amber-300 p-2.5 text-[.72rem] flex items-center justify-between text-amber-900">
+                          <div>
+                            <span>🟡 <strong>DP Diterima:</strong> Rp {formatPrice(payNum)}</span>
+                            <span className="mx-1.5 text-amber-400">|</span>
+                            <span><strong>Sisa Pelunasan:</strong></span>
+                          </div>
+                          <strong className="text-[.82rem] text-amber-800">
+                            Rp {formatPrice(sisaNum)}
+                          </strong>
+                        </div>
+                      )
+                    })()}
+
+                    {/* Upload Bukti Pembayaran */}
+                    <div className="grid gap-1.5 border-t border-emerald-200/60 pt-2.5">
+                      <span className="text-[.72rem] font-bold text-ink">Upload Bukti Transfer / Resi *</span>
+                      {bookingDraft.payment_proof_file || bookingDraft.payment_proof_preview ? (
+                        <div className="rounded-xl border border-emerald-200 bg-white p-2.5 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {bookingDraft.payment_proof_preview && !bookingDraft.payment_proof_preview.toLowerCase().endsWith('.pdf') ? (
+                              <img
+                                src={bookingDraft.payment_proof_preview}
+                                alt="Bukti Transfer"
+                                className="size-12 rounded-lg border border-line object-cover shrink-0 cursor-pointer"
+                                onClick={() => setLightboxUrl(bookingDraft.payment_proof_preview)}
+                                title="Klik untuk memperbesar"
+                              />
+                            ) : (
+                              <div className="grid size-12 shrink-0 place-items-center rounded-lg border border-line bg-slate-ice text-red-500">
+                                <FileText size={20} />
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <p className="m-0 truncate text-[.74rem] font-bold text-ink">
+                                {bookingDraft.payment_proof_file ? bookingDraft.payment_proof_file.name : 'Bukti Transfer'}
+                              </p>
+                              <p className="mb-0 mt-0.5 text-[.64rem] text-muted">
+                                {bookingDraft.payment_proof_file
+                                  ? `${(bookingDraft.payment_proof_file.size / 1024).toFixed(1)} KB`
+                                  : 'Terpilih'}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setBookingDraft((d) => ({ ...d, payment_proof_file: null, payment_proof_preview: null }))}
+                            className="rounded-lg border border-line bg-white px-2.5 py-1 text-[.68rem] font-bold text-rose-600 hover:bg-rose-50"
+                          >
+                            Hapus
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-emerald-300 bg-white p-3.5 text-center hover:bg-emerald-50/50 transition-colors">
+                          <UploadCloud size={22} className="text-emerald-600 mb-1" />
+                          <span className="text-[.74rem] font-bold text-ink">
+                            Pilih Foto Bukti Transfer / Struk ATM
+                          </span>
+                          <span className="text-[.64rem] text-muted">
+                            JPG, PNG, WEBP, atau PDF (Maksimal 10 MB)
+                          </span>
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept="image/jpeg,image/png,image/webp,application/pdf"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0]
+                              if (file) {
+                                const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : null
+                                setBookingDraft((d) => ({
+                                  ...d,
+                                  payment_proof_file: file,
+                                  payment_proof_preview: preview,
+                                }))
+                              }
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer: Fixed bottom */}
+            {(() => {
+              const chosenV = vehicles.find((v) => String(v.id) === String(bookingDraft.vehicle_id))
+              const chk = checkVehicleAvailableInWindow(chosenV, manualBookingWindow, bookings, bookingDraft.transmission_type, manualVehicleAvailability)
+              const isVehicleBlocked = !chk.available
+
+              return (
+                <footer className="flex shrink-0 flex-col gap-2 border-t border-line bg-slate-ice/40 px-5 py-3.5">
+                  {bookingFormError && (
+                    <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-1.5 text-[.72rem] text-red-700">
+                      <AlertCircle size={14} className="shrink-0 text-red-600" />
+                      <span className="flex-1 font-medium truncate">{bookingFormError}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      className="h-10 rounded-xl border border-line bg-white px-4 text-[.76rem] font-bold text-muted hover:bg-slate-ice"
+                      type="button"
+                      onClick={() => setBookingFormOpen(false)}
+                    >
+                      Batal
+                    </button>
+                    <button
+                      className="h-10 rounded-xl bg-crimson px-5 text-[.76rem] font-bold text-white hover:bg-crimson-deep disabled:opacity-50 transition-colors shadow-sm cursor-pointer disabled:cursor-not-allowed"
+                      type="submit"
+                      disabled={savingBooking || isVehicleBlocked}
+                    >
+                      {savingBooking ? (
+                        <span className="flex items-center gap-2">
+                          <span className="size-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                          Menyimpan...
+                        </span>
+                      ) : isVehicleBlocked ? (
+                        'Unit Tidak Tersedia'
+                      ) : bookingDraft.status === 'confirmed' ? (
+                        bookingDraft.payment_type === 'full' ? 'Simpan Booking (Lunas 100%)' : 'Simpan Booking (Sudah DP)'
+                      ) : (
+                        'Simpan Booking (Menunggu DP)'
+                      )}
+                    </button>
+                  </div>
+                </footer>
+              )
+            })()}
+          </form>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Pembayaran & Kunci Reservasi */}
+      {paymentConfirmModalOpen && paymentConfirmBooking && (
+        <div
+          className="admin-modal-overlay fixed inset-0 z-50 flex items-end justify-center bg-ink/60 p-0 backdrop-blur-[4px] sm:items-center sm:p-4 max-[520px]:items-center max-[520px]:p-3 animate-fadeIn"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !paymentConfirmSubmitting) {
+              setPaymentConfirmModalOpen(false)
+              setPaymentConfirmBooking(null)
+            }
+          }}
+        >
+          <form
+            onSubmit={handleConfirmPaymentAndBooking}
+            className="admin-modal-panel flex max-h-[92vh] w-full max-w-[560px] flex-col rounded-t-2xl bg-white shadow-2xl sm:max-h-[min(840px,92vh)] sm:rounded-2xl overflow-hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="payment-confirm-title"
+          >
+            {/* Header */}
+            <header className="flex shrink-0 items-center justify-between border-b border-line bg-white px-5 py-4">
+              <div className="flex items-center gap-2.5">
+                <div className="grid size-9 place-items-center rounded-xl bg-emerald-50 text-emerald-600">
+                  <Receipt size={18} />
+                </div>
+                <div>
+                  <h2 className="m-0 font-display text-[1.05rem] font-bold text-ink" id="payment-confirm-title">
+                    Konfirmasi Pembayaran
+                  </h2>
+                  <p className="mb-0 mt-0.5 text-[.72rem] text-muted">
+                    Wajib verifikasi metode, pengirim, dan bukti transfer sebelum booking dikonfirmasi.
+                  </p>
+                </div>
+              </div>
+              <button
+                className="grid size-9 place-items-center rounded-xl text-muted hover:bg-slate-ice hover:text-ink disabled:opacity-50"
+                type="button"
+                disabled={paymentConfirmSubmitting}
+                aria-label="Tutup form konfirmasi"
+                onClick={() => {
+                  setPaymentConfirmModalOpen(false)
+                  setPaymentConfirmBooking(null)
+                }}
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </header>
+
+            {/* Error Notification if any */}
+            {paymentConfirmError && (
+              <div className="shrink-0 bg-red-50 border-b border-red-200 px-5 py-2.5 flex items-start gap-2.5 text-[.74rem] text-red-700 animate-fadeIn" role="alert">
+                <AlertCircle size={16} className="shrink-0 text-red-600 mt-0.5" />
+                <div className="flex-1 font-semibold">{paymentConfirmError}</div>
+              </div>
+            )}
+
+            {/* Content Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {/* Ringkasan Booking */}
+              <div className="rounded-xl border border-cyan/20 bg-cyan/5 p-3.5 text-[.76rem]">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <span className="block text-[.66rem] font-bold uppercase tracking-wider text-cyan">Data Pemesan</span>
+                    <strong className="text-[.88rem] text-ink">{paymentConfirmBooking.customer_name}</strong>
+                    <div className="mt-0.5 flex items-center gap-2 text-[.72rem] text-muted">
+                      <span>{paymentConfirmBooking.customer_phone}</span>
+                      {paymentConfirmBooking.booking_code && (
+                        <span className="font-bold text-cyan">· {paymentConfirmBooking.booking_code}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="block text-[.66rem] font-bold uppercase tracking-wider text-muted">Total Sewa</span>
+                    <strong className="text-[.92rem] font-black text-ink">
+                      Rp {formatPrice(Number(paymentConfirmBooking.estimated_price) || 0)}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="mt-2.5 border-t border-cyan/15 pt-2 text-[.72rem] text-slate-600 flex items-center justify-between">
+                  <span>
+                    🚗 {(paymentConfirmBooking.vehicle_snapshot ?? []).map(formatBookedVehicle).join(' + ') || 'Unit Armada'}
+                  </span>
+                  <span>
+                    ⏱️ {formatDuration(paymentConfirmBooking.duration, paymentConfirmBooking.duration_unit)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Form Input Pembayaran */}
+              <div className="space-y-3.5">
+                {/* Pilihan Jenis Pembayaran: DP vs Lunas Penuh */}
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl border border-line">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const full = Number(paymentConfirmBooking.estimated_price) || 0
+                      const half = Math.round(full * 0.5 / 1000) * 1000 || 500000
+                      setPaymentConfirmDraft((d) => ({
+                        ...d,
+                        pay_type: 'dp',
+                        amount: formatPrice(half),
+                      }))
+                    }}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-[.76rem] font-bold transition-all ${
+                      paymentConfirmDraft.pay_type === 'dp'
+                        ? 'bg-amber-500 text-white shadow-sm'
+                        : 'text-muted hover:text-ink'
+                    }`}
+                  >
+                    <span>🟡 DP (Uang Muka)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const full = Number(paymentConfirmBooking.estimated_price) || 0
+                      setPaymentConfirmDraft((d) => ({
+                        ...d,
+                        pay_type: 'full',
+                        amount: formatPrice(full),
+                      }))
+                    }}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-[.76rem] font-bold transition-all ${
+                      paymentConfirmDraft.pay_type === 'full'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-muted hover:text-ink'
+                    }`}
+                  >
+                    <span>✅ Lunas Penuh (100%)</span>
+                  </button>
+                </div>
+
+                {/* 1. Metode Pembayaran */}
+                <label className="grid gap-1">
+                  <span className="text-[.74rem] font-bold text-ink flex items-center gap-1">
+                    Metode Pembayaran <span className="text-red-500">*</span>
+                  </span>
+                  <select
+                    className={fieldClass}
+                    required
+                    value={paymentConfirmDraft.method}
+                    onChange={(e) => setPaymentConfirmDraft((d) => ({ ...d, method: e.target.value }))}
+                  >
+                    {paymentMethodOptions.map((opt) => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                  <span className="text-[.63rem] text-muted">Pilih rekening tujuan transfer atau kas pembayaran.</span>
+                </label>
+
+                {/* 2. Nama Pemilik Rekening / Pengirim */}
+                <label className="grid gap-1">
+                  <span className="text-[.74rem] font-bold text-ink flex items-center gap-1">
+                    Nama Pemilik Rekening / Pengirim <span className="text-red-500">*</span>
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    className={fieldClass}
+                    placeholder="Contoh: Bpk Handoko Pratama"
+                    value={paymentConfirmDraft.sender_name}
+                    onChange={(e) => setPaymentConfirmDraft((d) => ({ ...d, sender_name: e.target.value }))}
+                  />
+                  <span className="text-[.63rem] text-muted">
+                    Nama pemilik rekening yang mentransfer (sesuai struk / mutasi bank).
+                  </span>
+                </label>
+
+                {/* 3. Nominal Pembayaran / DP */}
+                <div className="grid gap-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[.74rem] font-bold text-ink flex items-center gap-1">
+                      {paymentConfirmDraft.pay_type === 'full' ? 'Nominal Lunas 100% (Rp) *' : 'Nominal DP (Rp) *'}
+                    </span>
+                    {paymentConfirmDraft.pay_type === 'dp' && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const full = Number(paymentConfirmBooking.estimated_price) || 0
+                            const half = Math.round(full * 0.5 / 1000) * 1000
+                            if (half > 0) setPaymentConfirmDraft((d) => ({ ...d, amount: formatPrice(half) }))
+                          }}
+                          className="rounded px-1.5 py-0.5 text-[.64rem] font-semibold text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100"
+                        >
+                          DP 50%
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const full = Number(paymentConfirmBooking.estimated_price) || 0
+                            const third = Math.round(full * 0.3 / 1000) * 1000
+                            if (third > 0) setPaymentConfirmDraft((d) => ({ ...d, amount: formatPrice(third) }))
+                          }}
+                          className="rounded px-1.5 py-0.5 text-[.64rem] font-semibold text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100"
+                        >
+                          DP 30%
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPaymentConfirmDraft((d) => ({ ...d, amount: '500.000' }))}
+                          className="rounded px-1.5 py-0.5 text-[.64rem] font-semibold text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100"
+                        >
+                          Rp 500rb
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-2.5 text-[.78rem] font-bold text-muted">Rp</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      required
+                      disabled={paymentConfirmDraft.pay_type === 'full'}
+                      className={`${fieldClass} pl-9 font-bold`}
+                      placeholder="Contoh: 500.000"
+                      value={paymentConfirmDraft.pay_type === 'full' ? formatPrice(Number(paymentConfirmBooking.estimated_price) || 0) : paymentConfirmDraft.amount}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '')
+                        setPaymentConfirmDraft((d) => ({
+                          ...d,
+                          amount: val ? parseInt(val, 10).toLocaleString('id-ID') : '',
+                        }))
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Real-time Calculation Summary Banner */}
+                {(() => {
+                  const est = Number(paymentConfirmBooking.estimated_price) || 0
+                  const dpNum = paymentConfirmDraft.pay_type === 'full'
+                    ? est
+                    : (parseInt(String(paymentConfirmDraft.amount || '0').replace(/\D/g, ''), 10) || 0)
+                  const sisa = Math.max(0, est - dpNum)
+
+                  if (paymentConfirmDraft.pay_type === 'full') {
+                    return (
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-[.74rem] flex items-center justify-between text-emerald-900">
+                        <div>
+                          <span className="block font-bold">Pembayaran Lunas Penuh (100%)</span>
+                          <span className="text-[.68rem] text-emerald-700">Total sewa dibayar lunas sekaligus. Sisa tagihan Rp 0.</span>
+                        </div>
+                        <strong className="text-[.92rem] font-black text-emerald-800">
+                          Rp {formatPrice(est)}
+                        </strong>
+                      </div>
+                    )
+                  }
+                  return (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-[.74rem] space-y-1.5">
+                      <div className="flex items-center justify-between text-muted text-[.7rem]">
+                        <span>Total Tagihan Sewa:</span>
+                        <span className="font-semibold text-ink">Rp {formatPrice(est)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-amber-900 font-medium">
+                        <span>Nominal DP Diterima:</span>
+                        <span className="font-bold">Rp {formatPrice(dpNum)}</span>
+                      </div>
+                      <div className="border-t border-amber-200/80 pt-1.5 flex items-center justify-between font-bold text-amber-900">
+                        <span className="flex items-center gap-1">
+                          <span>⏳ Sisa yang Harus Dilunasi Nanti:</span>
+                        </span>
+                        <strong className="text-[.88rem] font-black text-amber-800">
+                          Rp {formatPrice(sisa)}
+                        </strong>
+                      </div>
+                      <p className="m-0 text-[.64rem] text-amber-800/80 pt-0.5">
+                        * Sisa tagihan dapat dicatat saat pelunasan di pool atau transfer sebelum unit jalan.
+                      </p>
+                    </div>
+                  )
+                })()}
+
+                {/* 4. Upload Bukti Pembayaran / Struk Transfer */}
+                <div className="grid gap-1.5">
+                  <span className="text-[.74rem] font-bold text-ink flex items-center gap-1">
+                    Upload Bukti {paymentConfirmDraft.pay_type === 'full' ? 'Lunas' : 'DP'} / Resi Transfer <span className="text-red-500">*</span>
+                  </span>
+
+                  {/* Jika sudah ada file dipilih atau preview */}
+                  {(paymentConfirmDraft.file || paymentConfirmDraft.file_preview) ? (
+                    <div className="rounded-xl border border-line bg-slate-ice/40 p-3 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {paymentConfirmDraft.file_preview && !paymentConfirmDraft.file_preview.toLowerCase().endsWith('.pdf') ? (
+                          <img
+                            src={paymentConfirmDraft.file_preview}
+                            alt="Bukti Transfer"
+                            className="size-14 rounded-lg border border-line object-cover shrink-0 cursor-pointer"
+                            onClick={() => setLightboxUrl(paymentConfirmDraft.file_preview)}
+                            title="Klik untuk memperbesar"
+                          />
+                        ) : (
+                          <div className="grid size-14 shrink-0 place-items-center rounded-lg border border-line bg-white text-red-500">
+                            <FileText size={24} />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="m-0 truncate text-[.76rem] font-bold text-ink">
+                            {paymentConfirmDraft.file ? paymentConfirmDraft.file.name : 'Bukti Transfer Tersimpan'}
+                          </p>
+                          <p className="mb-0 mt-0.5 text-[.66rem] text-muted">
+                            {paymentConfirmDraft.file
+                              ? `${(paymentConfirmDraft.file.size / 1024).toFixed(1)} KB`
+                              : 'Format file valid'}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPaymentConfirmDraft((d) => ({ ...d, file: null, file_preview: null }))
+                        }}
+                        className="rounded-lg border border-line bg-white px-2.5 py-1.5 text-[.7rem] font-bold text-rose-600 hover:bg-rose-50"
+                      >
+                        Ganti / Hapus
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-line bg-slate-ice/30 p-5 text-center transition-colors hover:border-cyan hover:bg-cyan/5">
+                      <UploadCloud size={28} className="text-cyan mb-1.5" />
+                      <span className="text-[.76rem] font-bold text-ink">
+                        Klik atau Tarik Foto Bukti Transfer ke Sini
+                      </span>
+                      <span className="mt-0.5 text-[.66rem] text-muted">
+                        Format: JPG, PNG, WEBP, atau PDF (Maksimal 10 MB)
+                      </span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) {
+                            const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : null
+                            setPaymentConfirmDraft((d) => ({
+                              ...d,
+                              file,
+                              file_preview: preview,
+                            }))
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+
+                {/* 5. Catatan Tambahan (Opsional) */}
+                <label className="grid gap-1">
+                  <span className="text-[.74rem] font-bold text-ink">Catatan Pembayaran (Opsional)</span>
+                  <input
+                    type="text"
+                    className={fieldClass}
+                    placeholder="Contoh: DP 50%, sisa dilunasi saat serah terima unit di pool"
+                    value={paymentConfirmDraft.notes}
+                    onChange={(e) => setPaymentConfirmDraft((d) => ({ ...d, notes: e.target.value }))}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-line bg-slate-ice/40 px-5 py-3.5">
+              <button
+                className="h-10 rounded-xl border border-line bg-white px-4 text-[.76rem] font-bold text-muted hover:bg-slate-ice disabled:opacity-50"
+                type="button"
+                disabled={paymentConfirmSubmitting}
+                onClick={() => {
+                  setPaymentConfirmModalOpen(false)
+                  setPaymentConfirmBooking(null)
+                }}
+              >
+                Batal
+              </button>
+              <button
+                className="h-10 rounded-xl bg-crimson px-5 text-[.76rem] font-bold text-white hover:bg-crimson-deep disabled:opacity-60 transition-colors shadow-sm"
+                type="submit"
+                disabled={paymentConfirmSubmitting}
+              >
+                {paymentConfirmSubmitting ? (
+                  <span className="flex items-center gap-2">
+                    <span className="size-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Menyimpan & Mengonfirmasi...
+                  </span>
+                ) : (
+                  'Konfirmasi & Kunci Pesanan'
+                )}
+              </button>
+            </footer>
+          </form>
+        </div>
+      )}
+
+      {/* Modal Input Bukti Pelunasan */}
+      {settlementModalOpen && settlementBooking && (
+        <div
+          className="admin-modal-overlay fixed inset-0 z-50 flex items-end justify-center bg-ink/60 p-0 backdrop-blur-[4px] sm:items-center sm:p-4 max-[520px]:items-center max-[520px]:p-3 animate-fadeIn"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !settlementSubmitting) {
+              setSettlementModalOpen(false)
+              setSettlementBooking(null)
+            }
+          }}
+        >
+          <form
+            onSubmit={handleSaveSettlement}
+            className="admin-modal-panel flex max-h-[92vh] w-full max-w-[540px] flex-col rounded-t-2xl bg-white shadow-2xl sm:max-h-[min(820px,92vh)] sm:rounded-2xl overflow-hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settlement-modal-title"
+          >
+            {/* Header */}
+            <header className="flex shrink-0 items-center justify-between border-b border-line bg-gradient-to-r from-emerald-50/70 via-teal-50/40 to-white px-5 py-4">
+              <div className="flex items-center gap-2.5">
+                <div className="grid size-9 place-items-center rounded-xl bg-emerald-600 text-white shadow-sm">
+                  <Receipt size={18} />
+                </div>
+                <div>
+                  <h2 className="m-0 font-display text-[1.05rem] font-bold text-ink" id="settlement-modal-title">
+                    Input Bukti Pelunasan
+                  </h2>
+                  <p className="mb-0 mt-0.5 text-[.72rem] text-muted">
+                    Selesaikan sisa kewajiban pembayaran booking ini menjadi Lunas (100%).
+                  </p>
+                </div>
+              </div>
+              <button
+                className="grid size-9 place-items-center rounded-xl text-muted hover:bg-slate-ice hover:text-ink disabled:opacity-50"
+                type="button"
+                disabled={settlementSubmitting}
+                aria-label="Tutup form pelunasan"
+                onClick={() => {
+                  setSettlementModalOpen(false)
+                  setSettlementBooking(null)
+                }}
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </header>
+
+            {/* Error Notification */}
+            {settlementError && (
+              <div className="shrink-0 bg-red-50 border-b border-red-200 px-5 py-2.5 flex items-start gap-2.5 text-[.74rem] text-red-700 animate-fadeIn" role="alert">
+                <AlertCircle size={16} className="shrink-0 text-red-600 mt-0.5" />
+                <div className="flex-1 font-semibold">{settlementError}</div>
+              </div>
+            )}
+
+            {/* Content Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {/* Ringkasan Keuangan Booking */}
+              {(() => {
+                const pInfo = getBookingPaymentInfo(settlementBooking)
+                const total = Number(settlementBooking.estimated_price) || 0
+                const dp = pInfo?.dp_amount || pInfo?.amount || 0
+                const sisa = pInfo?.remaining_amount || Math.max(0, total - dp)
+                return (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 text-[.76rem] space-y-2.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <span className="block text-[.66rem] font-bold uppercase tracking-wider text-emerald-800">
+                          Data Pemesan
+                        </span>
+                        <strong className="text-[.88rem] text-ink">{settlementBooking.customer_name}</strong>
+                        <div className="text-[.72rem] text-muted">{settlementBooking.customer_phone}</div>
+                      </div>
+                      <div className="text-right">
+                        <span className="block text-[.66rem] font-bold uppercase tracking-wider text-muted">
+                          Total Sewa
+                        </span>
+                        <strong className="text-[.92rem] font-black text-ink">
+                          Rp {formatPrice(total)}
+                        </strong>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-emerald-200/80 pt-2 grid grid-cols-2 gap-2 text-[.74rem]">
+                      <div>
+                        <span className="text-muted block text-[.66rem]">DP Telah Masuk:</span>
+                        <strong className="text-ink">Rp {formatPrice(dp)}</strong>
+                        <div className="text-[.64rem] text-muted truncate">via {pInfo?.dp_method || pInfo?.method}</div>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-emerald-800 font-bold block text-[.66rem]">Kewajiban Pelunasan:</span>
+                        <strong className="text-[.94rem] font-black text-emerald-700">Rp {formatPrice(sisa)}</strong>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+
+              <div className="space-y-3.5">
+                {/* Metode Pelunasan */}
+                <label className="grid gap-1">
+                  <span className="text-[.74rem] font-bold text-ink flex items-center gap-1">
+                    Metode Pelunasan <span className="text-red-500">*</span>
+                  </span>
+                  <select
+                    className={fieldClass}
+                    required
+                    value={settlementDraft.method}
+                    onChange={(e) => setSettlementDraft((d) => ({ ...d, method: e.target.value }))}
+                  >
+                    {paymentMethodOptions.map((opt) => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                  <span className="text-[.63rem] text-muted">Pilih transfer bank atau Tunai / Cash di Pool jika dibayar langsung saat ambil mobil.</span>
+                </label>
+
+                {/* Nama Pembayar / Pemilik Rekening */}
+                <label className="grid gap-1">
+                  <span className="text-[.74rem] font-bold text-ink flex items-center gap-1">
+                    Nama Pemilik Rekening / Pembayar <span className="text-red-500">*</span>
+                  </span>
+                  <input
+                    type="text"
+                    required
+                    className={fieldClass}
+                    placeholder="Contoh: Bpk Handoko"
+                    value={settlementDraft.sender_name}
+                    onChange={(e) => setSettlementDraft((d) => ({ ...d, sender_name: e.target.value }))}
+                  />
+                  <span className="text-[.63rem] text-muted">Nama yang tertera pada mutasi bank atau nama pihak yang melunasi.</span>
+                </label>
+
+                {/* Nominal Pelunasan */}
+                <div className="grid gap-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[.74rem] font-bold text-ink flex items-center gap-1">
+                      Nominal Pelunasan (Rp) <span className="text-red-500">*</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const pInfo = getBookingPaymentInfo(settlementBooking)
+                        const total = Number(settlementBooking.estimated_price) || 0
+                        const dp = pInfo?.dp_amount || pInfo?.amount || 0
+                        const sisa = pInfo?.remaining_amount || Math.max(0, total - dp)
+                        setSettlementDraft((d) => ({ ...d, amount: formatPrice(sisa) }))
+                      }}
+                      className="text-[.64rem] font-semibold text-emerald-700 hover:underline"
+                    >
+                      Sesuai Sisa Tagihan
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-2.5 text-[.78rem] font-bold text-muted">Rp</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      required
+                      className={`${fieldClass} pl-9 font-bold`}
+                      placeholder="Contoh: 1.300.000"
+                      value={settlementDraft.amount}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '')
+                        setSettlementDraft((d) => ({
+                          ...d,
+                          amount: val ? parseInt(val, 10).toLocaleString('id-ID') : '',
+                        }))
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Upload Bukti Pelunasan */}
+                <div className="grid gap-1.5">
+                  <span className="text-[.74rem] font-bold text-ink flex items-center gap-1">
+                    Upload Bukti Pelunasan / Resi Struk <span className="text-red-500">*</span>
+                  </span>
+
+                  {(settlementDraft.file || settlementDraft.file_preview) ? (
+                    <div className="rounded-xl border border-line bg-slate-ice/40 p-3 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {settlementDraft.file_preview && !settlementDraft.file_preview.toLowerCase().endsWith('.pdf') ? (
+                          <img
+                            src={settlementDraft.file_preview}
+                            alt="Bukti Pelunasan"
+                            className="size-14 rounded-lg border border-line object-cover shrink-0 cursor-pointer"
+                            onClick={() => setLightboxUrl(settlementDraft.file_preview)}
+                            title="Klik untuk memperbesar"
+                          />
+                        ) : (
+                          <div className="grid size-14 shrink-0 place-items-center rounded-lg border border-line bg-white text-emerald-600">
+                            <FileText size={24} />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="m-0 truncate text-[.76rem] font-bold text-ink">
+                            {settlementDraft.file ? settlementDraft.file.name : 'Bukti Pelunasan'}
+                          </p>
+                          <p className="mb-0 mt-0.5 text-[.66rem] text-muted">
+                            {settlementDraft.file ? `${(settlementDraft.file.size / 1024).toFixed(1)} KB` : 'Format valid'}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSettlementDraft((d) => ({ ...d, file: null, file_preview: null }))}
+                        className="rounded-lg border border-line bg-white px-2.5 py-1.5 text-[.7rem] font-bold text-rose-600 hover:bg-rose-50"
+                      >
+                        Ganti / Hapus
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/30 p-5 text-center transition-colors hover:border-emerald-500 hover:bg-emerald-50/60">
+                      <UploadCloud size={28} className="text-emerald-600 mb-1.5" />
+                      <span className="text-[.76rem] font-bold text-ink">
+                        Klik atau Tarik Foto Bukti Pelunasan ke Sini
+                      </span>
+                      <span className="mt-0.5 text-[.66rem] text-muted">
+                        Format: JPG, PNG, WEBP, atau PDF (Maksimal 10 MB)
+                      </span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) {
+                            const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : null
+                            setSettlementDraft((d) => ({
+                              ...d,
+                              file,
+                              file_preview: preview,
+                            }))
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+
+                {/* Catatan Pelunasan */}
+                <label className="grid gap-1">
+                  <span className="text-[.74rem] font-bold text-ink">Catatan Pelunasan (Opsional)</span>
+                  <input
+                    type="text"
+                    className={fieldClass}
+                    placeholder="Contoh: Dilunasi tunai saat penyerahan kunci armada di pool"
+                    value={settlementDraft.notes}
+                    onChange={(e) => setSettlementDraft((d) => ({ ...d, notes: e.target.value }))}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-line bg-slate-ice/40 px-5 py-3.5">
+              <button
+                className="h-10 rounded-xl border border-line bg-white px-4 text-[.76rem] font-bold text-muted hover:bg-slate-ice disabled:opacity-50"
+                type="button"
+                disabled={settlementSubmitting}
+                onClick={() => {
+                  setSettlementModalOpen(false)
+                  setSettlementBooking(null)
+                }}
+              >
+                Batal
+              </button>
+              <button
+                className="h-10 rounded-xl bg-emerald-600 px-5 text-[.76rem] font-bold text-white hover:bg-emerald-700 disabled:opacity-60 transition-colors shadow-sm"
+                type="submit"
+                disabled={settlementSubmitting}
+              >
+                {settlementSubmitting ? (
+                  <span className="flex items-center gap-2">
+                    <span className="size-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Menyimpan Pelunasan...
+                  </span>
+                ) : (
+                  'Simpan Pelunasan & Tandai Lunas'
+                )}
+              </button>
+            </footer>
+          </form>
+        </div>
+      )}
+
+      {/* Lightbox / Zoom Bukti Transfer */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-fadeIn"
+          onClick={() => setLightboxUrl(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="relative max-h-[92vh] max-w-[90vw] overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header className="flex items-center justify-between border-b border-line bg-slate-ice/50 px-4 py-2.5">
+              <div className="flex items-center gap-2">
+                <Receipt size={16} className="text-cyan" />
+                <span className="text-[.82rem] font-bold text-ink">Bukti Pembayaran / Struk Transfer</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={lightboxUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded-lg border border-line bg-white px-2.5 py-1 text-[.72rem] font-semibold text-cyan hover:bg-slate-ice"
+                >
+                  <ExternalLink size={13} /> Buka Tab Baru
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setLightboxUrl(null)}
+                  className="grid size-7 place-items-center rounded-lg text-muted hover:bg-slate-ice hover:text-ink cursor-pointer"
+                  aria-label="Tutup preview bukti"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </header>
+            <div className="overflow-auto p-3 bg-slate-900/5 max-h-[82vh] flex items-center justify-center">
+              <img
+                src={lightboxUrl}
+                alt="Bukti Transfer"
+                className="max-h-[76vh] max-w-full rounded-lg object-contain shadow"
+              />
+            </div>
+          </div>
         </div>
       )}
     </div>

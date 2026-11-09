@@ -1324,7 +1324,7 @@ function RentalHome() {
     lastBookingSubmitRef.current = Date.now()
 
     try {
-    if (withDriver) {
+    if (withDriver || isEventBooking) {
       const queryKey = `${date}|${time}|${durasi}|${availabilityRefresh}`
       try {
         const { data, error } = await supabase.rpc('driver_availability_for_window', {
@@ -1334,8 +1334,13 @@ function RentalHome() {
         if (error || typeof data !== 'boolean') throw error ?? new Error('Respons ketersediaan supir tidak valid.')
         setDriverAvailability({ key: queryKey, status: 'ready', available: data })
         if (!data) {
-          setWithDriver(false)
-          setFormErrors({ booking: 'Supir untuk jadwal ini baru saja tidak tersedia. Pilih jadwal lain atau lanjutkan tanpa supir.' })
+          if (withDriver) setWithDriver(false)
+          if (isEventBooking) setIsEventBooking(false)
+          setFormErrors({
+            booking: isEventBooking
+              ? 'Paket acara membutuhkan supir, namun saat ini seluruh supir sedang bertugas untuk jadwal yang dipilih. Pilih jadwal lain atau sewa lepas kunci.'
+              : 'Supir untuk jadwal ini baru saja tidak tersedia. Pilih jadwal lain atau lanjutkan tanpa supir.'
+          })
           return
         }
       } catch {
@@ -1529,6 +1534,25 @@ function RentalHome() {
     }
 
     setSelectedVehicleModelKeys((previous) => [...previous, vehicleGroup.key])
+
+    // Otomatis masukkan 1 unit dari varian transmisi yang tersedia jika ketersediaan sudah siap
+    const availableVariants = vehicleGroup.variants.flatMap((vehicle) => {
+      const transmissionTypes = vehicle.transmission_options?.length ? getAllocatedTransmissionOptions(vehicle) : [null]
+      return transmissionTypes.map((transmissionType) => ({
+        vehicle,
+        transmissionType,
+        available: getWindowRemaining(windowAvailability, vehicle, transmissionType) ?? 0,
+      })).filter((v) => v.available > 0)
+    })
+
+    if (availableVariants.length > 0) {
+      const first = availableVariants[0]
+      setSelectedVehicles((previous) => [
+        ...previous.filter((item) => !vehicleGroup.variants.some((v) => v.id === item.id)),
+        { ...first.vehicle, transmission_type: first.transmissionType, quantity: 1 }
+      ])
+    }
+
     if (selectedVehicleModelKeys.length === 0) {
       setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100)
     }
@@ -1536,6 +1560,16 @@ function RentalHome() {
 
   function handleVehicleCardClick(event, vehicleGroup) {
     if (event.target.closest('button, a')) return
+    if (hasSelectedSchedule && availabilityStatus === 'ready') {
+      const isReady = vehicleGroup.variants.some((v) => isVehicleReadyForWindow(v, windowAvailability))
+      if (!isReady && !selectedVehicleModelKeys.includes(vehicleGroup.key)) {
+        setFormErrors((prev) => ({
+          ...prev,
+          vehicles: `Armada ${vehicleGroup.name} sedang tidak tersedia (penuh / sedang dalam masa sewa) pada tanggal & jam tersebut. Silakan pilih armada lain yang bertanda Tersedia.`,
+        }))
+        return
+      }
+    }
     openVehicleDetail(vehicleGroup)
   }
 
@@ -1573,6 +1607,35 @@ function RentalHome() {
   const selectedVehicleModels = selectedVehicleModelKeys
     .map((key) => allVehicleGroups.find((group) => group.key === key))
     .filter(Boolean)
+
+  // Otomatis pilih varian default (1 unit) untuk setiap mobil yang dipilih agar pelanggan tidak perlu klik [+] manual
+  useEffect(() => {
+    if (availabilityStatus !== 'ready') return
+    setSelectedVehicles((current) => {
+      let updated = [...current]
+      let changed = false
+      selectedVehicleModels.forEach((vehicleGroup) => {
+        const variantIds = new Set(vehicleGroup.variants.map((v) => v.id))
+        const hasSelection = updated.some((item) => variantIds.has(item.id) && item.quantity > 0)
+        if (!hasSelection) {
+          const availableVariants = vehicleGroup.variants.flatMap((vehicle) => {
+            const transmissionTypes = vehicle.transmission_options?.length ? getAllocatedTransmissionOptions(vehicle) : [null]
+            return transmissionTypes.map((transmissionType) => ({
+              vehicle,
+              transmissionType,
+              available: getWindowRemaining(windowAvailability, vehicle, transmissionType) ?? 0,
+            })).filter((v) => v.available > 0)
+          })
+          if (availableVariants.length > 0) {
+            const first = availableVariants[0]
+            updated.push({ ...first.vehicle, transmission_type: first.transmissionType, quantity: 1 })
+            changed = true
+          }
+        }
+      })
+      return changed ? updated : current
+    })
+  }, [availabilityStatus, selectedVehicleModelKeys, windowAvailability, selectedVehicleModels])
   const visibleVehicleGroups = groupVehiclesByName(visibleVehicles)
   const detailVariants = vehicleDetailGroup?.variants.flatMap((vehicle) => {
     const availability = hasSelectedSchedule && availabilityStatus === 'ready' ? windowAvailability : null
@@ -1784,24 +1847,203 @@ function RentalHome() {
                       return total + Math.max(0, totalAvailable - allocatedAvailable)
                     }, 0)
                     return (
-                      <div className="grid gap-2 rounded-lg border border-line bg-white p-3" key={vehicleGroup.key}>
-                        <div className="flex items-center justify-between gap-2"><strong className="text-[.8rem] text-ink">{vehicleGroup.name}</strong><button type="button" className="grid size-8 place-items-center rounded-md text-slate-600 hover:bg-slate-ice" aria-label={`Hapus ${vehicleGroup.name}`} onClick={() => removeSelectedVehicle(vehicleGroup)}><X size={15} aria-hidden="true" /></button></div>
-                        {availabilityStatus === 'ready' ? availableVariants.length > 0 ? availableVariants.map(({ vehicle, transmissionType, available, unitPrice }) => {
-                          const quantity = selectedVehicles.find((item) => item.id === vehicle.id && item.transmission_type === transmissionType)?.quantity ?? 0
-                          const selectedForVariant = selectedVehicles.filter((item) => item.id === vehicle.id).reduce((total, item) => total + item.quantity, 0)
-                          const totalAvailableForVariant = getWindowRemaining(windowAvailability, vehicle) ?? 0
-                          const typeLabel = getVehicleVariantLabel(vehicle, transmissionType)
-                          return (
-                            <div className="flex items-center justify-between gap-3 rounded-md bg-slate-ice px-3 py-2" key={`${vehicle.id}-${transmissionType ?? 'default'}`}>
-                              <span className="grid min-w-0 gap-0.5"><strong className="text-[.74rem] text-ink">{typeLabel}</strong><small className="text-[.68rem] font-medium text-slate-700">{available} unit · {isNegoPrice(unitPrice) ? 'Nego' : `Rp ${formatPrice(unitPrice)}`} / unit</small>{quantity > 0 && <small className="text-[.68rem] font-semibold text-crimson">{isNegoPrice(unitPrice) ? 'Biaya Nego via WA' : `Subtotal Rp ${formatPrice(unitPrice * quantity)}`}</small>}</span>
-                              <div className="flex items-center gap-2">
-                                <button className="grid size-8 place-items-center rounded-md border border-line bg-white text-muted disabled:cursor-not-allowed disabled:opacity-40" type="button" aria-label={`Kurangi ${vehicleGroup.name} ${typeLabel}`} disabled={quantity === 0} onClick={() => setVehicleTransmissionQuantity(vehicle, transmissionType, quantity - 1)}><Minus size={14} aria-hidden="true" /></button>
-                                <output className="min-w-5 text-center text-[.78rem] font-bold text-ink" aria-label={`Jumlah ${typeLabel}`}>{quantity}</output>
-                                <button className="grid size-8 place-items-center rounded-md border border-line bg-white text-muted disabled:cursor-not-allowed disabled:opacity-40" type="button" aria-label={`Tambah ${vehicleGroup.name} ${typeLabel}`} disabled={quantity >= available || selectedForVariant >= totalAvailableForVariant} onClick={() => setVehicleTransmissionQuantity(vehicle, transmissionType, quantity + 1)}><Plus size={14} aria-hidden="true" /></button>
-                              </div>
-                            </div>
+                      <div className="grid gap-2.5 rounded-xl border border-line bg-white p-3.5 shadow-2xs" key={vehicleGroup.key}>
+                        <div className="flex items-center justify-between gap-2 border-b border-line/60 pb-2">
+                          <strong className="text-[.84rem] font-bold text-ink">{vehicleGroup.name}</strong>
+                          <button
+                            type="button"
+                            className="grid size-7 place-items-center rounded-lg text-slate-500 hover:bg-slate-ice hover:text-ink cursor-pointer transition-colors"
+                            aria-label={`Hapus ${vehicleGroup.name}`}
+                            onClick={() => removeSelectedVehicle(vehicleGroup)}
+                            title="Hapus kendaraan ini"
+                          >
+                            <X size={15} aria-hidden="true" />
+                          </button>
+                        </div>
+
+                        {availabilityStatus === 'ready' ? (
+                          availableVariants.length === 1 ? (
+                            // Kasus 1: Hanya ada 1 tipe transmisi (langsung tampil rapi & ringkas)
+                            (() => {
+                              const variant = availableVariants[0]
+                              const currentItem = selectedVehicles.find(
+                                (item) => item.id === variant.vehicle.id && item.transmission_type === variant.transmissionType
+                              )
+                              const quantity = currentItem?.quantity ?? 1
+                              const typeLabel = getVehicleVariantLabel(variant.vehicle, variant.transmissionType)
+                              const isNego = isNegoPrice(variant.unitPrice)
+                              const totalPrice = variant.unitPrice * quantity
+
+                              return (
+                                <div className="flex items-center justify-between gap-3 rounded-xl border border-line/70 bg-slate-ice/60 p-3">
+                                  <div className="grid min-w-0 gap-0.5">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="inline-flex items-center rounded-md bg-white border border-line px-2.5 py-0.5 text-[.74rem] font-bold text-ink shadow-2xs">
+                                        Transmisi: {typeLabel}
+                                      </span>
+                                      <span className="text-[.68rem] text-slate-500 font-medium">
+                                        ({variant.available} unit tersedia)
+                                      </span>
+                                    </div>
+                                    <div className="mt-1 flex items-baseline gap-2">
+                                      <strong className="text-[.86rem] font-black text-crimson">
+                                        {isNego ? 'Biaya Nego via WA' : `Rp ${formatPrice(totalPrice)}`}
+                                      </strong>
+                                      {quantity > 1 && !isNego && (
+                                        <span className="text-[.66rem] font-medium text-muted">
+                                          (@ Rp {formatPrice(variant.unitPrice)} / unit)
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Stepper Jumlah Unit */}
+                                  <div className="flex items-center gap-1.5 rounded-lg border border-line bg-white p-1 shadow-2xs shrink-0">
+                                    <button
+                                      type="button"
+                                      className="grid size-7 place-items-center rounded text-muted hover:bg-slate-ice hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                                      disabled={quantity <= 1}
+                                      onClick={() => setVehicleTransmissionQuantity(variant.vehicle, variant.transmissionType, quantity - 1)}
+                                      aria-label="Kurangi unit"
+                                    >
+                                      <Minus size={13} />
+                                    </button>
+                                    <output className="min-w-6 text-center text-[.78rem] font-black text-ink">
+                                      {quantity}
+                                    </output>
+                                    <button
+                                      type="button"
+                                      className="grid size-7 place-items-center rounded text-muted hover:bg-slate-ice hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                                      disabled={quantity >= variant.available}
+                                      onClick={() => setVehicleTransmissionQuantity(variant.vehicle, variant.transmissionType, quantity + 1)}
+                                      aria-label="Tambah unit"
+                                    >
+                                      <Plus size={13} />
+                                    </button>
+                                  </div>
+                                </div>
+                              )
+                            })()
+                          ) : availableVariants.length > 1 ? (
+                            // Kasus 2: Ada pilihan Manual & Matic (tampilkan tombol tab / pill transmisi)
+                            (() => {
+                              const selectedInGroup = selectedVehicles.find((item) =>
+                                vehicleGroup.variants.some((v) => v.id === item.id)
+                              )
+                              const activeVariant = availableVariants.find(
+                                (v) => selectedInGroup && v.vehicle.id === selectedInGroup.id && v.transmissionType === selectedInGroup.transmission_type
+                              ) || availableVariants[0]
+
+                              const quantity = selectedInGroup?.quantity ?? 1
+                              const isNego = isNegoPrice(activeVariant.unitPrice)
+                              const totalPrice = activeVariant.unitPrice * quantity
+
+                              return (
+                                <div className="rounded-xl border border-line/70 bg-slate-ice/60 p-3 space-y-2.5">
+                                  {/* Tombol Pill Pilih Transmisi */}
+                                  <div>
+                                    <span className="block text-[.66rem] font-bold uppercase tracking-wider text-muted mb-1.5">
+                                      Pilih Transmisi:
+                                    </span>
+                                    <div className="flex flex-wrap gap-2">
+                                      {availableVariants.map((v) => {
+                                        const isChosen = activeVariant.vehicle.id === v.vehicle.id && activeVariant.transmissionType === v.transmissionType
+                                        const label = getVehicleVariantLabel(v.vehicle, v.transmissionType)
+                                        return (
+                                          <button
+                                            key={`${v.vehicle.id}-${v.transmissionType}`}
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedVehicles((prev) => {
+                                                const withoutThisGroup = prev.filter(
+                                                  (item) => !vehicleGroup.variants.some((vg) => vg.id === item.id)
+                                                )
+                                                return [
+                                                  ...withoutThisGroup,
+                                                  { ...v.vehicle, transmission_type: v.transmissionType, quantity: Math.min(quantity, v.available) }
+                                                ]
+                                              })
+                                            }}
+                                            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[.74rem] font-bold transition-all cursor-pointer ${
+                                              isChosen
+                                                ? 'bg-crimson text-white shadow-sm ring-2 ring-crimson/20'
+                                                : 'bg-white text-ink border border-line hover:border-crimson/40 hover:bg-white'
+                                            }`}
+                                          >
+                                            <span>{label}</span>
+                                            <span className={`text-[.62rem] font-normal ${isChosen ? 'text-white/80' : 'text-slate-500'}`}>
+                                              ({v.available} unit)
+                                            </span>
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+
+                                  {/* Info Harga & Stepper Jumlah Unit */}
+                                  <div className="flex items-center justify-between gap-3 border-t border-line/60 pt-2.5">
+                                    <div className="grid gap-0.5">
+                                      <div className="flex items-baseline gap-2">
+                                        <strong className="text-[.86rem] font-black text-crimson">
+                                          {isNego ? 'Biaya Nego via WA' : `Rp ${formatPrice(totalPrice)}`}
+                                        </strong>
+                                        {quantity > 1 && !isNego && (
+                                          <span className="text-[.66rem] font-medium text-muted">
+                                            (@ Rp {formatPrice(activeVariant.unitPrice)} / unit)
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="text-[.64rem] text-slate-500 font-medium">
+                                        {formatDuration(durasi, bookingMode.unit)} · Siap Jalan
+                                      </span>
+                                    </div>
+
+                                    {/* Stepper Jumlah Unit */}
+                                    <div className="flex items-center gap-1.5 rounded-lg border border-line bg-white p-1 shadow-2xs shrink-0">
+                                      <button
+                                        type="button"
+                                        className="grid size-7 place-items-center rounded text-muted hover:bg-slate-ice hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                                        disabled={quantity <= 1}
+                                        onClick={() => setVehicleTransmissionQuantity(activeVariant.vehicle, activeVariant.transmissionType, quantity - 1)}
+                                        aria-label="Kurangi unit"
+                                      >
+                                        <Minus size={13} />
+                                      </button>
+                                      <output className="min-w-6 text-center text-[.78rem] font-bold text-ink">
+                                        {quantity}
+                                      </output>
+                                      <button
+                                        type="button"
+                                        className="grid size-7 place-items-center rounded text-muted hover:bg-slate-ice hover:text-ink disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                                        disabled={quantity >= activeVariant.available}
+                                        onClick={() => setVehicleTransmissionQuantity(activeVariant.vehicle, activeVariant.transmissionType, quantity + 1)}
+                                        aria-label="Tambah unit"
+                                      >
+                                        <Plus size={13} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })()
+                          ) : unallocatedUnits > 0 ? (
+                            <span className="text-[.72rem] font-medium text-amber-800">
+                              {unallocatedUnits} unit tersedia, tetapi tipenya belum dialokasikan admin.
+                            </span>
+                          ) : (
+                            <span className="text-[.72rem] font-medium text-slate-500">
+                              Tidak ada tipe unit yang tersedia pada jadwal ini.
+                            </span>
                           )
-                        }) : unallocatedUnits > 0 ? <span className="text-[.72rem] font-medium text-amber-800">{unallocatedUnits} unit tersedia, tetapi tipenya belum dialokasikan admin.</span> : <span className="text-[.72rem] font-medium text-slate-700">Tidak ada tipe unit yang tersedia pada jadwal ini.</span> : <span className="text-[.72rem] font-medium text-slate-700">Memeriksa tipe unit untuk jadwal ini...</span>}
+                        ) : !hasSelectedSchedule ? (
+                          <span className="text-[.72rem] font-medium text-slate-500">
+                            Pilih tanggal dan waktu mulai sewa di atas untuk cek ketersediaan.
+                          </span>
+                        ) : (
+                          <span className="text-[.72rem] font-medium text-slate-500">
+                            Memeriksa ketersediaan unit...
+                          </span>
+                        )}
                       </div>
                     )
                   })}
@@ -1818,12 +2060,20 @@ function RentalHome() {
                 className="mt-1 size-4 shrink-0 accent-crimson"
                 type="checkbox"
                 checked={isEventBooking}
+                disabled={!isEventBooking && (driverAvailabilityStatus === 'ready' && !currentDriverAvailability?.available)}
                 onChange={(event) => {
                   setIsEventBooking(event.target.checked)
                   if (event.target.checked) setWithDriver(false)
                 }}
               />
-              <span><strong>Paket acara</strong> <span className="font-normal text-purple-500">(opsional — pilih jika ingin dekorasi atau kebutuhan khusus acara)</span></span>
+              <span>
+                <strong>Paket acara</strong>{' '}
+                <span className="font-normal text-purple-500">
+                  {driverAvailabilityStatus === 'ready' && !currentDriverAvailability?.available
+                    ? '(Tidak dapat dipilih: supir sedang penuh pada jadwal ini)'
+                    : '(opsional — pilih jika ingin dekorasi atau kebutuhan khusus acara)'}
+                </span>
+              </span>
               </label>
               {isEventBooking && (
                 <div className="grid gap-4">
@@ -2064,9 +2314,14 @@ function RentalHome() {
                 : null
               const isSelected = selectedVehicleModelKeys.includes(vehicleGroup.key)
               const readyForWindow = hasSelectedSchedule && availabilityStatus === 'ready' && variants.some((variant) => isVehicleReadyForWindow(variant, windowAvailability))
+              const isBlockedForSchedule = hasSelectedSchedule && availabilityStatus === 'ready' && !readyForWindow && !isSelected
               const canSelect = readyForWindow || isSelected
               return (
-              <article className={`group min-w-0 cursor-pointer overflow-hidden border-b pb-5 transition duration-200 hover:-translate-y-1 ${
+              <article className={`group min-w-0 overflow-hidden border-b pb-5 transition duration-200 ${
+                isBlockedForSchedule
+                  ? 'cursor-not-allowed opacity-60 grayscale-[35%] bg-slate-50/40'
+                  : 'cursor-pointer hover:-translate-y-1'
+              } ${
                 isSelected
                   ? 'border-crimson/60 bg-transparent ring-2 ring-crimson/20'
                   : promoVariant
@@ -2088,10 +2343,24 @@ function RentalHome() {
                 </div>
                 <div className="px-1 pt-4">
                   <div className="flex items-center justify-between gap-3"><h3 className="m-0 font-display text-[1.18rem] font-bold text-ink">{vehicleGroup.name}</h3><span className="rounded-full bg-cyan/10 px-2.5 py-1 text-[.62rem] font-bold uppercase tracking-[.06em] text-[#0369a1]">{vehicle.category}</span></div>
-                  <span className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[.65rem] font-semibold ${hasSelectedSchedule ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
-                    <span className={`size-1.5 rounded-full ${hasSelectedSchedule ? 'bg-emerald-500' : 'bg-slate-400'}`} aria-hidden="true" />
-                    {hasSelectedSchedule ? 'Tersedia di jadwal ini' : 'Pilih tanggal & jam untuk cek'}
-                  </span>
+                  {hasSelectedSchedule ? (
+                    readyForWindow ? (
+                      <span className="mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[.65rem] font-semibold bg-emerald-50 text-emerald-700">
+                        <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                        Tersedia di jadwal ini
+                      </span>
+                    ) : (
+                      <span className="mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[.65rem] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                        <span className="size-1.5 rounded-full bg-rose-500" aria-hidden="true" />
+                        ❌ Penuh / Sedang Dipinjam
+                      </span>
+                    )
+                  ) : (
+                    <span className="mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[.65rem] font-semibold bg-slate-100 text-slate-600">
+                      <span className="size-1.5 rounded-full bg-slate-400" aria-hidden="true" />
+                      Pilih tanggal & jam untuk cek
+                    </span>
+                  )}
                   <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 max-[600px]:gap-x-3">
                     <div className="flex min-w-0 items-center gap-[10px]"><UsersRound className="box-content shrink-0 rounded-[5px] bg-cyan/10 p-[5px] text-cyan" aria-hidden="true" size={17} /><span className="grid min-w-0 gap-[2px]"><small className="text-[.56rem] font-semibold tracking-[.03em] text-[#64748b]">TEMPAT DUDUK</small><strong className="truncate text-[.63rem] font-semibold text-muted">{vehicle.seats}</strong></span></div>
                     {variantLabels.length > 0 && <div className="flex min-w-0 items-center gap-[10px]"><Settings2 className="box-content shrink-0 rounded-[5px] bg-cyan/10 p-[5px] text-cyan" aria-hidden="true" size={17} /><span className="grid min-w-0 gap-[2px]"><small className="text-[.56rem] font-semibold tracking-[.03em] text-[#64748b]">VARIAN TERSEDIA</small><strong className="truncate text-[.63rem] font-semibold text-muted">{variantLabels.join(', ')}</strong>{transmissionDetails.length > 0 && <small className="truncate text-[.56rem] text-[#64748b]">{transmissionDetails.join(' · ')}</small>}</span></div>}

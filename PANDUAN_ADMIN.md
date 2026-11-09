@@ -10,13 +10,14 @@ Dokumen ini disusun sebagai panduan resmi dan standar operasional prosedur (SOP)
 1. [Akses Masuk & Manajemen Akun Admin](#1-akses-masuk--manajemen-akun-admin)
 2. [Sistem Notifikasi Bel Suara & Push Desktop](#2-sistem-notifikasi-bel-suara--push-desktop)
 3. [Alur Pemrosesan Pesanan (Booking Management)](#3-alur-pemrosesan-pesanan-booking-management)
-4. [Fitur Negosiasi Harga (Ubah Deal Nego)](#4-fitur-negosiasi-harga-ubah-deal-nego)
-5. [Manajemen Supir & Validasi Anti-Bentrok](#5-manajemen-supir--validasi-anti-bentrok)
-6. [Manajemen Armada, Varian & Harga Promo](#6-manajemen-armada-varian--harga-promo)
-7. [Ekspor Laporan ke Excel (.xlsx)](#7-ekspor-laporan-ke-excel-xlsx)
-8. [Halaman Cek Status Booking Mandiri Pelanggan](#8-halaman-cek-status-booking-mandiri-pelanggan)
-9. [SOP Aturan Sewa & Syarat Ketentuan Resmi](#9-sop-aturan-sewa--syarat-ketentuan-resmi)
-10. [Keamanan Sistem & Troubleshooting](#10-keamanan-sistem--troubleshooting)
+4. [Fitur Cek Jadwal & Ketersediaan Armada Manual (Layanan CS WhatsApp)](#4-fitur-cek-jadwal--ketersediaan-armada-manual-layanan-cs-whatsapp)
+5. [Fitur Negosiasi Harga (Ubah Deal Nego)](#5-fitur-negosiasi-harga-ubah-deal-nego)
+6. [Manajemen Supir & Validasi Anti-Bentrok](#6-manajemen-supir--validasi-anti-bentrok)
+7. [Manajemen Armada, Varian & Harga Promo](#7-manajemen-armada-varian--harga-promo)
+8. [Ekspor Laporan ke Excel (.xlsx)](#8-ekspor-laporan-ke-excel-xlsx)
+9. [Halaman Cek Status Booking Mandiri Pelanggan](#9-halaman-cek-status-booking-mandiri-pelanggan)
+10. [SOP Aturan Sewa & Syarat Ketentuan Resmi](#10-sop-aturan-sewa--syarat-ketentuan-resmi)
+11. [Keamanan Sistem & Troubleshooting](#11-keamanan-sistem--troubleshooting)
 
 ---
 
@@ -84,20 +85,127 @@ Semua pesanan yang masuk melalui website akan terdaftar pada tab **Booking**.
    * Catatan khusus dari pemesan.
    * Rincian kalkulasi harga dan status negosiasi harga.
 
-### C. Alur Pergantian Status Booking
+### C. Alur Pergantian Status Booking & Sistem Pembayaran (DP vs Lunas)
 1. **Menunggu (Pending)**: Pesanan baru masuk dari website. Pada tahap ini, unit belum dikunci dari katalog publik.
 2. **Dikonfirmasi (Confirmed)**:
+   * **VERIFIKASI PEMBAYARAN WAJIB**: Saat admin memilih status *Dikonfirmasi* (baik dari tabel maupun drawer detail), sistem akan **membuka modal Konfirmasi Pembayaran & Bukti Transfer**.
+   * **Pilihan Jenis Pembayaran**:
+     * **🟡 DP (Uang Muka)**:
+       * Admin memasukkan nominal DP yang telah diterima (bisa menggunakan tombol cepat: `DP 30%`, `DP 50%`, atau `DP Rp 500rb`).
+       * Sistem secara otomatis menghitung dan menampilkan **Sisa Tagihan yang Harus Dilunasi**:  
+         $$\text{Sisa Tagihan} = \text{Total Biaya Sewa} - \text{Nominal DP}$$
+       * Admin mengunggah bukti transfer DP.
+       * Status pesanan menjadi *Dikonfirmasi* dengan badge **`DP DITERIMA · SISA RP X.XXX.XXX`**.
+     * **✅ Lunas Penuh (100%)**:
+       * Nominal otomatis dikunci 100% dari total estimasi sewa. Sisa tagihan menjadi **Rp 0**.
+       * Admin mengunggah struk/bukti pelunasan transfer.
+       * Status pesanan menjadi *Dikonfirmasi* dengan badge **`LUNAS (100%)`**.
+   * **Input Wajib**:
+     1. **Metode Pembayaran** (Transfer BCA, Mandiri, BRI, BNI, BSI, QRIS, Tunai di Pool, dll.)
+     2. **Nama Pemilik Rekening / Pengirim** (nama pengirim pada resi / mutasi m-banking)
+     3. **Upload Bukti Transfer / Resi** (JPG, PNG, WEBP, atau PDF)
+     4. **Nominal Pembayaran**
    * **PENTING**: Mengubah status ke Dikonfirmasi **otomatis mengunci stok armada** sehingga jadwal tersebut tidak bisa dipesan lagi oleh orang lain (*anti double-booking*).
    * Untuk pesanan dengan mode sewa supir, admin **wajib memilih supir** terlebih dahulu sebelum dapat mengonfirmasi pesanan.
-   * Pastikan uang muka (DP minimal 30%) sudah diterima di rekening resmi sebelum mengubah ke status ini.
-3. **Selesai (Completed)**:
-   * Setelah masa sewa berakhir, kendaraan telah diterima kembali di pool/kantor dalam kondisi baik, BBM telah dicek (*same-to-same*), dan deposit jaminan telah diselesaikan.
+
+### D. Fitur Input Bukti Pelunasan (Settlement Modal)
+Bagi booking yang awalnya dikonfirmasi dengan **DP (Uang Muka)**:
+1. Buka drawer pesanan dengan mengklik baris pesanan pada tabel.
+2. Pada bagian *Informasi Pembayaran & Bukti Transfer*, sistem menampilkan banner kuning peringatan sisa tagihan beserta tombol:  
+   👉 **`+ Input Bukti Pelunasan (Rp X.XXX.XXX)`**
+3. Klik tombol tersebut untuk membuka **Modal Input Bukti Pelunasan**:
+   * Menampilkan ringkasan total sewa, DP yang sudah masuk, dan sisa yang wajib dibayar.
+   * Admin mengisi metode pelunasan (misal transfer bank atau **Tunai / Cash di Pool** saat serah terima mobil).
+   * Masukkan nama pembayar dan nominal pelunasan (otomatis terisi pas sisa tagihan).
+   * Unggah foto bukti struk pelunasan atau kwitansi kas.
+4. Klik **Simpan Pelunasan & Tandai Lunas**.
+5. Sistem otomatis:
+   * Mengubah status pembayaran menjadi **`LUNAS (100%)`** dan sisa tagihan menjadi **Rp 0**.
+   * Menampilkan kedua bukti pembayaran secara berdampingan di drawer detail:  
+     1. **Bukti Pembayaran DP**
+     2. **Bukti Pelunasan**
+   * Masing-masing bukti struk memiliki tombol perbesar (*zoom lightbox*) dan tautan buka gambar di tab baru.
+
+### E. Status Selesai, Ditolak & Dibatalkan
+1. **Selesai (Completed)**:
+   * Setelah masa sewa berakhir, kendaraan telah diterima kembali di pool/kantor dalam kondisi baik, BBM telah dicek (*same-to-same*), dan kewajiban pelunasan telah tuntas.
    * Mengubah status ke Selesai akan **melepaskan supir kembali ke status Tersedia** dan unit kendaraan diberi **jeda persiapan 5 jam** sebelum siap disewa kembali.
-4. **Ditolak / Dibatalkan (Rejected/Cancelled)**: Digunakan jika armada tidak tersedia, pelanggan membatalkan pesanan, atau verifikasi identitas tidak valid. Stok unit otomatis terlepas kembali.
+2. **Ditolak / Dibatalkan (Rejected/Cancelled)**: Digunakan jika armada tidak tersedia, pelanggan membatalkan pesanan, atau verifikasi identitas tidak valid. Stok unit otomatis terlepas kembali.
+
+### F. Input Booking Manual (Pesanan via WhatsApp / Telepon / Offline)
+Jika ada pelanggan yang memesan langsung melalui chat WhatsApp, panggilan telepon, atau datang langsung ke kantor/pool:
+
+1. Buka tab **Booking** di Dashboard Admin.
+2. Klik tombol merah **`+ Input Booking Manual`** di pojok kanan atas (samping tombol *Export Excel*).
+3. Formulir modal akan muncul:
+   * **Data Pelanggan**: Masukkan Nama Pemesan dan No. WhatsApp/Telepon (sistem otomatis menstandarkan awalan `+62`).
+   * **Pilihan Armada & Anti-Bentrok Realtime**:
+     * Dropdown menampilkan status ketersediaan setiap armada secara *live*: bertanda `✓ Tersedia (X unit)` atau `❌ Penuh / Sedang Dipinjam` (otomatis di-disable/tidak bisa dipilih).
+     * Jika armada yang sedang dipilih ternyata memiliki jadwal bentrok atau berstatus pinjam pada rentang waktu yang ditentukan, sistem langsung memunculkan **Banner Peringatan Merah** seketika itu juga, lengkap dengan tombol rekomendasi cepat armada lain yang *ready*.
+     * Tombol **Simpan Booking** otomatis terkunci (`❌ Armada Tidak Tersedia`) sehingga admin tidak membuang waktu mengisi rincian pembayaran untuk armada yang bentrok.
+   * **Layanan & Supir**: Pilih apakah Lepas Kunci, Dengan Supir, atau Paket Acara. Jika semua supir sedang tugas/libur, opsi supir otomatis di-disable dengan label `❌ Supir Penuh / Bentrok`.
+   * **Jadwal Sewa**: Tentukan tanggal mulai, jam mulai, dan durasi sewa (bisa menggunakan tombol cepat: 12 jam, 1 hari, 2 hari, 3 hari, 7 hari, 30 hari, atau ketik kustom jam). Sistem otomatis menghitung jam & tanggal pengembalian secara *real-time*. Jika jadwal diubah dan menyebabkan armada bentrok, peringatan muncul langsung di bagian jadwal.
+   * **Lokasi Jemput**: Masukkan alamat penjemputan/pengantaran unit.
+   * **Biaya Sewa (Deal WA)**: Masukkan nominal harga total yang disepakati (bisa langsung harga nego), serta centang biaya tol jika termasuk.
+   * **Status Awal & Rincian Pembayaran**:
+     * Pilih **✅ Dikonfirmasi (Lunas Penuh 100%)** jika pelanggan langsung melunasi sewa di awal — nominal otomatis terkunci 100% dan sisa tagihan tercatat Rp 0 (Lunas).
+     * Pilih **🟡 Dikonfirmasi (Bayar DP / Uang Muka)** jika pelanggan baru membayar uang muka — admin dapat menentukan nominal DP (tersedia preset DP 50%, DP 30%, dll.) dan sisa tagihan dicatat untuk pelunasan nanti.
+     * Pilih **⏳ Menunggu (Belum Bayar / Menunggu DP)** jika baru reservasi sementara dan bukti transfer belum masuk.
+     * Untuk status Dikonfirmasi (baik DP maupun Lunas), admin wajib memilih metode transfer, memasukkan nama pemilik rekening pengirim, dan mengunggah foto bukti transfer/struk. Stok armada langsung dikunci di website publik agar anti double-booking.
+   * **Catatan**: Tulis rincian tambahan (misal: `[ORDER VIA WA] - DP via transfer BCA`).
+4. Klik **Simpan Booking**.
+5. Sistem akan:
+   * Menerbitkan **Kode Booking resmi** (misal `KHS-XXXXXX`).
+   * Mengunci unit armada pada tanggal/jam tersebut di website.
+   * Memasukkan data transaksi ke laporan keuangan dan ekspor Excel.
+   * Pelanggan juga dapat melacak status pesanannya sendiri di halaman `/cek-booking` menggunakan nomor WhatsApp atau kode booking tersebut.
 
 ---
 
-## 4. Fitur Negosiasi Harga (Ubah Deal Nego)
+## 4. Fitur Cek Jadwal & Ketersediaan Armada Manual (Layanan CS WhatsApp)
+
+Calon penyewa sering menanyakan ketersediaan kendaraan melalui chat WhatsApp:  
+> *"Halo om, tanggal 15 jam 8 pagi sewa 2 hari mobil apa aja yang ready ya?"*
+
+Untuk mempermudah dan mempercepat respons Customer Support tanpa perlu mengecek kalender satu per satu atau menghitung kalkulator sewa manual, dashboard menyediakan tab khusus **Cek Jadwal**.
+
+### A. Cara Menggunakan
+1. Buka tab **Cek Jadwal** (ikon kalender centang) pada bilah navigasi admin.
+2. Tentukan kriteria sewa:
+   * **Tanggal Mulai**: Pilih tanggal sewa (bisa menggunakan tombol cepat: `Hari Ini`, `Besok`, atau `Lusa`).
+   * **Jam Mulai**: Masukkan jam keberangkatan (tersedia tombol cepat: `08:00`, `10:00`, `14:00`, `19:00`).
+   * **Durasi Sewa**: Tentukan durasi sewa menggunakan 3 kolom input standar (**Bulan**, **Hari**, dan **Jam Tambahan**), atau klik tombol cepat preset di bawahnya (`12 Jam`, `1 Hari`, `2 Hari`, `3 Hari`, `1 Minggu`, `1 Bulan`).
+3. Banner ketersediaan real-time langsung menghitung jam selesai sewa, jumlah unit ready, unit penuh/tersewa, dan supir yang siap bertugas.
+
+### B. Sub-Tab & Tampilan Informasi
+* **🟢 Armada Ready**:
+  * Menampilkan seluruh armada yang siap jalan pada jadwal tersebut.
+  * Dilengkapi informasi kapasitas kursi, sisa unit, varian transmisi yang siap (`Matic Ready` / `Manual Ready`), serta **estimasi tarif sewa total** sesuai durasi yang dipilih.
+  * **Tombol `+ Buat Booking Unit Ini`**: Mengarahkan admin langsung ke formulir booking manual dengan data mobil, tanggal mulai, jam mulai, durasi, dan transmisi yang **sudah terisi otomatis**!
+  * **Tombol `Salin Info`**: Menyalin spesifikasi ringkas dan tarif 1 mobil tersebut untuk dikirimkan ke chat personal pelanggan.
+* **🔴 Penuh / Tersewa**:
+  * Menampilkan mobil yang tidak tersedia (karena sedang dalam masa peminjaman atau perawatan bengkel).
+  * Menampilkan rincian pesanan yang sedang berjalan (nama pemesan, kode booking, dan rentang sewa).
+  * **Perkiraan Siap Kembali**: Menampilkan jam & tanggal kepulangan mobil secara akurat, sehingga staf CS dapat langsung memberikan alternatif: *"Innova Zenix baru kembali tanggal 11 jam 16:00 sore ya Kak, mau di-booking untuk setelah jam itu atau ganti ke Innova Reborn yang ready sekarang?"*
+* **👨‍✈️ Status Supir**:
+  * Memantau seluruh supir operasional: siapa yang `Tersedia (Siap Jalan)`, siapa yang `Sedang Bertugas` (lengkap dengan nama tamu dan jam selesai tugas), serta siapa yang sedang `Libur`.
+  * Tombol pintas **Chat WA** untuk menghubungi supir secara langsung.
+* **💬 Format Balasan WA**:
+  * Menampilkan pratinjau teks balasan WhatsApp yang rapi, profesional, dan ramah.
+
+### C. Tombol "Salin Format Balasan WA" (1-Click Copy ke WhatsApp)
+1. Klik tombol hijau **`Salin Format Balasan WA`** di pojok kanan atas.
+2. Sistem akan menyalin pesan resmi lengkap dengan:
+   * Sapaan ramah PT Khalisa Sumber Rezeki Rent Car Padang.
+   * Rincian tanggal & jam mulai, jam selesai, dan durasi sewa.
+   * Daftar seluruh armada yang **READY** beserta jenis transmisi dan tarif estimasi.
+   * Keunggulan unit (bersih, wangi, prima, AC dingin, lepas kunci / include supir).
+   * Ajakan reservasi (*Call-to-Action*).
+3. Buka WhatsApp Web atau aplikasi WhatsApp di ponsel, lalu tekan **Ctrl+V** (Paste) dan kirim. Calon penyewa menerima informasi lengkap dalam hitungan detik!
+
+---
+
+## 5. Fitur Negosiasi Harga (Ubah Deal Nego)
 
 Website menyediakan opsi bagi pelanggan untuk mencentang *"Saya ingin ajukan nego harga via WhatsApp"*.
 
@@ -113,7 +221,7 @@ Website menyediakan opsi bagi pelanggan untuk mencentang *"Saya ingin ajukan neg
 
 ---
 
-## 5. Manajemen Supir & Validasi Anti-Bentrok
+## 6. Manajemen Supir & Validasi Anti-Bentrok
 
 Tab **Supir** digunakan untuk mengelola data tim pengemudi armada PT Khalisa Sumber Rezeki.
 
@@ -138,7 +246,7 @@ Tab **Supir** digunakan untuk mengelola data tim pengemudi armada PT Khalisa Sum
 
 ---
 
-## 6. Manajemen Armada, Varian & Harga Promo
+## 7. Manajemen Armada, Varian & Harga Promo
 
 Tab **Armada** digunakan untuk mengatur stok mobil, varian mesin/transmisi, foto, harga sewa, dan badge promo.
 
@@ -169,7 +277,7 @@ Jika ada armada yang sedang masuk bengkel, servis rutin, atau perbaikan bodi:
 
 ---
 
-## 7. Ekspor Laporan ke Excel (.xlsx)
+## 8. Ekspor Laporan ke Excel (.xlsx)
 
 Untuk kebutuhan rekap operasional, arsip bulanan, atau pelaporan keuangan:
 
@@ -183,13 +291,13 @@ Untuk kebutuhan rekap operasional, arsip bulanan, atau pelaporan keuangan:
 5. File `.xlsx` yang diunduh berformat rapi dan siap cetak:
    * Header warna biru navy korporat.
    * Garis baris selang-seling (*zebra stripe*).
-   * Kolom lengkap: Nomor, Kode Booking, Tanggal Mulai/Selesai, Nama Pemesan, WhatsApp, Armada, Supir, Status Pesanan, dan Nilai Estimasi Biaya.
+   * Kolom sangat lengkap: No., Kode Booking, Tanggal Dibuat, Nama Pemesan, No. Telepon, Mulai Sewa, Selesai Sewa, Armada, Layanan, Durasi, Supir, Status Booking, Status Bayar (Lunas/DP/Menunggu), Tipe Bayar, Metode Bayar (Rekening), Nama Pengirim, Total Sewa (Rp), Dibayar (Rp), Sisa Tagihan (Rp), dan Catatan Order.
    * Format mata uang rupiah standar akuntansi (`Rp #,##0`).
-   * Baris total rekap akumulasi nilai di baris paling bawah.
+   * Baris total rekap akumulasi di baris paling bawah (menghitung otomatis: Total Estimasi Sewa, Total Uang Masuk Dibayar, dan Total Sisa Piutang).
 
 ---
 
-## 8. Halaman Cek Status Booking Mandiri Pelanggan
+## 9. Halaman Cek Status Booking Mandiri Pelanggan
 
 Pelanggan dapat memantau status pesanannya sendiri tanpa harus menghubungi admin secara manual:
 
@@ -204,7 +312,7 @@ Pelanggan dapat memantau status pesanannya sendiri tanpa harus menghubungi admin
 
 ---
 
-## 9. SOP Aturan Sewa & Syarat Ketentuan Resmi
+## 10. SOP Aturan Sewa & Syarat Ketentuan Resmi
 
 Saat melayani pelanggan via WhatsApp atau serah terima unit, gunakan klausul resmi dari halaman **`khalisarental.id/syarat-ketentuan`** sebagai acuan:
 
@@ -227,7 +335,7 @@ Saat melayani pelanggan via WhatsApp atau serah terima unit, gunakan klausul res
 
 ---
 
-## 10. Keamanan Sistem & Troubleshooting
+## 11. Keamanan Sistem & Troubleshooting
 
 ### A. Kredensial & Lingkungan Sistem
 * **Domain Utama**: `khalisarental.id` (Terkoneksi SSL HTTPS aktif).
@@ -242,4 +350,4 @@ Saat melayani pelanggan via WhatsApp atau serah terima unit, gunakan klausul res
 
 ---
 
-*Dokumen ini diterbitkan oleh Tim Pengembang Website PT Khalisa Sumber Rezeki — Diperbarui per 31 Oktober 2026.*
+*Dokumen ini diterbitkan oleh Tim Pengembang Website PT Khalisa Sumber Rezeki — Diperbarui per November 2026.*
